@@ -18,6 +18,18 @@
 # today (only health + metrics exist) but it breaks the moment authenticated endpoints
 # land. Same failure mode as leartech-orchestrator-web-ui. Fixed first, deliberately.
 #
+# CONFIG CONTRACT (pinned, not negotiated at runtime)
+# gitops-gsm, gitops-akv and gcs-storage run concurrently in DIFFERENT repos, so they
+# cannot agree on names while running. The contract is therefore fixed here:
+#   ARTIFACT_GCS_BUCKET   — the staging bucket
+#   ARTIFACT_GCS_PROJECT  — the GCP project
+# All three steps name these exact env vars. Do not invent alternatives.
+#
+# MERGED != DEPLOYED
+# A kind:pr step completes at MERGE, but release -> GitOps -> rollout takes minutes.
+# `release-check` gates the round-trip on the new code and config being LIVE on both
+# clusters, so verify-roundtrip cannot race the rollout.
+#
 # Maintainer note: if you would rather apply the two gitops steps by hand, drop
 # `gitops-gsm` / `gitops-akv` and add their config before promoting this Plan.
 apiVersion: agent.leartech.io/v1alpha1
@@ -29,8 +41,8 @@ spec:
   description: >-
     Implement leartech-artifact-api's artifact storage endpoints over Google Cloud
     Storage (official Go SDK), enforce the leartechapi:artifact scopes, and wire the
-    already-deployed design MCP tools to them. Ends with a real cross-session
-    round-trip: publish an artifact, retrieve it by label.
+    already-deployed design MCP tools to them. Gated on a real rollout check, then a
+    deterministic cross-session round-trip: publish an artifact, retrieve it by label.
   steps:
     # ── 1. Prerequisite: the missing gitops overlay (auth issuer + bucket) ──
     - name: gitops-gsm
@@ -45,12 +57,16 @@ spec:
         (https://hydra-jx-staging.jx.leartech.com) and auth.audience to
         leartech-artifact-api (bare-name convention, matching leartech-plan-api).
         Leave cors.allowedOrigins as an EMPTY list — safe-closed; the service has no
-        browser callers, only the MCP over ClusterIP. Do NOT add an ingress. Also set
-        the GCS bucket + project values the storage adapter reads (see the sibling
-        gcs-storage step for the exact value names; co-ordinate naming with it).
+        browser callers, only the MCP over ClusterIP. Do NOT add an ingress.
+
+        Also set the GCS config so the pods get these EXACT env vars (the fixed
+        contract the gcs-storage step reads — do NOT invent other names):
+        ARTIFACT_GCS_BUCKET (the staging bucket) and ARTIFACT_GCS_PROJECT (the GCP
+        project). Set whatever chart values render to those two env vars.
+
         Mirror the structure and comment style of
         helmfiles/jx-staging/configs/leartech-plan-api.yaml.
-        Done = PR opened via open_pr and gates green.
+        Done = PR merged (open via open_pr, drive gates green).
 
     - name: gitops-akv
       kind: pr
@@ -58,11 +74,13 @@ spec:
       repo: mikelear/jx-build-cluster-akv
       goal: >-
         Mirror the gitops-gsm change for the Azure cluster. Identical shape, but the
-        per-cluster Hydra issuer is https://hydra-jx-staging.az.leartech.com. Confirm
-        parity with the gsm file field-for-field — the two clusters must not drift.
-        Note Helm list values REPLACE rather than merge, so any list override must
-        repeat the chart defaults verbatim.
-        Done = PR opened via open_pr and gates green.
+        per-cluster Hydra issuer is https://hydra-jx-staging.az.leartech.com. Set the
+        SAME two env vars field-for-field: ARTIFACT_GCS_BUCKET and
+        ARTIFACT_GCS_PROJECT (the artifact bucket stays on GCS regardless of which
+        cluster the pod runs on). Confirm parity with the gsm file field-for-field —
+        the two clusters must not drift. Note Helm list values REPLACE rather than
+        merge, so any list override must repeat the chart defaults verbatim.
+        Done = PR merged (open via open_pr, drive gates green).
 
     # ── 2. Storage adapter — the first real Go/GCS work ──
     - name: gcs-storage
@@ -73,6 +91,11 @@ spec:
         Add an internal/storage package implementing the artifact object layout on
         Google Cloud Storage using the official Go SDK (cloud.google.com/go/storage),
         authenticating via Workload Identity — no service-account JSON keys.
+
+        CONFIG CONTRACT (fixed — the gitops-gsm/gitops-akv steps set these exact env
+        vars; read them by these exact names): ARTIFACT_GCS_BUCKET and
+        ARTIFACT_GCS_PROJECT. Fail fast at startup with a clear message if either is
+        empty, rather than failing later on the first upload.
 
         LAYOUT (revisions are IMMUTABLE):
           artifact/<guid>/<revision>/manifest.json
@@ -87,7 +110,7 @@ spec:
         - Allocate a GUID per artifact; `label` is the human-facing discovery key.
         - Writes create a NEW revision and MUST NEVER overwrite an existing one. If a
           Plan consumed revision 3, the record of what it consumed has to survive —
-          overwriting destroys the audit trail. Reject writes to an existing revision.
+          overwriting destroys the audit trail. Reject writes to a finalized revision.
         - Mint V4 signed URLs for upload (PUT) and download (GET). Bytes go direct to
           GCS and never through the service.
         - No public-readable path: artifacts are guidance consumed by Plans, never
@@ -95,9 +118,9 @@ spec:
         - No database. The manifest IS the record; keep database.enabled false.
 
         ISOLATE TESTING: unit tests against a fake/in-memory storage seam (interface +
-        test double), covering GUID allocation, revision immutability (second write to
-        the same revision is refused), manifest round-trip, and signed-URL generation.
-        Runnable with `go test ./...` and NO real GCS bucket.
+        test double), covering GUID allocation, revision immutability (a write to a
+        finalized revision is refused), multi-revision creation, manifest round-trip,
+        and signed-URL generation. Runnable with `go test ./...` and NO real GCS bucket.
 
         LOGGING TO VERIFY: structured logs per operation (op, artifact id, revision,
         label, request id, outcome) queryable in Loki.
@@ -105,7 +128,7 @@ spec:
         Also remove the scaffold-inherited plan-api internals that artifacts do not
         need (internal/plans, internal/orcv1alpha1, internal/gates, internal/k8s) if
         nothing references them, so the repo stops implying CRD behaviour it has none of.
-        Done = PR opened via open_pr and gates green.
+        Done = PR merged (open via open_pr, drive gates green).
 
     # ── 3. The endpoints + scope enforcement ──
     - name: rest-endpoints
@@ -134,19 +157,20 @@ spec:
 
         FINALIZE validates thinly and no more: manifest parses, every declared file
         exists in the object store, sizes are sane. Kind-specific validation is
-        explicitly out of scope.
+        explicitly out of scope. A write to an ALREADY-FINALIZED revision returns 409.
 
         Keep api/openapi.yaml and the swaggo annotations in step so /openapi.json and
         /docs stay accurate, and the generated clients pick the endpoints up on release.
 
         ISOLATE TESTING: handler unit tests with a fake storage seam and a fake token
         context, covering: 401 unauthenticated, 403 wrong scope, 403 wrong audience,
-        404 unknown id/label, 409 write to an existing revision, and the happy paths.
-        No real GCS, no real Hydra.
+        404 unknown id/label, 409 write to a finalized revision, second-revision
+        creation via POST /{id}/revisions, and the happy paths. No real GCS, no real
+        Hydra.
 
         LOGGING TO VERIFY: structured logs (route, artifact id, revision, scope
         decision, tenant, request id, outcome) queryable in Loki.
-        Done = PR opened via open_pr and gates green.
+        Done = PR merged (open via open_pr, drive gates green).
 
     # ── 4. Wire the already-deployed MCP tools ──
     - name: mcp-tools
@@ -165,7 +189,8 @@ spec:
 
         Existing tools to back: list_artifacts, get_artifact, create_artifact.
         Add finalize_artifact so a producer can seal a revision, since upload is a
-        separate presigned PUT the MCP never proxies.
+        separate presigned PUT the MCP never proxies. Expose revision creation too, so
+        a second revision can be added to an existing artifact.
 
         create_artifact must return the presigned uploadURL to the caller — bytes go
         direct to GCS over PUT and MUST NOT be proxied through MCP or the service.
@@ -182,10 +207,10 @@ spec:
 
         LOGGING TO VERIFY: structured logs per tool call (tool, artifact id, tier used,
         request id, outcome) queryable in Loki.
-        Done = PR opened via open_pr and gates green.
+        Done = PR merged (open via open_pr, drive gates green).
 
-    # ── 5. The acceptance test that matters ──
-    - name: verify-roundtrip
+    # ── 5. Rollout gate — merged is not deployed ──
+    - name: release-check
       kind: check
       agentType: leartech-agent-infra
       dependsOn:
@@ -193,10 +218,30 @@ spec:
         - gitops-akv
         - mcp-tools
       goal: >-
-        Deterministically confirm the artifact path works end to end on jx-staging,
-        on BOTH clusters.
+        Gate the round-trip on the new code + config being LIVE, not merely merged —
+        a kind:pr step is done at merge, but release → GitOps → rollout takes minutes,
+        so verifying too early races the old version. Wait (with a deadline) until, on
+        BOTH clusters (gcp + az): leartech-artifact-api rolled out its released version
+        (deploy_health expected_version = the released tag, normalize git-tag →
+        chart-version; healthy = available>=1 AND observed_version == expected); the
+        pods carry the new gitops config (LEARTECH_AUTH_SERVER_URL non-empty,
+        ARTIFACT_GCS_BUCKET / ARTIFACT_GCS_PROJECT set); and leartech-mcp-servers
+        redeployed with the wired design tools. FAIL (exit non-zero) if the new
+        versions are not live within the deadline. Do not open a PR.
 
-        Done when all of the following hold:
+    # ── 6. The acceptance test that matters ──
+    - name: verify-roundtrip
+      kind: check
+      agentType: leartech-agent-infra
+      dependsOn:
+        - release-check
+      goal: >-
+        Deterministically confirm the artifact path works end to end on jx-staging,
+        on BOTH clusters. FAIL (exit non-zero) if ANY assertion below fails — a
+        kind:check verdict is this step's exit code, so reporting a failure while
+        exiting 0 would wrongly pass the Plan.
+
+        Assertions:
         - leartech-artifact-api pods are Ready and /openapi.json returns 200 probed
           from INSIDE the namespace (the service has no ingress by design).
         - An unauthenticated request to /api/v1/artifacts returns 401, and a token
@@ -206,7 +251,9 @@ spec:
           returns a manifest listing the file with a matching sha256.
         - get_artifact resolves the same artifact BY LABEL and returns a working
           signed download URL whose bytes match what was uploaded.
-        - A second write to the same revision is refused (immutability holds).
+        - A second revision is created via POST /api/v1/artifacts/{id}/revisions,
+          uploaded and finalized; get_artifact can still retrieve revision 1
+          unchanged, proving revisions are additive not destructive.
+        - A write to an already-finalized revision returns 409 (immutability holds on
+          the revision path, not just the initial revision).
         - Structured logs for the above appear in Loki with the request ids.
-
-        Report per-assertion pass/fail; do not open a PR.
