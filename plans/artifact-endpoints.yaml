@@ -38,97 +38,95 @@ metadata:
   name: artifact-endpoints
 spec:
   paused: true
-  description: >-
-    Implement leartech-artifact-api's artifact storage endpoints over Google Cloud
-    Storage (official Go SDK), enforce the leartechapi:artifact scopes, and wire the
-    already-deployed design MCP tools to them. Gated on a real rollout check, then a
-    deterministic cross-session round-trip: publish an artifact, retrieve it by label.
   steps:
     # ── 1. Prerequisite: the missing gitops overlay (auth issuer + bucket) ──
     - name: gitops-gsm
       kind: pr
       agentType: leartech-agent-go
       repo: mikelear/jx-build-cluster-gsm
-      goal: >-
-        Add helmfiles/jx-staging/configs/leartech-artifact-api.yaml. leartech-artifact-api
-        currently deploys on chart defaults, so AUTH_ENABLED=true but
-        LEARTECH_AUTH_SERVER_URL is empty — auth cannot validate because there is no
-        issuer for JWKS. Set auth.serverUrl to the GCP staging Hydra
-        (https://hydra-jx-staging.jx.leartech.com) and auth.audience to
-        leartech-artifact-api (bare-name convention, matching leartech-plan-api).
-        Leave cors.allowedOrigins as an EMPTY list — safe-closed; the service has no
-        browser callers, only the MCP over ClusterIP. Do NOT add an ingress.
+      inputs:
+        goal: >-
+          Add helmfiles/jx-staging/configs/leartech-artifact-api.yaml. leartech-artifact-api
+          currently deploys on chart defaults, so AUTH_ENABLED=true but
+          LEARTECH_AUTH_SERVER_URL is empty — auth cannot validate because there is no
+          issuer for JWKS. Set auth.serverUrl to the GCP staging Hydra
+          (https://hydra-jx-staging.jx.leartech.com) and auth.audience to
+          leartech-artifact-api (bare-name convention, matching leartech-plan-api).
+          Leave cors.allowedOrigins as an EMPTY list — safe-closed; the service has no
+          browser callers, only the MCP over ClusterIP. Do NOT add an ingress.
 
-        Also set the GCS config so the pods get these EXACT env vars (the fixed
-        contract the gcs-storage step reads — do NOT invent other names):
-        ARTIFACT_GCS_BUCKET (the staging bucket) and ARTIFACT_GCS_PROJECT (the GCP
-        project). Set whatever chart values render to those two env vars.
+          Also set the GCS config so the pods get these EXACT env vars (the fixed
+          contract the gcs-storage step reads — do NOT invent other names):
+          ARTIFACT_GCS_BUCKET (the staging bucket) and ARTIFACT_GCS_PROJECT (the GCP
+          project). Set whatever chart values render to those two env vars.
 
-        Mirror the structure and comment style of
-        helmfiles/jx-staging/configs/leartech-plan-api.yaml.
-        Done = PR merged (open via open_pr, drive gates green).
+          Mirror the structure and comment style of
+          helmfiles/jx-staging/configs/leartech-plan-api.yaml.
+          Done = PR merged (open via open_pr, drive gates green).
 
     - name: gitops-akv
       kind: pr
       agentType: leartech-agent-go
       repo: mikelear/jx-build-cluster-akv
-      goal: >-
-        Mirror the gitops-gsm change for the Azure cluster. Identical shape, but the
-        per-cluster Hydra issuer is https://hydra-jx-staging.az.leartech.com. Set the
-        SAME two env vars field-for-field: ARTIFACT_GCS_BUCKET and
-        ARTIFACT_GCS_PROJECT (the artifact bucket stays on GCS regardless of which
-        cluster the pod runs on). Confirm parity with the gsm file field-for-field —
-        the two clusters must not drift. Note Helm list values REPLACE rather than
-        merge, so any list override must repeat the chart defaults verbatim.
-        Done = PR merged (open via open_pr, drive gates green).
+      inputs:
+        goal: >-
+          Mirror the gitops-gsm change for the Azure cluster. Identical shape, but the
+          per-cluster Hydra issuer is https://hydra-jx-staging.az.leartech.com. Set the
+          SAME two env vars field-for-field: ARTIFACT_GCS_BUCKET and
+          ARTIFACT_GCS_PROJECT (the artifact bucket stays on GCS regardless of which
+          cluster the pod runs on). Confirm parity with the gsm file field-for-field —
+          the two clusters must not drift. Note Helm list values REPLACE rather than
+          merge, so any list override must repeat the chart defaults verbatim.
+          Done = PR merged (open via open_pr, drive gates green).
 
     # ── 2. Storage adapter — the first real Go/GCS work ──
     - name: gcs-storage
       kind: pr
       agentType: leartech-agent-go
       repo: mikelear/leartech-artifact-api
-      goal: >-
-        Add an internal/storage package implementing the artifact object layout on
-        Google Cloud Storage using the official Go SDK (cloud.google.com/go/storage),
-        authenticating via Workload Identity — no service-account JSON keys.
+      inputs:
+        goal: >-
+          Add an internal/storage package implementing the artifact object layout on
+          Google Cloud Storage using the official Go SDK (cloud.google.com/go/storage),
+          authenticating via Workload Identity — no service-account JSON keys.
 
-        CONFIG CONTRACT (fixed — the gitops-gsm/gitops-akv steps set these exact env
-        vars; read them by these exact names): ARTIFACT_GCS_BUCKET and
-        ARTIFACT_GCS_PROJECT. Fail fast at startup with a clear message if either is
-        empty, rather than failing later on the first upload.
+          CONFIG CONTRACT (fixed — the gitops-gsm/gitops-akv steps set these exact env
+          vars; read them by these exact names): ARTIFACT_GCS_BUCKET and
+          ARTIFACT_GCS_PROJECT. Fail fast at startup with a clear message if either is
+          empty, rather than failing later on the first upload.
 
-        LAYOUT (revisions are IMMUTABLE):
-          artifact/<guid>/<revision>/manifest.json
-          artifact/<guid>/<revision>/<files...>
-          artifact/<guid>/latest              (mutable pointer only)
+          LAYOUT (revisions are IMMUTABLE):
+            artifact/<guid>/<revision>/manifest.json
+            artifact/<guid>/<revision>/<files...>
+            artifact/<guid>/latest              (mutable pointer only)
 
-        MANIFEST fields: id (GUID), label, kind, target (optional), ttl, revision,
-        producer (PER REVISION, not per artifact), publishedBy {client, subject},
-        files [{path, bytes, sha256}].
+          MANIFEST fields: id (GUID), label, kind, target (optional), ttl, revision,
+          producer (PER REVISION, not per artifact), publishedBy {client, subject},
+          files [{path, bytes, sha256}].
 
-        REQUIRED BEHAVIOUR:
-        - Allocate a GUID per artifact; `label` is the human-facing discovery key.
-        - Writes create a NEW revision and MUST NEVER overwrite an existing one. If a
-          Plan consumed revision 3, the record of what it consumed has to survive —
-          overwriting destroys the audit trail. Reject writes to a finalized revision.
-        - Mint V4 signed URLs for upload (PUT) and download (GET). Bytes go direct to
-          GCS and never through the service.
-        - No public-readable path: artifacts are guidance consumed by Plans, never
-          published. Signed URLs only.
-        - No database. The manifest IS the record; keep database.enabled false.
+          REQUIRED BEHAVIOUR:
+          - Allocate a GUID per artifact; `label` is the human-facing discovery key.
+          - Writes create a NEW revision and MUST NEVER overwrite an existing one. If a
+            Plan consumed revision 3, the record of what it consumed has to survive —
+            overwriting destroys the audit trail. Reject writes to a finalized revision.
+          - Mint V4 signed URLs for upload (PUT) and download (GET). Bytes go direct to
+            GCS and never through the service.
+          - No public-readable path: artifacts are guidance consumed by Plans, never
+            published. Signed URLs only.
+          - No database. The manifest IS the record; keep database.enabled false.
 
-        ISOLATE TESTING: unit tests against a fake/in-memory storage seam (interface +
-        test double), covering GUID allocation, revision immutability (a write to a
-        finalized revision is refused), multi-revision creation, manifest round-trip,
-        and signed-URL generation. Runnable with `go test ./...` and NO real GCS bucket.
+          ISOLATE TESTING: unit tests against a fake/in-memory storage seam (interface +
+          test double), covering GUID allocation, revision immutability (a write to a
+          finalized revision is refused), multi-revision creation, manifest round-trip,
+          and signed-URL generation. Runnable with `go test ./...` and NO real GCS bucket.
 
-        LOGGING TO VERIFY: structured logs per operation (op, artifact id, revision,
-        label, request id, outcome) queryable in Loki.
+          LOGGING TO VERIFY: structured logs per operation (op, artifact id, revision,
+          label, request id, outcome) queryable in Loki.
 
-        Also remove the scaffold-inherited plan-api internals that artifacts do not
-        need (internal/plans, internal/orcv1alpha1, internal/gates, internal/k8s) if
-        nothing references them, so the repo stops implying CRD behaviour it has none of.
-        Done = PR merged (open via open_pr, drive gates green).
+          Also remove the scaffold-inherited plan-api internals that artifacts do not
+          need (internal/plans, internal/orcv1alpha1, internal/gates, internal/k8s) if
+          nothing references them, so the repo stops implying CRD behaviour it has none of.
+          Done = PR merged (open via open_pr, drive gates green).
 
     # ── 3. The endpoints + scope enforcement ──
     - name: rest-endpoints
@@ -137,40 +135,41 @@ spec:
       repo: mikelear/leartech-artifact-api
       dependsOn:
         - gcs-storage
-      goal: >-
-        Add the artifact REST endpoints on /api/v1, backed by internal/storage, and
-        enforce scopes AT THE SERVICE.
+      inputs:
+        goal: >-
+          Add the artifact REST endpoints on /api/v1, backed by internal/storage, and
+          enforce scopes AT THE SERVICE.
 
-        ENDPOINTS:
-          POST   /api/v1/artifacts                 -> {id, revision, uploadURL, expiresAt}
-          POST   /api/v1/artifacts/{id}/revisions  -> new revision on an existing artifact
-          POST   /api/v1/artifacts/{id}/finalize   -> validate + seal, returns manifest
-          GET    /api/v1/artifacts                 -> list; filter by kind, label, target
-          GET    /api/v1/artifacts/{id}            -> manifest + signed download URLs
-                                                      (accept a label as well as a GUID)
+          ENDPOINTS:
+            POST   /api/v1/artifacts                 -> {id, revision, uploadURL, expiresAt}
+            POST   /api/v1/artifacts/{id}/revisions  -> new revision on an existing artifact
+            POST   /api/v1/artifacts/{id}/finalize   -> validate + seal, returns manifest
+            GET    /api/v1/artifacts                 -> list; filter by kind, label, target
+            GET    /api/v1/artifacts/{id}            -> manifest + signed download URLs
+                                                        (accept a label as well as a GUID)
 
-        AUTHZ — the load-bearing rule: enforce the caller's own audience and scope on
-        EVERY request, regardless of caller. Never assume "the MCP already checked".
-        leartechapi:artifact:read gates the GETs; leartechapi:artifact:write gates the
-        POSTs. Derive tenant from the validated token claims and filter on it, so
-        artifacts are isolated per tenant. There is deliberately NO publish scope.
+          AUTHZ — the load-bearing rule: enforce the caller's own audience and scope on
+          EVERY request, regardless of caller. Never assume "the MCP already checked".
+          leartechapi:artifact:read gates the GETs; leartechapi:artifact:write gates the
+          POSTs. Derive tenant from the validated token claims and filter on it, so
+          artifacts are isolated per tenant. There is deliberately NO publish scope.
 
-        FINALIZE validates thinly and no more: manifest parses, every declared file
-        exists in the object store, sizes are sane. Kind-specific validation is
-        explicitly out of scope. A write to an ALREADY-FINALIZED revision returns 409.
+          FINALIZE validates thinly and no more: manifest parses, every declared file
+          exists in the object store, sizes are sane. Kind-specific validation is
+          explicitly out of scope. A write to an ALREADY-FINALIZED revision returns 409.
 
-        Keep api/openapi.yaml and the swaggo annotations in step so /openapi.json and
-        /docs stay accurate, and the generated clients pick the endpoints up on release.
+          Keep api/openapi.yaml and the swaggo annotations in step so /openapi.json and
+          /docs stay accurate, and the generated clients pick the endpoints up on release.
 
-        ISOLATE TESTING: handler unit tests with a fake storage seam and a fake token
-        context, covering: 401 unauthenticated, 403 wrong scope, 403 wrong audience,
-        404 unknown id/label, 409 write to a finalized revision, second-revision
-        creation via POST /{id}/revisions, and the happy paths. No real GCS, no real
-        Hydra.
+          ISOLATE TESTING: handler unit tests with a fake storage seam and a fake token
+          context, covering: 401 unauthenticated, 403 wrong scope, 403 wrong audience,
+          404 unknown id/label, 409 write to a finalized revision, second-revision
+          creation via POST /{id}/revisions, and the happy paths. No real GCS, no real
+          Hydra.
 
-        LOGGING TO VERIFY: structured logs (route, artifact id, revision, scope
-        decision, tenant, request id, outcome) queryable in Loki.
-        Done = PR merged (open via open_pr, drive gates green).
+          LOGGING TO VERIFY: structured logs (route, artifact id, revision, scope
+          decision, tenant, request id, outcome) queryable in Loki.
+          Done = PR merged (open via open_pr, drive gates green).
 
     # ── 4. Wire the already-deployed MCP tools ──
     - name: mcp-tools
@@ -179,35 +178,36 @@ spec:
       repo: mikelear/leartech-mcp-servers
       dependsOn:
         - rest-endpoints
-      goal: >-
-        Wire internal/designserver's tools to the new artifact-api endpoints. The
-        client, auth and audience plumbing already exist — do not reinvent them; the
-        three-tier outbound behaviour (forward the caller's Bearer verbatim, RFC 8693
-        exchange when the audience differs, s2s only when there is no caller Bearer)
-        must be preserved exactly as internal/planserver implements it, including the
-        principle that the MCP NEVER widens authority beyond the caller's own.
+      inputs:
+        goal: >-
+          Wire internal/designserver's tools to the new artifact-api endpoints. The
+          client, auth and audience plumbing already exist — do not reinvent them; the
+          three-tier outbound behaviour (forward the caller's Bearer verbatim, RFC 8693
+          exchange when the audience differs, s2s only when there is no caller Bearer)
+          must be preserved exactly as internal/planserver implements it, including the
+          principle that the MCP NEVER widens authority beyond the caller's own.
 
-        Existing tools to back: list_artifacts, get_artifact, create_artifact.
-        Add finalize_artifact so a producer can seal a revision, since upload is a
-        separate presigned PUT the MCP never proxies. Expose revision creation too, so
-        a second revision can be added to an existing artifact.
+          Existing tools to back: list_artifacts, get_artifact, create_artifact.
+          Add finalize_artifact so a producer can seal a revision, since upload is a
+          separate presigned PUT the MCP never proxies. Expose revision creation too, so
+          a second revision can be added to an existing artifact.
 
-        create_artifact must return the presigned uploadURL to the caller — bytes go
-        direct to GCS over PUT and MUST NOT be proxied through MCP or the service.
+          create_artifact must return the presigned uploadURL to the caller — bytes go
+          direct to GCS over PUT and MUST NOT be proxied through MCP or the service.
 
-        Also register this server in the agent MCP catalog
-        (leartech-automated-agent gate/agent/mcp_catalog.yaml is a SEPARATE repo — do
-        not edit it here; note it in the PR description as a follow-up) so Plans can
-        fetch artifacts referenced in a step goal.
+          Also register this server in the agent MCP catalog
+          (leartech-automated-agent gate/agent/mcp_catalog.yaml is a SEPARATE repo — do
+          not edit it here; note it in the PR description as a follow-up) so Plans can
+          fetch artifacts referenced in a step goal.
 
-        ISOLATE TESTING: table tests using the existing fakes_test.go seam, asserting
-        each tool maps to the right endpoint and that the forward/exchange/s2s tier
-        selection is unchanged. Extend tokenexchange_test.go coverage to the artifact
-        path. No real cluster, no real Hydra.
+          ISOLATE TESTING: table tests using the existing fakes_test.go seam, asserting
+          each tool maps to the right endpoint and that the forward/exchange/s2s tier
+          selection is unchanged. Extend tokenexchange_test.go coverage to the artifact
+          path. No real cluster, no real Hydra.
 
-        LOGGING TO VERIFY: structured logs per tool call (tool, artifact id, tier used,
-        request id, outcome) queryable in Loki.
-        Done = PR merged (open via open_pr, drive gates green).
+          LOGGING TO VERIFY: structured logs per tool call (tool, artifact id, tier used,
+          request id, outcome) queryable in Loki.
+          Done = PR merged (open via open_pr, drive gates green).
 
     # ── 5. Rollout gate — merged is not deployed ──
     - name: release-check
@@ -217,17 +217,18 @@ spec:
         - gitops-gsm
         - gitops-akv
         - mcp-tools
-      goal: >-
-        Gate the round-trip on the new code + config being LIVE, not merely merged —
-        a kind:pr step is done at merge, but release → GitOps → rollout takes minutes,
-        so verifying too early races the old version. Wait (with a deadline) until, on
-        BOTH clusters (gcp + az): leartech-artifact-api rolled out its released version
-        (deploy_health expected_version = the released tag, normalize git-tag →
-        chart-version; healthy = available>=1 AND observed_version == expected); the
-        pods carry the new gitops config (LEARTECH_AUTH_SERVER_URL non-empty,
-        ARTIFACT_GCS_BUCKET / ARTIFACT_GCS_PROJECT set); and leartech-mcp-servers
-        redeployed with the wired design tools. FAIL (exit non-zero) if the new
-        versions are not live within the deadline. Do not open a PR.
+      inputs:
+        goal: >-
+          Gate the round-trip on the new code + config being LIVE, not merely merged —
+          a kind:pr step is done at merge, but release → GitOps → rollout takes minutes,
+          so verifying too early races the old version. Wait (with a deadline) until, on
+          BOTH clusters (gcp + az): leartech-artifact-api rolled out its released version
+          (deploy_health expected_version = the released tag, normalize git-tag →
+          chart-version; healthy = available>=1 AND observed_version == expected); the
+          pods carry the new gitops config (LEARTECH_AUTH_SERVER_URL non-empty,
+          ARTIFACT_GCS_BUCKET / ARTIFACT_GCS_PROJECT set); and leartech-mcp-servers
+          redeployed with the wired design tools. FAIL (exit non-zero) if the new
+          versions are not live within the deadline. Do not open a PR.
 
     # ── 6. The acceptance test that matters ──
     - name: verify-roundtrip
@@ -235,25 +236,26 @@ spec:
       agentType: leartech-agent-infra
       dependsOn:
         - release-check
-      goal: >-
-        Deterministically confirm the artifact path works end to end on jx-staging,
-        on BOTH clusters. FAIL (exit non-zero) if ANY assertion below fails — a
-        kind:check verdict is this step's exit code, so reporting a failure while
-        exiting 0 would wrongly pass the Plan.
+      inputs:
+        goal: >-
+          Deterministically confirm the artifact path works end to end on jx-staging,
+          on BOTH clusters. FAIL (exit non-zero) if ANY assertion below fails — a
+          kind:check verdict is this step's exit code, so reporting a failure while
+          exiting 0 would wrongly pass the Plan.
 
-        Assertions:
-        - leartech-artifact-api pods are Ready and /openapi.json returns 200 probed
-          from INSIDE the namespace (the service has no ingress by design).
-        - An unauthenticated request to /api/v1/artifacts returns 401, and a token
-          carrying the wrong audience is rejected.
-        - Via the design MCP: create_artifact returns a GUID plus a presigned upload
-          URL; a PUT of a small tokens.json to that URL succeeds; finalize_artifact
-          returns a manifest listing the file with a matching sha256.
-        - get_artifact resolves the same artifact BY LABEL and returns a working
-          signed download URL whose bytes match what was uploaded.
-        - A second revision is created via POST /api/v1/artifacts/{id}/revisions,
-          uploaded and finalized; get_artifact can still retrieve revision 1
-          unchanged, proving revisions are additive not destructive.
-        - A write to an already-finalized revision returns 409 (immutability holds on
-          the revision path, not just the initial revision).
-        - Structured logs for the above appear in Loki with the request ids.
+          Assertions:
+          - leartech-artifact-api pods are Ready and /openapi.json returns 200 probed
+            from INSIDE the namespace (the service has no ingress by design).
+          - An unauthenticated request to /api/v1/artifacts returns 401, and a token
+            carrying the wrong audience is rejected.
+          - Via the design MCP: create_artifact returns a GUID plus a presigned upload
+            URL; a PUT of a small tokens.json to that URL succeeds; finalize_artifact
+            returns a manifest listing the file with a matching sha256.
+          - get_artifact resolves the same artifact BY LABEL and returns a working
+            signed download URL whose bytes match what was uploaded.
+          - A second revision is created via POST /api/v1/artifacts/{id}/revisions,
+            uploaded and finalized; get_artifact can still retrieve revision 1
+            unchanged, proving revisions are additive not destructive.
+          - A write to an already-finalized revision returns 409 (immutability holds on
+            the revision path, not just the initial revision).
+          - Structured logs for the above appear in Loki with the request ids.
