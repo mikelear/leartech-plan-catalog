@@ -71,6 +71,17 @@ trusted set of maintainers (`OWNERS`), which grows deliberately over time. Passi
 gates makes a PR _eligible_; a human still decides. In the future, tenants running
 our product can host their own catalog and manage their own merge policy.
 
+### Judged by current rules, never a stale copy
+
+The linter is Go that lives **in this repo**, and the presubmit builds it from the
+submission — so a PR that changes `internal/lint` tests its own change. To keep that
+from letting a Plan pass against an _old_ contract, `main` requires every PR to be
+**up to date before merge** (branch-protection strict checks). A branch that forked
+before a rule landed cannot merge until it pulls `main`, which rebuilds the linter
+from current source and re-lints against the current rules. So a merged Plan is
+always evaluated against the rules **as they stand at merge** — the "accepted ⇒ the
+controller will admit it and the agents can run it" claim holds even as rules grow.
+
 ## Submitting a Plan
 
 1. Add a Plan to `plans/` or a PlanTemplate to `templates/` (one YAML per file).
