@@ -39,7 +39,7 @@ the controller reaches a terminal phase.
 
   "ai_review": {                        // advisory, via the owned gateway
     "verdict": "PASS | CONCERNS",
-    "models": ["claude-sonnet-4-6", "…"],
+    "models": ["claude", "deepseek"],   // gateway logical names
     "issues": [ "…" ],
     "score": 0.0
   },
