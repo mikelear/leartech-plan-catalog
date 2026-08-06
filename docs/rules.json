@@ -113,6 +113,12 @@
       "title": "Test coherence",
       "why": "test.directed vocabulary is kind-specific; a mismatch is a silent no-op, and a directive without spec.test is ignored.",
       "fix": "Match test.directed to the step kind (pr→merged|closed_unmerged|opened, check→pass|fail, apply→succeed|error) and set spec.test: true."
+    },
+    {
+      "id": "R20",
+      "title": "No unknown fields",
+      "why": "Fields not in the Plan/PlanTemplate CRD are strict-decoded out by the apiserver at apply, so a Plan carrying them cannot be instantiated. Common offenders: a step-level `goal` (belongs under `inputs`) and a spec-level `description` (not a CRD field).",
+      "fix": "Use only CRD fields. Put a step goal under `inputs:` (inputs.goal); drop spec-level `description` (use a YAML comment for human context)."
     }
   ],
   "schema_version": "v1"
