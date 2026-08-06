@@ -112,9 +112,13 @@ Every review — from a human, a model, or a tool — follows one documented sha
 machine-readable `json` block (`verdict` + `findings[{severity, fix, refs}]`). Uniform
 across all reviewers, so each review is one clean row for the Plan-quality flywheel.
 
-The two presubmits surface as separate GitHub check contexts. `pr`
-(`pullrequest.yaml` — the deterministic Go gate + kubeconform) is the required
-status check; `plan-ai-review` is advisory (`optional: true`).
+The presubmits surface as separate GitHub check contexts:
+- **`pr`** (`pullrequest.yaml`) — the deterministic Go gate (R1–R21) + kubeconform. Required.
+- **`plan-cluster-verify`** — server-side dry-run of every Plan/PlanTemplate against the
+  **live CRD** (structural schema + admission; persists nothing). The authoritative,
+  drift-free check that a submission will actually apply — complements the offline Go
+  rules. Required-eligible.
+- **`plan-ai-review`** — advisory (`optional: true`).
 
 ## Running the gate locally
 
