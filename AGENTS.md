@@ -7,8 +7,9 @@ passes the gate — and how to read the gate's feedback and self-correct.
 ## The loop
 
 1. Write a Plan to `plans/<name>.yaml` (or a PlanTemplate to `templates/<name>.yaml`).
-2. Open a PR. Two checks run:
-   - **`plan-lint`** — the deterministic HARD gate (must pass to merge).
+2. Open a PR. Three checks run:
+   - **`plan-lint`** — the deterministic HARD gate (rules R1–R21 + kubeconform; must pass).
+   - **`plan-cluster-verify`** — server-side dry-run against the live CRD (must pass).
    - **`plan-ai-review`** — an advisory model review (never blocks).
 3. Read the feedback (see "Reading feedback" below), fix, push again.
 4. A human maintainer merges. Merging does **not** run the Plan — execution is a
@@ -63,13 +64,14 @@ runtime — so it must match what that `agentType` expects, or the agent Job fai
 run time (there is no `goal` field at step level; it goes **inside** `inputs`). R20
 (no unknown CRD fields) + R21 (inputs shape per agentType) enforce this.
 
-- **Dev agents** — `leartech-agent-go`, `leartech-agent-ng`, `leartech-agent-rust`.
-  `inputs` is an **Initiative**:
+- **Dev agents** — `leartech-agent-go`, `leartech-agent-ng`, `leartech-agent-rust`,
+  `leartech-agent-py` (every agentType whose runtime uses the default Initiative
+  entrypoint). `inputs` is an **Initiative**:
   ```yaml
   inputs:
     name: kebab-id            # required — short kebab id (also the branch suffix)
     repo: owner/name          # required — owner defaults to mikelear if omitted
-    branch: feat/thing        # optional — defaults from name
+    branch: feat/thing        # required (legacy single-repo shape) — the branch the agent pushes to
     goal: |                   # required — what the agent must achieve + the done-check
       …
   ```
@@ -85,6 +87,9 @@ run time (there is no `goal` field at step level; it goes **inside** `inputs`). 
   Known actions: `chart-config` (`cluster`, `service`, `goal`), `release-health-check`
   (`service`, `namespace`, `budgetMinutes`). Use a canned action — the infra agent does
   not run arbitrary free-form goals.
+- **BA agent** — `leartech-agent-ba` runs its own entrypoint (`gate.agent.ba_agent`),
+  so it is neither the Initiative nor the infra-action shape. R21 does **not** yet
+  enforce its inputs (it passes unvalidated); match an existing BA step if you write one.
 
 The full rule list with rationale + fixes is `docs/rules.md`. A Plan the catalog accepts
 is one the controller will admit **and** the agents can actually run.

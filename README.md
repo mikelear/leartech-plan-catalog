@@ -9,7 +9,7 @@ philosophy we apply to code**:
 
 1. **`plan-lint` — the hard gate (deterministic, Go).** Two layers, both
    non-zero-exit-blocks-merge:
-   - **Semantic + safety + DAG rules** (`internal/lint`, R1–R20) — ported from the
+   - **Semantic + safety + DAG rules** (`internal/lint`, R1–R21) — ported from the
      controller's own reconcile-time validation, so a Plan the catalog accepts is
      one the controller will actually run (hold-by-default, cycle detection,
      fan-in shape, template expansion, dependsOn resolution, …).
@@ -89,11 +89,11 @@ templates/       reusable PlanTemplates (composed via `use:` + `with:`)
 cmd/plan-lint/   the deterministic hard gate (Go entrypoint; -json for agents)
 cmd/crd2schema/  generates schemas/ JSON Schema from the vendored CRDs
 cmd/rulesdoc/    generates docs/rules.{json,md} from the rule catalog
-internal/lint/   the rules engine (R1–R20) + rule metadata + unit tests
+internal/lint/   the rules engine (R1–R21) + rule metadata + unit tests
 schemas/         CRD-derived JSON Schema (kubeconform) + vendored CRDs under crd/
 docs/            rules.json + rules.md (generated) · flywheel.md
-scripts/         plan-ai-review.sh (advisory, LLM via the owned gateway) + plan-lint-comment.sh
-.lighthouse/     Tekton presubmits: pullrequest.yaml (plan-lint hard gate) + plan-ai-review (advisory)
+scripts/         plan-ai-review.sh + plan-lint-comment.sh + plan-cluster-verify.sh (live-CRD dry-run)
+.lighthouse/     Tekton presubmits: plan-lint (hard) + plan-cluster-verify (live-CRD dry-run) + plan-ai-review (advisory)
 OWNERS           trusted maintainers (no auto-merge)
 ```
 
@@ -113,11 +113,11 @@ machine-readable `json` block (`verdict` + `findings[{severity, fix, refs}]`). U
 across all reviewers, so each review is one clean row for the Plan-quality flywheel.
 
 The presubmits surface as separate GitHub check contexts:
-- **`pr`** (`pullrequest.yaml`) — the deterministic Go gate (R1–R21) + kubeconform. Required.
+- **`plan-lint`** (`pullrequest.yaml`) — the deterministic Go gate (R1–R21) + kubeconform. **Required.**
 - **`plan-cluster-verify`** — server-side dry-run of every Plan/PlanTemplate against the
   **live CRD** (structural schema + admission; persists nothing). The authoritative,
   drift-free check that a submission will actually apply — complements the offline Go
-  rules. Required-eligible.
+  rules. **Required.**
 - **`plan-ai-review`** — advisory (`optional: true`).
 
 ## Running the gate locally

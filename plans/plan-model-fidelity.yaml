@@ -23,6 +23,7 @@ spec:
       inputs:
         name: plan-api-dto-fidelity
         repo: mikelear/leartech-plan-api
+        branch: feat/plan-api-dto-fidelity
         goal: >-
           Bring plan-api's DTOs + OpenAPI up to the controller Plan CRD (the source of
           truth). CreatePlanStep (internal/dto/create.go): add `kind` (enum
@@ -50,6 +51,7 @@ spec:
       inputs:
         name: portal-plan-client
         repo: mikelear/leartech-ship-proven-portal
+        branch: feat/portal-plan-client
         goal: >-
           Regenerate the Portal's plan-api client from the now-updated OpenAPI so the
           generated DTOs re-exported in src/app/plan/plan.models.ts (Plan=DtoPlan,
@@ -65,6 +67,7 @@ spec:
       inputs:
         name: portal-plan-views
         repo: mikelear/leartech-ship-proven-portal
+        branch: feat/portal-plan-views
         goal: >-
           Update the EXISTING plan surface (plans-list, plan-detail, create-plan, DAG)
           to render the new model: a `kind` badge per step; for a kind:check step its
