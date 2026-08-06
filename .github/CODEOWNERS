@@ -1,0 +1,3 @@
+# Strict human merge — every path requires review from a trusted maintainer.
+# Kept in lockstep with OWNERS. Grows deliberately over time. No bots.
+* @mikelear
