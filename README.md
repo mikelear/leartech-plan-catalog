@@ -10,8 +10,10 @@ philosophy we apply to code**:
 1. **`plan-lint` — the hard gate (deterministic, Go).** Structural + safety checks
    on every Plan/PlanTemplate. Non-zero exit blocks the merge. This is the
    un-bypassable governance surface. It _grows_ — each rule encodes a lesson paid
-   for in a real run (see `internal/lint`, rules R1–R10). Every deterministic
-   (non-LLM) check in this catalog is Go, with its own unit tests.
+   for in a real run (see `internal/lint`, rules R1–R19 — structural + safety +
+   DAG/expansion checks ported from the controller's own reconcile-time
+   validation, so a Plan the catalog accepts is one the controller will run).
+   Every deterministic (non-LLM) check in this catalog is Go, with unit tests.
 2. **`plan-ai-review` — the judgment layer (advisory).** Routes each submission
    through **our own AI gateway**, with **our own virtual key**, to one or more ML
    models that score design quality a linter can't. Posts a sticky PR comment.
@@ -63,7 +65,7 @@ our product can host their own catalog and manage their own merge policy.
 plans/           concrete Plans (hold-by-default proposals)
 templates/       reusable PlanTemplates (composed via `use:` + `with:`)
 cmd/plan-lint/   the deterministic hard gate (Go entrypoint)
-internal/lint/   the rules engine (R1–R10) + unit tests
+internal/lint/   the rules engine (R1–R19) + unit tests
 scripts/         plan-ai-review.sh (advisory, LLM via the owned gateway)
 .lighthouse/     Tekton presubmit wiring both steps
 OWNERS           trusted maintainers (no auto-merge)

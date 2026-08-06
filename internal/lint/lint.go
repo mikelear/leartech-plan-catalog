@@ -9,6 +9,12 @@
 // adding a rule here (and, later, a whole new Tekton step). Each rule below
 // encodes a lesson we've paid for in a real run; the rule numbers are stable so
 // failures are greppable.
+//
+// The graph + expansion rules (R11–R19) are ported directly from the controller's
+// own reconcile-time validation (validateDAG / detectCycle / validateFanInShape /
+// ExpandPlanSteps in leartech-orchestrator-controller) so that a Plan the catalog
+// accepts is a Plan the controller will actually run — the gate catches at PR time
+// exactly what would otherwise become a terminal Failed at reconcile.
 package lint
 
 import (
@@ -30,15 +36,26 @@ import (
 const APIVersion = "agent.leartech.io/v1alpha1"
 
 // MaxName bounds metadata.name. The AgentRun jobName goes into a 63-byte
-// pod-template label as <plan>-<step>-<attempt>; if the name overflows, the run
-// never spawns (empty phase, no Job, no events). Keep names short.
+// pod-template label as <plan>-<step>-<attempt>; keep the Plan name short so the
+// child names stay readable. (The controller hash-truncates overflow rather than
+// failing, so this is a sanity/readability cap, enforced hard for the catalog.)
 const MaxName = 58
 
+// maxExpandedRunName mirrors the controller's MaxPlanAgentRunNameLen (57): the
+// deterministic child-AgentRun name budget before it hash-truncates. Beyond this
+// the run still spawns (hash-truncated) but the name is no longer readable — so
+// we WARN, not fail.
+const maxExpandedRunName = 57
+
 var (
-	stepKinds   = map[string]bool{"pr": true, "apply": true, "check": true}
-	sortedKinds = []string{"apply", "check", "pr"}
-	nameRE      = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`) // DNS-1123 label
-	laptopRE    = regexp.MustCompile(`(/Users/|/home/|~/)`)
+	stepKinds    = map[string]bool{"pr": true, "apply": true, "check": true}
+	sortedKinds  = []string{"apply", "check", "pr"}
+	nameRE       = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`) // DNS-1123 label
+	laptopRE     = regexp.MustCompile(`(/Users/|/home/|~/)`)
+	triggerPhase = map[string]bool{"Running": true, "AwaitingReview": true, "AwaitingApproval": true, "Succeeded": true}
+	// forbidden fields on a `use:` step — mirrors controller validateUseStepShape.
+	// (kind + triggeredWhen are NOT forbidden there; only these smuggle runtime.)
+	useForbidden = []string{"agentType", "inputs", "repo", "budgetIter", "hold", "fanIn", "fanInValidate"}
 )
 
 // Findings accumulates hard errors and advisory warnings.
@@ -54,6 +71,18 @@ func (f *Findings) err(rule, where, msg string) {
 func (f *Findings) warn(rule, where, msg string) {
 	f.Warns = append(f.Warns, fmt.Sprintf("[%s] %s: %s", rule, where, msg))
 }
+
+// TemplateMeta is the cross-document index entry for a PlanTemplate present in
+// the same PR: enough to validate use-steps that reference it (R15/R16/R18).
+type TemplateMeta struct {
+	RequiredParams []string
+	StepNames      []string
+}
+
+// TemplateIndex maps PlanTemplate name → its metadata, built across every
+// document in the submission so a Plan and the template it uses can be
+// co-submitted and cross-checked.
+type TemplateIndex map[string]TemplateMeta
 
 // Run walks every *.yaml under the given roots and lints each document. Missing
 // roots are ignored. It returns the findings and the number of files checked.
@@ -75,6 +104,11 @@ func Run(roots []string) (*Findings, int, error) {
 	}
 	sort.Strings(files)
 
+	type parsed struct {
+		path string
+		doc  map[string]any
+	}
+	var docs []parsed
 	f := &Findings{}
 	for _, path := range files {
 		data, err := os.ReadFile(path)
@@ -93,15 +127,47 @@ func Run(roots []string) (*Findings, int, error) {
 				break
 			}
 			if len(doc) > 0 {
-				LintDoc(doc, path, f)
+				docs = append(docs, parsed{path, doc})
 			}
 		}
+	}
+
+	// First pass: index every PlanTemplate so co-submitted Plans can be checked
+	// against the templates they `use:`.
+	idx := TemplateIndex{}
+	for _, p := range docs {
+		if asStr(p.doc["kind"]) != "PlanTemplate" {
+			continue
+		}
+		name := asStr(mapOf(p.doc["metadata"])["name"])
+		if name == "" {
+			continue
+		}
+		idx[name] = templateMeta(mapOf(p.doc["spec"]))
+	}
+
+	for _, p := range docs {
+		LintDoc(p.doc, p.path, f, idx)
 	}
 	return f, len(files), nil
 }
 
+func templateMeta(spec map[string]any) TemplateMeta {
+	var m TemplateMeta
+	for _, raw := range sliceOf(spec["params"]) {
+		p := mapOf(raw)
+		if b, ok := p["required"].(bool); ok && b {
+			m.RequiredParams = append(m.RequiredParams, asStr(p["name"]))
+		}
+	}
+	for _, raw := range sliceOf(spec["steps"]) {
+		m.StepNames = append(m.StepNames, asStr(mapOf(raw)["name"]))
+	}
+	return m
+}
+
 // LintDoc applies the structural + safety rules to a single decoded document.
-func LintDoc(doc map[string]any, where string, f *Findings) {
+func LintDoc(doc map[string]any, where string, f *Findings, idx TemplateIndex) {
 	// R2 apiVersion
 	if asStr(doc["apiVersion"]) != APIVersion {
 		f.err("R2", where, fmt.Sprintf("apiVersion must be %q, got %q", APIVersion, asStr(doc["apiVersion"])))
@@ -112,17 +178,15 @@ func LintDoc(doc map[string]any, where string, f *Findings) {
 		f.err("R3", where, fmt.Sprintf("kind must be Plan|PlanTemplate, got %q", kind))
 	}
 	// R4 name present, DNS-1123, length
-	meta, _ := asMap(doc["metadata"])
-	name := asStr(meta["name"])
-	switch {
-	case name == "":
+	name := asStr(mapOf(doc["metadata"])["name"])
+	if name == "" {
 		f.err("R4", where, "metadata.name is required")
-	default:
+	} else {
 		if !nameRE.MatchString(name) {
 			f.err("R4", where, fmt.Sprintf("metadata.name %q is not a DNS-1123 label", name))
 		}
 		if len(name) > MaxName {
-			f.err("R4", where, fmt.Sprintf("metadata.name %q is %d>%d chars — the AgentRun will never spawn (63-byte label cap)", name, len(name), MaxName))
+			f.err("R4", where, fmt.Sprintf("metadata.name %q is %d>%d chars — the AgentRun will never spawn cleanly (63-byte label cap)", name, len(name), MaxName))
 		}
 	}
 
@@ -134,7 +198,7 @@ func LintDoc(doc map[string]any, where string, f *Findings) {
 
 	switch kind {
 	case "Plan":
-		lintPlan(spec, where, f)
+		lintPlan(name, spec, where, f, idx)
 	case "PlanTemplate":
 		lintTemplate(spec, where, f)
 	}
@@ -148,7 +212,7 @@ func LintDoc(doc map[string]any, where string, f *Findings) {
 	}
 }
 
-func lintPlan(spec map[string]any, where string, f *Findings) {
+func lintPlan(planName string, spec map[string]any, where string, f *Findings, idx TemplateIndex) {
 	// R5 HOLD-BY-DEFAULT — the load-bearing safety rule. A catalog Plan is a
 	// PROPOSAL: it must NOT be able to execute on merge. Execution is a separate,
 	// human-gated promote/unpause. The reconciler honors spec.paused=true.
@@ -161,15 +225,10 @@ func lintPlan(spec map[string]any, where string, f *Findings) {
 		f.err("R6", where, "spec.steps must be a non-empty list")
 		return
 	}
-	names := stepNames(steps)
-	// R7 unique step names
-	if dupes := duplicates(names); len(dupes) > 0 {
-		f.err("R7", where, fmt.Sprintf("duplicate step names: %v", dupes))
-	}
-	known := make(map[string]bool, len(names))
-	for _, n := range names {
-		known[n] = true
-	}
+	planIsTest, _ := spec["test"].(bool)
+
+	// Per-step shape checks (R6 concrete shape, R14 use-step fields, R15/R16
+	// template resolution, R18 expanded-name length, R19 test coherence).
 	for i, raw := range steps {
 		s, isMap := asMap(raw)
 		name := asStr(s["name"])
@@ -178,32 +237,89 @@ func lintPlan(spec map[string]any, where string, f *Findings) {
 			f.err("R6", sw, "each step needs a name")
 			continue
 		}
-		// R6 a step is either a template include (use:) OR a concrete step
-		// (kind+agentType).
-		if _, hasUse := s["use"]; hasUse {
-			if _, hasKind := s["kind"]; hasKind {
-				f.warn("R6", sw, "a `use:` step should not set `kind` (the template's steps carry kind)")
-			}
-		} else {
-			if kind := asStr(s["kind"]); !stepKinds[kind] {
-				f.err("R6", sw, fmt.Sprintf("kind must be one of %v (got %q)", sortedKinds, kind))
+		switch {
+		case has(s, "use"):
+			lintUseStep(planName, s, sw, f, idx)
+		case truthy(s["fanIn"]):
+			// fan-in is a no-agent step; its shape is checked in graphChecks
+			// (R13). It legitimately has no agentType/kind.
+		default:
+			if k := asStr(s["kind"]); !stepKinds[k] {
+				f.err("R6", sw, fmt.Sprintf("kind must be one of %v (got %q)", sortedKinds, k))
 			}
 			if asStr(s["agentType"]) == "" {
 				f.err("R6", sw, "concrete step needs agentType")
 			}
 		}
-		// R8 dependsOn references must resolve
-		for _, dep := range strSlice(s["dependsOn"]) {
-			if !known[dep] {
-				f.err("R8", sw, fmt.Sprintf("dependsOn references unknown step %q", dep))
-			}
+		// R19 test/kind coherence
+		lintTestDirected(planIsTest, s, sw, f)
+	}
+
+	graphChecks(steps, where, f)
+}
+
+func lintUseStep(planName string, s map[string]any, sw string, f *Findings, idx TemplateIndex) {
+	// R14 a `use:` step must not smuggle runtime fields (the template supplies
+	// them). Mirrors controller validateUseStepShape — expansion hard-fails on
+	// these.
+	var bad []string
+	for _, field := range useForbidden {
+		if has(s, field) {
+			bad = append(bad, field)
 		}
+	}
+	if len(bad) > 0 {
+		sort.Strings(bad)
+		f.err("R14", sw, fmt.Sprintf("a `use:` step MUST NOT declare: %s (the template supplies these)", strings.Join(bad, ", ")))
+	}
+
+	tmplName := asStr(s["use"])
+	tmpl, present := idx[tmplName]
+	if !present {
+		// The template may exist on the target cluster but isn't co-submitted —
+		// we can't prove it's missing, so warn rather than fail.
+		f.warn("R15", sw, fmt.Sprintf("references PlanTemplate %q which is not in this PR — ensure it exists on the target cluster", tmplName))
+		return
+	}
+	// R16 every required param must be supplied in `with:`.
+	with := mapOf(s["with"])
+	for _, p := range tmpl.RequiredParams {
+		if _, ok := with[p]; !ok {
+			f.err("R16", sw, fmt.Sprintf("PlanTemplate %q requires param %q, not supplied in `with:`", tmplName, p))
+		}
+	}
+	// R18 warn if the expanded child-AgentRun name would overflow and get
+	// hash-truncated (still runs, just less readable/debuggable).
+	useName := asStr(s["name"])
+	for _, ts := range tmpl.StepNames {
+		full := planName + "-" + useName + "-" + ts
+		if len(full) > maxExpandedRunName {
+			f.warn("R18", sw, fmt.Sprintf("expanded step name %q is %d>%d chars — the controller will hash-truncate it (less readable); shorten the step or template name", full, len(full), maxExpandedRunName))
+		}
+	}
+}
+
+func lintTestDirected(planIsTest bool, s map[string]any, sw string, f *Findings) {
+	t, ok := asMap(s["test"])
+	if !ok {
+		return
+	}
+	directed := asStr(t["directed"])
+	if directed == "" {
+		return
+	}
+	if !planIsTest {
+		f.warn("R19", sw, "step sets test.directed but spec.test is not true — the directive is ignored")
+		return
+	}
+	if !validDirected(asStr(s["kind"]), directed) {
+		f.err("R19", sw, fmt.Sprintf("test.directed %q is not valid for kind %q (pr→merged|closed_unmerged|opened, check→pass|fail, apply→succeed|error)", directed, normalizeKind(asStr(s["kind"]))))
 	}
 }
 
 func lintTemplate(spec map[string]any, where string, f *Findings) {
 	// R9 templates declare params + steps; template steps are concrete (no nested
-	// use: — expansion is depth-1) and carry kind+agentType.
+	// use: — expansion is depth-1) and carry kind+agentType (unless fan-in).
 	if _, ok := asSlice(spec["params"]); !ok {
 		f.warn("R9", where, "spec.params should be a list of {name, required}")
 	}
@@ -220,16 +336,148 @@ func lintTemplate(spec map[string]any, where string, f *Findings) {
 			f.err("R9", sw, "each step needs a name")
 			continue
 		}
-		if _, hasUse := s["use"]; hasUse {
+		if has(s, "use") {
 			f.err("R9", sw, "template steps must NOT nest `use:` (expansion is depth-1)")
 		}
-		if kind := asStr(s["kind"]); !stepKinds[kind] {
-			f.err("R9", sw, fmt.Sprintf("kind must be one of %v (got %q)", sortedKinds, kind))
+		if truthy(s["fanIn"]) {
+			continue // fan-in shape checked in graphChecks
+		}
+		if k := asStr(s["kind"]); !stepKinds[k] {
+			f.err("R9", sw, fmt.Sprintf("kind must be one of %v (got %q)", sortedKinds, k))
 		}
 		if asStr(s["agentType"]) == "" {
 			f.err("R9", sw, "template step needs agentType")
 		}
 	}
+
+	graphChecks(steps, where, f)
+}
+
+// graphChecks runs the DAG-level rules shared by Plan and PlanTemplate steps:
+// R7 unique names, R8 dependsOn resolves, R11 no cycle, R12 no self-dependency,
+// R13 fan-in shape, R17 triggeredWhen well-formed. Ported from the controller's
+// validateDAG / detectCycle / validateFanInShape.
+func graphChecks(steps []any, where string, f *Findings) {
+	names := map[string]bool{}
+	var dupes []string
+	for _, raw := range steps {
+		n := asStr(mapOf(raw)["name"])
+		if n == "" {
+			continue
+		}
+		if names[n] {
+			dupes = append(dupes, n)
+		}
+		names[n] = true
+	}
+	if len(dupes) > 0 {
+		sort.Strings(dupes)
+		f.err("R7", where, fmt.Sprintf("duplicate step names: %v", uniq(dupes)))
+	}
+
+	for i, raw := range steps {
+		s := mapOf(raw)
+		name := asStr(s["name"])
+		sw := fmt.Sprintf("%s step[%d]=%s", where, i, orQ(name))
+		// R8 + R12 dependsOn resolves and isn't self-referential
+		for _, dep := range strSlice(s["dependsOn"]) {
+			if !names[dep] {
+				f.err("R8", sw, fmt.Sprintf("dependsOn references unknown step %q", dep))
+			}
+			if dep == name && name != "" {
+				f.err("R12", sw, "step depends on itself")
+			}
+		}
+		// R17 triggeredWhen well-formed
+		if tw, ok := asMap(s["triggeredWhen"]); ok {
+			target := asStr(tw["step"])
+			if target != "" && !names[target] {
+				f.err("R17", sw, fmt.Sprintf("triggeredWhen references unknown step %q", target))
+			}
+			if target == name && name != "" {
+				f.err("R17", sw, "triggeredWhen references itself")
+			}
+			if ph := asStr(tw["phase"]); ph != "" && !triggerPhase[ph] {
+				f.err("R17", sw, fmt.Sprintf("triggeredWhen.phase %q must be one of [AwaitingApproval AwaitingReview Running Succeeded]", ph))
+			}
+		}
+		// R13 fan-in shape
+		lintFanIn(s, name, sw, f)
+	}
+
+	if cyc := detectCycle(steps); cyc != "" {
+		f.err("R11", where, cyc)
+	}
+}
+
+// lintFanIn mirrors controller validateFanInShape: fan-in ⇒ ≥1 dependsOn AND ≥1
+// fanInValidate; non-fan-in ⇒ no fanInValidate.
+func lintFanIn(s map[string]any, name, sw string, f *Findings) {
+	fanIn := truthy(s["fanIn"])
+	validate := strSlice(s["fanInValidate"])
+	deps := strSlice(s["dependsOn"])
+	if fanIn {
+		if len(deps) == 0 {
+			f.err("R13", sw, "fan-in step must declare at least one dependsOn (nothing to fan in from)")
+		}
+		if len(validate) == 0 {
+			f.err("R13", sw, "fan-in step must declare at least one fanInValidate path (an empty gate silently passes)")
+		}
+		return
+	}
+	if len(validate) > 0 {
+		f.err("R13", sw, "non-fan-in step must not declare fanInValidate (set fanIn: true)")
+	}
+	_ = name
+}
+
+// detectCycle runs a DFS over the dependsOn graph. Returns "" when acyclic, else
+// a message naming a step involved in the cycle. Ported from the controller's
+// detectCycle (white/grey/black tri-colour DFS).
+func detectCycle(steps []any) string {
+	deps := map[string][]string{}
+	var order []string
+	for _, raw := range steps {
+		s := mapOf(raw)
+		n := asStr(s["name"])
+		if n == "" {
+			continue
+		}
+		order = append(order, n)
+		deps[n] = strSlice(s["dependsOn"])
+	}
+	const (
+		white = 0
+		grey  = 1
+		black = 2
+	)
+	color := map[string]int{}
+	var visit func(string) string
+	visit = func(name string) string {
+		color[name] = grey
+		for _, dep := range deps[name] {
+			switch color[dep] {
+			case grey:
+				return fmt.Sprintf("cycle detected involving step %q", dep)
+			case white:
+				if _, known := deps[dep]; known {
+					if msg := visit(dep); msg != "" {
+						return msg
+					}
+				}
+			}
+		}
+		color[name] = black
+		return ""
+	}
+	for _, n := range order {
+		if color[n] == white {
+			if msg := visit(n); msg != "" {
+				return msg
+			}
+		}
+	}
+	return ""
 }
 
 // --- small typed accessors over the generic YAML tree -----------------------
@@ -239,9 +487,19 @@ func asMap(v any) (map[string]any, bool) {
 	return m, ok
 }
 
+func mapOf(v any) map[string]any {
+	m, _ := v.(map[string]any)
+	return m
+}
+
 func asSlice(v any) ([]any, bool) {
 	s, ok := v.([]any)
 	return s, ok
+}
+
+func sliceOf(v any) []any {
+	s, _ := v.([]any)
+	return s
 }
 
 func asStr(v any) string {
@@ -249,14 +507,14 @@ func asStr(v any) string {
 	return s
 }
 
-func stepNames(steps []any) []string {
-	out := make([]string, 0, len(steps))
-	for _, raw := range steps {
-		if s, ok := asMap(raw); ok {
-			out = append(out, asStr(s["name"]))
-		}
-	}
-	return out
+func has(m map[string]any, key string) bool {
+	_, ok := m[key]
+	return ok
+}
+
+func truthy(v any) bool {
+	b, _ := v.(bool)
+	return b
 }
 
 func strSlice(v any) []string {
@@ -271,18 +529,15 @@ func strSlice(v any) []string {
 	return out
 }
 
-func duplicates(names []string) []string {
-	count := map[string]int{}
-	for _, n := range names {
-		count[n]++
-	}
+func uniq(in []string) []string {
+	seen := map[string]bool{}
 	var out []string
-	for n, c := range count {
-		if c > 1 {
-			out = append(out, n)
+	for _, s := range in {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
 		}
 	}
-	sort.Strings(out)
 	return out
 }
 
@@ -297,6 +552,28 @@ func uniqueMatches(re *regexp.Regexp, s string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func normalizeKind(kind string) string {
+	switch kind {
+	case "apply":
+		return "apply"
+	case "check":
+		return "check"
+	default:
+		return "pr"
+	}
+}
+
+func validDirected(kind, directed string) bool {
+	switch normalizeKind(kind) {
+	case "check":
+		return directed == "pass" || directed == "fail"
+	case "apply":
+		return directed == "succeed" || directed == "error"
+	default: // pr
+		return directed == "merged" || directed == "closed_unmerged" || directed == "opened"
+	}
 }
 
 func orQ(s string) string {
