@@ -18,6 +18,14 @@ spec:
           # required). The virtual key comes from the ExternalSecret below.
           - name: AI_GATEWAY_URL
             value: http://leartech-ai-gateway.ai-gateway.svc.cluster.local:8080
+          # Which cluster this run is on (gcp/az) — stamped on the sticky comment
+          # and used for a per-cluster comment marker.
+          - name: CLUSTER_ID
+            valueFrom:
+              configMapKeyRef:
+                name: jx-cluster-config
+                key: CLUSTER_ID
+                optional: true
           # Git credentials for the sticky PR comment — tekton-git is a basic-auth
           # secret (keys username/password), matching the pipeline-catalog ai-review task.
           - name: GIT_TOKEN

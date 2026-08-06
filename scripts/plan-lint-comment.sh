@@ -15,20 +15,21 @@ set -uo pipefail
 JSON_FILE="${1:-.plan-lint.json}"
 STATUS_FILE="${2:-.plan-lint.status}"
 status=$(cat "$STATUS_FILE" 2>/dev/null || echo 1)
-MARKER="<!-- plan-lint -->"
+CLUSTER="${CLUSTER_ID:-unknown}"
+MARKER="<!-- plan-lint-${CLUSTER} -->"
 REPO_SLUG="${REPO_OWNER:-mikelear}/${REPO_NAME:-leartech-plan-catalog}"
 
-BODY=$(python3 - "$JSON_FILE" "$status" "$REPO_SLUG" <<'PY'
+BODY=$(python3 - "$JSON_FILE" "$status" "$REPO_SLUG" "$CLUSTER" <<'PY'
 import json, sys
-path, status, slug = sys.argv[1], sys.argv[2], sys.argv[3]
+path, status, slug, cluster = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 base = f"https://github.com/{slug}/blob/main"
 try:
     r = json.load(open(path))
 except Exception:
     r = None
-L = ["<!-- plan-lint -->"]
+L = [f"<!-- plan-lint-{cluster} -->"]
 if r is None:
-    L += ["## 📐 plan-lint (deterministic gate)", "",
+    L += [f"## 📐 plan-lint · cluster `{cluster}` (deterministic gate)", "",
           "> [!CAUTION]", "> The gate failed before producing a report — see the `plan-lint` "
           "pipeline log (likely `go test`, schema drift, or kubeconform).", ""]
     print("\n".join(L)); sys.exit(0)
@@ -37,7 +38,7 @@ errs, warns, n = r.get("errors") or [], r.get("warnings") or [], r.get("files_ch
 passed = r.get("pass", False) and status == "0"
 badge = ("https://img.shields.io/badge/plan--lint-passing-brightgreen"
          if passed else "https://img.shields.io/badge/plan--lint-failing-red")
-L += [f"## 📐 plan-lint — deterministic gate  ![plan-lint]({badge})", ""]
+L += [f"## 📐 plan-lint — deterministic gate · cluster `{cluster}`  ![plan-lint]({badge})", ""]
 
 # Human callout (GitHub renders these colored).
 if passed:
@@ -90,7 +91,7 @@ print("\n".join(L))
 PY
 )
 
-echo "plan-lint-comment: post-context — token=$([ -n "${GIT_TOKEN:-}" ] && echo set || echo MISSING) pr=${PULL_NUMBER:-MISSING} owner=${REPO_OWNER:-MISSING} repo=${REPO_NAME:-MISSING} gate_status=$status"
+echo "plan-lint-comment: post-context — cluster=$CLUSTER token=$([ -n "${GIT_TOKEN:-}" ] && echo set || echo MISSING) pr=${PULL_NUMBER:-MISSING} owner=${REPO_OWNER:-MISSING} repo=${REPO_NAME:-MISSING} gate_status=$status"
 
 if [ -n "${GIT_TOKEN:-}" ] && [ -n "${PULL_NUMBER:-}" ] && [ -n "${REPO_OWNER:-}" ] && [ -n "${REPO_NAME:-}" ]; then
   AUTH="Authorization: token ${GIT_TOKEN}"

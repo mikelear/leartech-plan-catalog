@@ -14,6 +14,14 @@ spec:
           env:
           - name: HOME
             value: /tekton/home
+          # Which cluster this run is on (gcp/az) — stamped on the sticky comment
+          # and used for a per-cluster comment marker.
+          - name: CLUSTER_ID
+            valueFrom:
+              configMapKeyRef:
+                name: jx-cluster-config
+                key: CLUSTER_ID
+                optional: true
           # Git creds for the sticky feedback comment — tekton-git is basic-auth.
           - name: GIT_TOKEN
             valueFrom:
