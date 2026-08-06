@@ -18,6 +18,7 @@ spec:
       inputs:                       # dev agent → Initiative shape (R21)
         name: build-change
         repo: mikelear/example-service
+        branch: feat/build-change
         goal: >-
           Make the change and open a PR via open_pr. Done = PR merged and gates green.
     - name: verify
