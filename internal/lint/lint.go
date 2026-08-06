@@ -56,7 +56,54 @@ var (
 	// forbidden fields on a `use:` step — mirrors controller validateUseStepShape.
 	// (kind + triggeredWhen are NOT forbidden there; only these smuggle runtime.)
 	useForbidden = []string{"agentType", "inputs", "repo", "budgetIter", "hold", "fanIn", "fanInValidate"}
+	// Allowlists of accepted field names, taken verbatim from the Plan/PlanTemplate
+	// CRD openAPIV3Schema. Anything else is rejected by the apiserver's strict
+	// decoding at apply time — most commonly a step `goal` (which belongs under
+	// `inputs`) or a spec-level `description` (not a CRD field). R20 catches these.
+	planSpecKeys     = strset("command", "paused", "remediates", "steps", "tenant", "test", "triggeredBy")
+	templateSpecKeys = strset("params", "steps")
+	stepKeys         = strset("agentType", "budgetIter", "dependsOn", "fanIn", "fanInValidate", "hold", "inputs", "kind", "name", "repo", "test", "triggeredWhen", "use", "with")
+	paramKeys        = strset("name", "required")
 )
+
+func strset(keys ...string) map[string]bool {
+	m := make(map[string]bool, len(keys))
+	for _, k := range keys {
+		m[k] = true
+	}
+	return m
+}
+
+// unknownKeys returns the sorted keys of m not present in allowed.
+func unknownKeys(m map[string]any, allowed map[string]bool) []string {
+	var out []string
+	for k := range m {
+		if !allowed[k] {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// lintUnknown (R20) flags fields not in the CRD schema — the apiserver strict-
+// decodes them out at apply, so a Plan carrying them cannot be instantiated. The
+// classic offenders are a step-level `goal` (belongs under `inputs`) and a
+// spec-level `description` (not a CRD field).
+func lintUnknown(m map[string]any, allowed map[string]bool, scope, where string, f *Findings) {
+	uk := unknownKeys(m, allowed)
+	if len(uk) == 0 {
+		return
+	}
+	hint := ""
+	for _, k := range uk {
+		if k == "goal" {
+			hint = " — a step goal goes under `inputs:` (inputs.goal), not at step level"
+			break
+		}
+	}
+	f.err("R20", where, fmt.Sprintf("unknown %s field(s) %v — not in the Plan CRD; the apiserver strict-decodes them out at apply%s", scope, uk, hint))
+}
 
 // Finding is one structured rule result — machine-readable so a verdict store /
 // training flywheel can consume it (the ai-review layer + real run outcomes are
@@ -233,6 +280,8 @@ func lintPlan(planName string, spec map[string]any, where string, f *Findings, i
 	if b, ok := spec["paused"].(bool); !ok || !b {
 		f.err("R5", where, "spec.paused MUST be true — catalog Plans are hold-by-default proposals; execution is a separate human promote/unpause")
 	}
+	// R20 no unknown spec fields (the apiserver strict-decodes them out at apply).
+	lintUnknown(spec, planSpecKeys, "spec", where, f)
 
 	steps, ok := asSlice(spec["steps"])
 	if !ok || len(steps) == 0 {
@@ -251,6 +300,8 @@ func lintPlan(planName string, spec map[string]any, where string, f *Findings, i
 			f.err("R6", sw, "each step needs a name")
 			continue
 		}
+		// R20 no unknown step fields (e.g. a top-level `goal` — it goes in `inputs`).
+		lintUnknown(s, stepKeys, "step", sw, f)
 		switch {
 		case has(s, "use"):
 			lintUseStep(planName, s, sw, f, idx)
@@ -337,6 +388,13 @@ func lintTemplate(spec map[string]any, where string, f *Findings) {
 	if _, ok := asSlice(spec["params"]); !ok {
 		f.warn("R9", where, "spec.params should be a list of {name, required}")
 	}
+	// R20 no unknown template-spec fields.
+	lintUnknown(spec, templateSpecKeys, "spec", where, f)
+	for _, raw := range sliceOf(spec["params"]) {
+		if p, ok := asMap(raw); ok {
+			lintUnknown(p, paramKeys, "param", where, f)
+		}
+	}
 	steps, ok := asSlice(spec["steps"])
 	if !ok || len(steps) == 0 {
 		f.err("R9", where, "spec.steps must be a non-empty list")
@@ -350,6 +408,8 @@ func lintTemplate(spec map[string]any, where string, f *Findings) {
 			f.err("R9", sw, "each step needs a name")
 			continue
 		}
+		// R20 no unknown step fields.
+		lintUnknown(s, stepKeys, "step", sw, f)
 		if has(s, "use") {
 			f.err("R9", sw, "template steps must NOT nest `use:` (expansion is depth-1)")
 		}
