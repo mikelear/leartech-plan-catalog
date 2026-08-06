@@ -30,7 +30,10 @@ set -uo pipefail
 
 GW="${AI_GATEWAY_URL:-}"
 KEY="${AI_GATEWAY_API_KEY:-}"
-MODELS="${REVIEW_MODELS:-claude-sonnet-4-6}"
+# The gateway routes by its own LOGICAL model names (claude, deepseek, codestral,
+# qwen, azure_openai — the gateway resolves each to a provider), NOT provider model
+# ids like "claude-sonnet-4-6". Multi-model consensus = a comma-list, e.g. "claude,deepseek".
+MODELS="${REVIEW_MODELS:-claude}"
 
 if [ -z "$GW" ] || [ -z "$KEY" ]; then
   echo "plan-ai-review: AI_GATEWAY_URL / AI_GATEWAY_API_KEY unset — skipping advisory review (provision the virtual key to enable)."

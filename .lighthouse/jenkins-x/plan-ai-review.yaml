@@ -18,15 +18,24 @@ spec:
           # required). The virtual key comes from the ExternalSecret below.
           - name: AI_GATEWAY_URL
             value: http://leartech-ai-gateway.ai-gateway.svc.cluster.local:8080
+          # Git credentials for the sticky PR comment — the tekton-git secret is
+          # the canonical source (matches the pipeline-catalog ai-review task).
+          - name: GIT_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: tekton-git
+                key: GIT_TOKEN
+                optional: true
+          - name: GIT_USER
+            valueFrom:
+              secretKeyRef:
+                name: tekton-git
+                key: GIT_USER
+                optional: true
           envFrom:
-          # jx-boot-job-env-vars carries GIT_TOKEN for the sticky PR comment.
-          - secretRef:
-              name: jx-boot-job-env-vars
-              optional: true
-          # Our OWN AI gateway virtual key for the advisory review. Holds
-          # AI_GATEWAY_URL + AI_GATEWAY_API_KEY (+ optional REVIEW_MODELS).
-          # optional:true so this pipeline still runs (and self-skips) before
-          # the key is provisioned.
+          # Our OWN AI gateway virtual key for the advisory review — exposes
+          # AI_GATEWAY_API_KEY. optional:true so this pipeline still runs (and
+          # self-skips) before the key is provisioned.
           - secretRef:
               name: leartech-plan-catalog-ai-key
               optional: true
