@@ -7,8 +7,9 @@ passes the gate — and how to read the gate's feedback and self-correct.
 ## The loop
 
 1. Write a Plan to `plans/<name>.yaml` (or a PlanTemplate to `templates/<name>.yaml`).
-2. Open a PR. Two checks run:
-   - **`plan-lint`** — the deterministic HARD gate (must pass to merge).
+2. Open a PR. Three checks run:
+   - **`plan-lint`** — the deterministic HARD gate (rules R1–R21 + kubeconform; must pass).
+   - **`plan-cluster-verify`** — server-side dry-run against the live CRD (must pass).
    - **`plan-ai-review`** — an advisory model review (never blocks).
 3. Read the feedback (see "Reading feedback" below), fix, push again.
 4. A human maintainer merges. Merging does **not** run the Plan — execution is a
