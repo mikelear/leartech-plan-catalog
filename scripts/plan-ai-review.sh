@@ -64,21 +64,27 @@ REVIEW_MD="${REVIEW_MD}\n---\n_Advisory only. The deterministic \`plan-lint\` is
 
 echo -e "$REVIEW_MD"
 
-# Sticky PR comment (best-effort; marker keeps one comment)
+# Sticky PR comment (best-effort; marker keeps one comment). Observable: log which
+# context vars are present (token presence only, never the value) + the HTTP code,
+# so a non-posting run is diagnosable from the pipeline log.
+echo "plan-ai-review: post-context — token=$([ -n "${GIT_TOKEN:-}" ] && echo set || echo MISSING) pr=${PULL_NUMBER:-MISSING} owner=${REPO_OWNER:-MISSING} repo=${REPO_NAME:-MISSING}"
 if [ -n "${GIT_TOKEN:-}" ] && [ -n "${PULL_NUMBER:-}" ] && [ -n "${REPO_OWNER:-}" ] && [ -n "${REPO_NAME:-}" ]; then
   MARKER="<!-- plan-ai-review -->"
   BODY=$(printf '%s\n\n%b' "$MARKER" "$REVIEW_MD")
-  API="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues/${PULL_NUMBER}/comments?per_page=100"
   AUTH="Authorization: token ${GIT_TOKEN}"
-  EXISTING=$(curl -fsSL -H "$AUTH" "$API" 2>/dev/null | python3 -c "import json,sys
+  EXISTING=$(curl -fsSL -H "$AUTH" "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues/${PULL_NUMBER}/comments?per_page=100" 2>/dev/null | python3 -c "import json,sys
 try:
  [print(c['id']) for c in json.load(sys.stdin) if c.get('body','').startswith('$MARKER')]
 except Exception: pass" | head -1)
   PAYLOAD=$(python3 -c "import json,sys; print(json.dumps({'body':sys.stdin.read()}))" <<<"$BODY")
   if [ -n "$EXISTING" ]; then
-    curl -fsSL -X PATCH -H "$AUTH" -d "$PAYLOAD" "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues/comments/${EXISTING}" >/dev/null 2>&1
+    code=$(curl -sSL -o /dev/null -w "%{http_code}" -X PATCH -H "$AUTH" -d "$PAYLOAD" "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues/comments/${EXISTING}" 2>/dev/null)
+    echo "plan-ai-review: updated sticky comment -> HTTP $code"
   else
-    curl -fsSL -X POST -H "$AUTH" -d "$PAYLOAD" "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues/${PULL_NUMBER}/comments" >/dev/null 2>&1
+    code=$(curl -sSL -o /dev/null -w "%{http_code}" -X POST -H "$AUTH" -d "$PAYLOAD" "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues/${PULL_NUMBER}/comments" 2>/dev/null)
+    echo "plan-ai-review: posted sticky comment -> HTTP $code"
   fi
+else
+  echo "plan-ai-review: skipping PR comment (missing context above) — review is in this log"
 fi
 exit 0
