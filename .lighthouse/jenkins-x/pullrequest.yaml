@@ -2,7 +2,7 @@ apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
   creationTimestamp: null
-  name: pr
+  name: plan-lint
 spec:
   pipelineSpec:
     tasks:
@@ -14,6 +14,19 @@ spec:
           env:
           - name: HOME
             value: /tekton/home
+          # Git creds for the sticky feedback comment — tekton-git is basic-auth.
+          - name: GIT_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: tekton-git
+                key: password
+                optional: true
+          - name: GIT_USER
+            valueFrom:
+              secretKeyRef:
+                name: tekton-git
+                key: username
+                optional: true
           name: ""
           resources:
             requests:
@@ -24,12 +37,19 @@ spec:
         - image: uses:jenkins-x/jx3-pipeline-catalog/tasks/git-clone/git-clone-pr.yaml@versionStream
           name: ""
           resources: {}
-        # The HARD GATE. All deterministic (non-LLM) checks are Go:
+        - image: ghcr.io/jenkins-x/jx-boot:3.16.59
+          name: jx-variables
+          resources: {}
+          script: |
+            #!/usr/bin/env sh
+            jx gitops variables
+        # The HARD GATE. All deterministic (non-LLM) checks are Go. Runs with
+        # set +e so a failure still lets the report step post feedback; the
+        # overall verdict is written to .plan-lint.status and re-applied there.
         #   1. unit tests for the rules engine (they ARE part of the gate)
-        #   2. the semantic + DAG + safety linter (R1–R19)
+        #   2. the semantic + DAG + safety linter (R1–R19) — text to log + json to file
         #   3. a drift guard: committed JSON schemas must match the vendored CRDs
         #   4. kubeconform: every Plan/PlanTemplate conforms to the CRD schema
-        #      (types, enums, required, patterns) — auto-derived, stays in sync.
         - image: golang:1.26-alpine
           name: plan-lint
           resources:
@@ -38,20 +58,38 @@ spec:
               memory: 512Mi
           script: |
             #!/bin/sh
-            set -e
-            go test ./...
-            go run ./cmd/plan-lint
-            # Schema drift guard — regenerate from the vendored CRDs and diff.
+            set +e
+            fail=0
+            go test ./... || fail=1
+            go run ./cmd/plan-lint || fail=1            # text, for the log
+            go run ./cmd/plan-lint -json > .plan-lint.json   # structured, for the comment
             go run ./cmd/crd2schema -out /tmp/schemas-gen schemas/crd/*.yaml
             for f in schemas/*.json; do
               diff -u "$f" "/tmp/schemas-gen/$(basename "$f")" || {
-                echo "plan-lint: schemas/ is stale — run: go run ./cmd/crd2schema -out schemas schemas/crd/*.yaml"; exit 1; }
+                echo "plan-lint: schemas/ is stale — run: make schemas"; fail=1; }
             done
-            # CRD-schema conformance for every submitted Plan/PlanTemplate.
             go run github.com/yannh/kubeconform/cmd/kubeconform@v0.8.0 \
               -strict -summary \
               -schema-location './schemas/{{ .ResourceKind }}_{{ .ResourceAPIVersion }}.json' \
-              plans/ templates/
+              plans/ templates/ || fail=1
+            echo "$fail" > .plan-lint.status
+            echo "plan-lint: gate status=$fail"
+            exit 0
+        # Post the gate's findings as a sticky PR comment, then re-apply the
+        # gate's exit code so the check goes red on failure.
+        - image: python:3.12-alpine
+          name: plan-lint-report
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          script: |
+            #!/bin/sh
+            set -u
+            apk add --no-cache bash curl >/dev/null 2>&1
+            . ./.jx/variables.sh 2>/dev/null || true
+            export REPO_NAME="${REPO_NAME:-$APP_NAME}"
+            bash scripts/plan-lint-comment.sh .plan-lint.json .plan-lint.status
   podTemplate:
     tolerations:
     - key: sku

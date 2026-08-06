@@ -2,11 +2,13 @@ apiVersion: config.lighthouse.jenkins-x.io/v1alpha1
 kind: TriggerConfig
 spec:
   presubmits:
-  # Conventional primary presubmit (context "pr") — the deterministic Go hard
-  # gate: rules engine (R1–R19) + CRD-schema conformance (kubeconform). This is
-  # the context to mark REQUIRED on main; a red pr must block the merge.
-  - name: pr
-    context: "pr"
+  # The deterministic Go hard gate: rules engine (R1–R19) + CRD-schema
+  # conformance (kubeconform). Descriptive context name (plan-lint) so a
+  # contributor sees exactly what gates their PR. This is the REQUIRED check;
+  # a red plan-lint must block the merge. (File stays pullrequest.yaml — the
+  # conventional presubmit filename — while the context is renamed.)
+  - name: plan-lint
+    context: "plan-lint"
     always_run: true
     source: pullrequest.yaml
   # ADVISORY — the multi-model ai-review via the owned gateway. optional:true so
