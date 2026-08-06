@@ -85,7 +85,10 @@ for src in "$OLDPWD"/templates/*.yaml; do
     echo "# Proposed from the ShipProven Plan Catalog (mikelear/leartech-plan-catalog)."
     echo "# Reviewed there by plan-lint (R1-R19 + schema) + ai-review; re-gated here."
     echo "# Do not edit by hand — sync'd from templates/${b}.yaml."
-    echo "# Origin: ${PROV_LINE}"
+    # NB: keep this file's content a pure function of the source template — do NOT
+    # embed the triggering commit here, or every catalog merge would rewrite it and
+    # spuriously re-sync. Volatile provenance (which catalog PR triggered the sync)
+    # lives in the controller PR body + commit message instead.
     cat "$src"
     echo '{{- end }}'
   } > "$dst"

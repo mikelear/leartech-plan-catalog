@@ -11,15 +11,13 @@ metadata:
   name: example-compose-plan
 spec:
   paused: true
-  description: >-
-    Reference example of template composition — build a change, then reuse the
-    example-verify-arrival template to confirm the service arrived at version.
   steps:
     - name: build
       kind: pr
       agentType: leartech-agent-go
-      goal: >-
-        Make the change and open a PR. Done = PR opened via open_pr and gates green.
+      inputs:
+        goal: >-
+          Make the change and open a PR. Done = PR opened via open_pr and gates green.
     - name: verify
       use: example-verify-arrival
       dependsOn:

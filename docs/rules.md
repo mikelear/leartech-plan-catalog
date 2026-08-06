@@ -1,4 +1,4 @@
-# Plan Catalog rules (R1–R19)
+# Plan Catalog rules (R1–R20)
 
 _Generated from `internal/lint` — do not edit by hand; run `make rules`._
 
@@ -25,6 +25,7 @@ Every rule the deterministic `plan-lint` gate enforces. Errors block merge; a fa
 | [R17](#r17) | triggeredWhen | triggeredWhen must name a declared step and a valid phase, or the trigger never fires. |
 | [R18](#r18) | Expanded name length | An over-long expanded child name (<plan>-<useStep>-<tmplStep>) is hash-truncated by the controller — it still runs but the name is unreadable. |
 | [R19](#r19) | Test coherence | test.directed vocabulary is kind-specific; a mismatch is a silent no-op, and a directive without spec.test is ignored. |
+| [R20](#r20) | No unknown fields | Fields not in the Plan/PlanTemplate CRD are strict-decoded out by the apiserver at apply, so a Plan carrying them cannot be instantiated. Common offenders: a step-level `goal` (belongs under `inputs`) and a spec-level `description` (not a CRD field). |
 
 ## R1 — Valid document
 
@@ -139,4 +140,10 @@ Every rule the deterministic `plan-lint` gate enforces. Errors block merge; a fa
 **Why:** test.directed vocabulary is kind-specific; a mismatch is a silent no-op, and a directive without spec.test is ignored.
 
 **Fix:** Match test.directed to the step kind (pr→merged|closed_unmerged|opened, check→pass|fail, apply→succeed|error) and set spec.test: true.
+
+## R20 — No unknown fields
+
+**Why:** Fields not in the Plan/PlanTemplate CRD are strict-decoded out by the apiserver at apply, so a Plan carrying them cannot be instantiated. Common offenders: a step-level `goal` (belongs under `inputs`) and a spec-level `description` (not a CRD field).
+
+**Fix:** Use only CRD fields. Put a step goal under `inputs:` (inputs.goal); drop spec-level `description` (use a YAML comment for human context).
 

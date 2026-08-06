@@ -33,6 +33,7 @@ var Rules = map[string]RuleMeta{
 	"R17": {"R17", "triggeredWhen", "triggeredWhen must name a declared step and a valid phase, or the trigger never fires.", "Point triggeredWhen.step at an existing step and set phase to Running|AwaitingReview|AwaitingApproval|Succeeded."},
 	"R18": {"R18", "Expanded name length", "An over-long expanded child name (<plan>-<useStep>-<tmplStep>) is hash-truncated by the controller — it still runs but the name is unreadable.", "Shorten the plan, use-step, or template step names to keep the expanded name under 57 chars."},
 	"R19": {"R19", "Test coherence", "test.directed vocabulary is kind-specific; a mismatch is a silent no-op, and a directive without spec.test is ignored.", "Match test.directed to the step kind (pr→merged|closed_unmerged|opened, check→pass|fail, apply→succeed|error) and set spec.test: true."},
+	"R20": {"R20", "No unknown fields", "Fields not in the Plan/PlanTemplate CRD are strict-decoded out by the apiserver at apply, so a Plan carrying them cannot be instantiated. Common offenders: a step-level `goal` (belongs under `inputs`) and a spec-level `description` (not a CRD field).", "Use only CRD fields. Put a step goal under `inputs:` (inputs.goal); drop spec-level `description` (use a YAML comment for human context)."},
 }
 
 // Enriched is a Finding plus its catalog metadata — the shape emitted in

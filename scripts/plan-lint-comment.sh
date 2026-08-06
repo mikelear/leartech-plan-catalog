@@ -18,10 +18,14 @@ status=$(cat "$STATUS_FILE" 2>/dev/null || echo 1)
 CLUSTER="${CLUSTER_ID:-unknown}"
 MARKER="<!-- plan-lint-${CLUSTER} -->"
 REPO_SLUG="${REPO_OWNER:-mikelear}/${REPO_NAME:-leartech-plan-catalog}"
+# The commit this gate ran against — stamped so the sticky comment's freshness is
+# unambiguous (it is edited in place, so its GitHub timestamp looks old).
+SHA=$(printf '%s' "${PULL_PULL_SHA:-$(git rev-parse HEAD 2>/dev/null)}" | cut -c1-8)
 
-BODY=$(python3 - "$JSON_FILE" "$status" "$REPO_SLUG" "$CLUSTER" <<'PY'
+BODY=$(python3 - "$JSON_FILE" "$status" "$REPO_SLUG" "$CLUSTER" "$SHA" <<'PY'
 import json, sys
 path, status, slug, cluster = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+sha = sys.argv[5] if len(sys.argv) > 5 else ""
 base = f"https://github.com/{slug}/blob/main"
 try:
     r = json.load(open(path))
@@ -85,8 +89,10 @@ L += ["**References:** "
       f"[JSON schema]({base}/schemas/plan_v1alpha1.json) · "
       f"[examples]({base}/plans) · "
       f"[AGENTS.md]({base}/AGENTS.md)", ""]
+stamp = f"plan-lint · reviewed `{sha}`" + (f" · cluster `{cluster}`" if cluster else "") + " · updated in place on each push"
 L += ["---", "_Deterministic hard gate — this blocks merge. "
-      "See also the advisory `plan-ai-review` comment._"]
+      "See also the advisory `plan-ai-review` comment._",
+      "", f"<sub>{stamp}</sub>"]
 print("\n".join(L))
 PY
 )
