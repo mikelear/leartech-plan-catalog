@@ -79,13 +79,20 @@ func lintInputs(agentType string, s map[string]any, sw string, f *Findings) {
 	switch {
 	case devAgentTypes[agentType]:
 		if asStr(inp["name"]) == "" {
-			f.err("R21", sw, "dev-agent step inputs need `name` (the Initiative shape is inputs: {name, repo, goal})")
+			f.err("R21", sw, "dev-agent step inputs need `name` (the Initiative shape is inputs: {name, repo, branch, goal})")
 		}
 		if asStr(inp["goal"]) == "" {
 			f.err("R21", sw, "dev-agent step inputs need `goal` (under inputs, not at step level)")
 		}
-		if asStr(inp["repo"]) == "" && !has(inp, "repos") {
-			f.err("R21", sw, "dev-agent step inputs need `repo` (or repos)")
+		// Initiative: legacy single-repo requires BOTH repo and branch; or the new
+		// `repos: [{repo, branch, base?}]` list. (base defaults to main.)
+		if !has(inp, "repos") {
+			if asStr(inp["repo"]) == "" {
+				f.err("R21", sw, "dev-agent step inputs need `repo` (or a `repos:` list)")
+			}
+			if asStr(inp["branch"]) == "" {
+				f.err("R21", sw, "dev-agent step inputs need `branch` — the Initiative's legacy single-repo shape requires both repo and branch (or use a `repos:` list)")
+			}
 		}
 	case agentType == "leartech-agent-infra":
 		if asStr(inp["action"]) == "" {

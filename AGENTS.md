@@ -70,7 +70,7 @@ run time (there is no `goal` field at step level; it goes **inside** `inputs`). 
   inputs:
     name: kebab-id            # required — short kebab id (also the branch suffix)
     repo: owner/name          # required — owner defaults to mikelear if omitted
-    branch: feat/thing        # optional — defaults from name
+    branch: feat/thing        # required (legacy single-repo shape) — the branch the agent pushes to
     goal: |                   # required — what the agent must achieve + the done-check
       …
   ```
