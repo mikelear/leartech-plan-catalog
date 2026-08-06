@@ -1,0 +1,136 @@
+# Teach gate/tools/pipelines.py that a SUPERSEDED pipeline run is cancelled, not failed.
+#
+# THE BUG (traced end to end, all links verified)
+#   1. lighthouse fork PR #6 `cancel-superseded-runs` cancels the in-flight PipelineRun on
+#      a new commit  ->  spec.status = CancelledRunFinally
+#   2. Tekton reports Succeeded=False with reason "Cancelled"
+#   3. lighthouse pkg/engines/tekton/activity.go (fork PR #8) maps that to AbortedState
+#   4. lighthouse pkg/foghorn/controller.go maps AbortedState -> scm.StateCanceled with
+#      description "Pipeline cancelled"
+#   5. go-scm github convertFromState has NO cancelled state, so it falls to
+#      `default: return "error"` — the fork's own comment says exactly this:
+#      "GitHub's status API has no 'cancelled' state, so go-scm renders this as 'error'"
+#   6. gh statusCheckRollup therefore reports state=ERROR
+#   7. gate/tools/pipelines.py: FAILED_STATES = {'FAILURE', 'ERROR'}  ->  .failed == True
+#
+# So an agent reads its OWN superseded builds as failed gates. The distinguishing signal
+# exists — foghorn sets the status DESCRIPTION to "Pipeline cancelled" — but
+# parse_status_check_rollup reads only context / state / targetUrl and discards it.
+#
+# WHY IT IS LATENT TODAY
+# The current Dev-agent pattern is push-then-wait, so superseding rarely happens. It bites
+# any push-heavy workload — notably the design/sketch iteration loop, where an agent may
+# land several commits in a minute and every iteration would then read a phantom failure
+# and try to "fix" it.
+#
+# BLAST RADIUS (verified on origin/main — small)
+#   gate/tools/pipelines.py                      the fix
+#   gate/criteria/shared/test_pipeline_checks.py consumes .failed / .terminal
+#   tests/test_pipelines.py                      unit coverage
+# NOT affected: gate/watcher/iteration_loop.py, gate/tools/end2end_gate.py and
+# app/db/agent_diagnostics.py reference `failure.failed_tests`, an unrelated field.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: pipelines-cancelled-state
+spec:
+  paused: true
+  description: >-
+    Stop gate/tools/pipelines.py reporting superseded (cancelled) pipeline runs as failed
+    gates. A cancelled run surfaces as GitHub state ERROR because go-scm has no cancelled
+    state; the only discriminator is the status description "Pipeline cancelled", which the
+    rollup parser currently discards. Fix it and prove it against a real superseded run.
+  steps:
+    - name: handle-cancelled
+      kind: pr
+      agentType: leartech-agent-py
+      repo: mikelear/leartech-automated-agent
+      goal: >-
+        Teach gate/tools/pipelines.py to distinguish a superseded (cancelled) run from a
+        genuine failure.
+
+        ROOT CAUSE: lighthouse maps a cancelled PipelineRun to AbortedState, foghorn maps
+        that to scm.StateCanceled with description "Pipeline cancelled", and go-scm's GitHub
+        driver has no cancelled state so it renders "error". The state alone therefore
+        cannot distinguish the two — only the DESCRIPTION can.
+
+        CHANGES:
+        - parse_status_check_rollup currently reads context / state / targetUrl and DROPS
+          `description`. Capture it and add it to PipelineCheck.
+        - Add a `cancelled` property: state == 'ERROR' AND the description begins with
+          "Pipeline cancelled". Match on PREFIX, not equality — foghorn appends a duration
+          suffix like " (2m3s)" when showReportCompletionDuration is set.
+        - `failed` must exclude cancelled: a superseded run is not a failure.
+        - `terminal` must ALSO exclude cancelled: a superseded run means a NEWER run is
+          coming, so treating it as terminal makes a watcher stop waiting and act on a
+          stale verdict. This is the subtler half of the bug and the one that matters most
+          to a push-heavy loop.
+        - Keep the existing cluster-prefix handling intact (context.removeprefix) — that
+          already works and is unrelated.
+
+        DO NOT change lighthouse or foghorn. The mapping there is correct; the fork
+        deliberately made cancelled distinct from failure (fork PR #8) and this is the
+        consumer catching up.
+
+        ISOLATE TESTING: extend tests/test_pipelines.py with synthetic statusCheckRollup
+        entries — no cluster, no gh, no network. Cover: cancelled (ERROR + "Pipeline
+        cancelled") is neither failed nor terminal; cancelled WITH a duration suffix still
+        classifies (prefix match); a genuine ERROR with any other description is still
+        failed and terminal; FAILURE is unchanged; SUCCESS/PENDING/IN_PROGRESS unchanged;
+        and an entry with no description at all does not crash. Also check
+        gate/criteria/shared/test_pipeline_checks.py still behaves — it consumes .failed
+        and .terminal and its messaging should not report a superseded run as a failure.
+
+        LOGGING TO VERIFY: emit a structured log line when a check is classified as
+        cancelled (check name, cluster, pipelinerun, description) so a superseded run is
+        traceable in Loki rather than silently skipped.
+
+        Also capture a lesson in gate/agent/lessons/catalog/ — this bug class (a
+        distinguishing signal existing but being discarded by the parser) is exactly what
+        the lessons catalog is for, and it sits alongside the existing
+        ai-video-review-needs-saliency-calibration entry.
+        Done = PR merged (open via open_pr, drive gates green).
+
+    - name: release-check
+      kind: check
+      agentType: leartech-agent-infra
+      dependsOn:
+        - handle-cancelled
+      goal: >-
+        Gate verification on the new code being LIVE, not merely merged. Wait (with a
+        deadline) until, on BOTH clusters (gcp + az), leartech-automated-agent has rolled
+        out the released version (deploy_health expected_version = the released tag,
+        normalize git-tag → chart-version; healthy = available>=1 AND observed_version ==
+        expected). FAIL (exit non-zero) if the new version is not live within the deadline.
+        Do not open a PR.
+
+    - name: verify-supersede
+      kind: check
+      agentType: leartech-agent-infra
+      dependsOn:
+        - release-check
+      goal: >-
+        Prove the fix against a REAL superseded run, not only synthetic fixtures — the unit
+        tests cannot prove that GitHub actually reports what we think it reports. FAIL (exit
+        non-zero) if ANY assertion below fails; a kind:check verdict is this step's exit
+        code.
+
+        Method: on a quiet consumer repo (leartech-auth-admin-ui is a reasonable choice —
+        confirm it has no open PRs first), open a throwaway PR and push a SECOND commit
+        quickly enough that the first run is still in flight, so cancel-superseded-runs
+        cancels it. Then read the rollup with the fixed tooling.
+
+        Assertions:
+        - The superseded check reports GitHub state ERROR with a description beginning
+          "Pipeline cancelled" (confirming the upstream mapping is as traced).
+        - The fixed PipelineCheck classifies it as cancelled — NOT failed and NOT terminal.
+        - The newer run's check for the same context is present and is the one that reaches
+          a real verdict.
+        - A genuinely failing check on the same PR (if one occurs) is still classified as
+          failed, so the fix has not blanket-suppressed errors.
+        - The cancelled-classification log line is queryable in Loki.
+
+        CLEAN UP AFTERWARDS: close the throwaway PR and delete its branch. Leaving abandoned
+        agent branches and stale open PRs behind is a real cost — they mislead both humans
+        and agents about what the platform currently does. Report the cleanup as part of the
+        verdict.
