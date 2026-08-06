@@ -42,20 +42,22 @@ spec:
           script: |
             #!/usr/bin/env sh
             jx gitops variables
-        # ---- HARD GATE: deterministic structural + safety lint ----------------
+        # ---- HARD GATE: deterministic structural + safety lint (Go) -----------
         # "golangci for Plans." Non-zero exit blocks the merge. This is the
-        # un-bypassable governance surface; it grows as we add rules.
-        - image: python:3.12-alpine
+        # un-bypassable governance surface; it grows as we add rules. Written in
+        # Go — every deterministic (non-LLM) check in this catalog is Go, with
+        # its own unit tests that run here as part of the gate.
+        - image: golang:1.26-alpine
           name: plan-lint
           resources:
             requests:
-              cpu: 200m
-              memory: 256Mi
+              cpu: 500m
+              memory: 512Mi
           script: |
             #!/bin/sh
             set -e
-            pip install --quiet --no-cache-dir pyyaml
-            python3 scripts/plan-lint.py
+            go test ./...
+            go run ./cmd/plan-lint
         # ---- ADVISORY: multi-model ai-review via the OWNED gateway ------------
         # Never fails the build (exits 0). Posts a sticky PR comment scoring
         # design quality a linter can't judge, and feeds our Plan-quality
