@@ -35,6 +35,9 @@ FILES=(plans/**/*.yaml plans/*.yaml templates/**/*.yaml templates/*.yaml)
 
 set +e  # everything below is best-effort advisory — never fail the gate
 BASE="https://github.com/${REPO_OWNER:-mikelear}/${REPO_NAME:-leartech-plan-catalog}/blob/main"
+# The commit this review ran against — stamped in the footer so the sticky comment's
+# freshness is unambiguous (it is edited in place, so its GitHub timestamp looks old).
+SHA=$(printf '%s' "${PULL_PULL_SHA:-$(git rev-parse HEAD 2>/dev/null)}" | cut -c1-8)
 
 # Per-response parser: reads the gateway JSON on stdin, emits one result line.
 PARSE=$(mktemp)
@@ -75,6 +78,7 @@ BUILD=$(mktemp)
 cat > "$BUILD" <<'PY'
 import json, sys
 results_file, cluster, models_csv, base = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+sha = sys.argv[5] if len(sys.argv) > 5 else ""
 rows = [json.loads(l) for l in open(results_file) if l.strip()]
 SUP = {"claude": "Anthropic", "deepseek": "DeepSeek", "codestral": "Mistral",
        "qwen": "Alibaba (Qwen)", "azure_openai": "Azure OpenAI", "gpt-4": "OpenAI"}
@@ -126,12 +130,14 @@ L += [f'<details><summary>🤖 Machine-readable verdict (for AI submitters — s
       "```json", json.dumps(machine, indent=2), "```", "", "</details>", ""]
 L += [f"**References:** [rule catalog]({base}/docs/rules.md) · [AGENTS.md]({base}/AGENTS.md) · "
       f"[examples]({base}/plans)", ""]
+stamp = f"plan-ai-review · reviewed `{sha}`" + (f" · cluster `{cluster}`" if cluster else "") + " · updated in place on each push"
 L += ["---", "_Advisory — routed through the owned gateway; the per-model verdicts above feed our "
-      "Plan-quality flywheel. The deterministic `plan-lint` comment is the hard gate._"]
+      "Plan-quality flywheel. The deterministic `plan-lint` comment is the hard gate._",
+      "", f"<sub>{stamp}</sub>"]
 print("\n".join(L))
 PY
 
-BODY=$(python3 "$BUILD" "$RESULTS" "$CLUSTER" "$MODELS" "$BASE")
+BODY=$(python3 "$BUILD" "$RESULTS" "$CLUSTER" "$MODELS" "$BASE" "$SHA")
 echo "$BODY"
 
 # Sticky PR comment, PER CLUSTER (gcp + az keep separate comments).
