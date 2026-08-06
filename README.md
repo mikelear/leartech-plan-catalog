@@ -9,7 +9,7 @@ philosophy we apply to code**:
 
 1. **`plan-lint` — the hard gate (deterministic, Go).** Two layers, both
    non-zero-exit-blocks-merge:
-   - **Semantic + safety + DAG rules** (`internal/lint`, R1–R19) — ported from the
+   - **Semantic + safety + DAG rules** (`internal/lint`, R1–R20) — ported from the
      controller's own reconcile-time validation, so a Plan the catalog accepts is
      one the controller will actually run (hold-by-default, cycle detection,
      fan-in shape, template expansion, dependsOn resolution, …).
@@ -61,7 +61,8 @@ never bypasses GitOps.
 
 Concrete **Plans** are instantiated explicitly (via MCP `create_plan` → `plan-api`,
 or the Portal) and always land **paused** — a second, human-gated promote/unpause
-controls execution.
+controls execution. The full three-gate lifecycle (with `paused` enforced at every
+layer) is documented in [`docs/plan-lifecycle.md`](docs/plan-lifecycle.md).
 
 ## Strict human merge — no auto-merge
 
@@ -88,7 +89,7 @@ templates/       reusable PlanTemplates (composed via `use:` + `with:`)
 cmd/plan-lint/   the deterministic hard gate (Go entrypoint; -json for agents)
 cmd/crd2schema/  generates schemas/ JSON Schema from the vendored CRDs
 cmd/rulesdoc/    generates docs/rules.{json,md} from the rule catalog
-internal/lint/   the rules engine (R1–R19) + rule metadata + unit tests
+internal/lint/   the rules engine (R1–R20) + rule metadata + unit tests
 schemas/         CRD-derived JSON Schema (kubeconform) + vendored CRDs under crd/
 docs/            rules.json + rules.md (generated) · flywheel.md
 scripts/         plan-ai-review.sh (advisory, LLM via the owned gateway) + plan-lint-comment.sh
@@ -105,6 +106,11 @@ carrying a `fix` hint + a `doc` anchor) an agent parses to self-correct. The com
 links the machine-legible references — [`AGENTS.md`](AGENTS.md), the generated rule
 catalog ([`docs/rules.md`](docs/rules.md) / [`docs/rules.json`](docs/rules.json)), the
 JSON schema, and the examples — so an agent can read the failure and repair its Plan.
+
+Every review — from a human, a model, or a tool — follows one documented shape,
+[`leartech.review/v1`](docs/review-format.md): a colored human section plus a
+machine-readable `json` block (`verdict` + `findings[{severity, fix, refs}]`). Uniform
+across all reviewers, so each review is one clean row for the Plan-quality flywheel.
 
 The two presubmits surface as separate GitHub check contexts. `pr`
 (`pullrequest.yaml` — the deterministic Go gate + kubeconform) is the required

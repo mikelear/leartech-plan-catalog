@@ -542,6 +542,58 @@ spec:
 	}
 }
 
+func TestR20UnknownStepField(t *testing.T) {
+	doc := `
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: p
+spec:
+  paused: true
+  steps:
+    - name: a
+      kind: pr
+      agentType: x
+      goal: do the thing
+`
+	assertErr(t, lintYAML(t, doc), "R20")
+}
+
+func TestR20UnknownSpecField(t *testing.T) {
+	doc := `
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: p
+spec:
+  paused: true
+  description: human context that is not a CRD field
+  steps:
+    - name: a
+      kind: pr
+      agentType: x
+`
+	assertErr(t, lintYAML(t, doc), "R20")
+}
+
+func TestGoalUnderInputsIsValid(t *testing.T) {
+	doc := `
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: p
+spec:
+  paused: true
+  steps:
+    - name: a
+      kind: pr
+      agentType: x
+      inputs:
+        goal: do the thing
+`
+	assertNoErr(t, lintYAML(t, doc), "R20")
+}
+
 func TestUseStepIsValidWithoutKind(t *testing.T) {
 	plan := `
 apiVersion: agent.leartech.io/v1alpha1

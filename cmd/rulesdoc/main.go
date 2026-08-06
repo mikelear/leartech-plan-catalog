@@ -54,7 +54,7 @@ func main() {
 
 	// rules.md
 	var b strings.Builder
-	b.WriteString("# Plan Catalog rules (R1–R19)\n\n")
+	fmt.Fprintf(&b, "# Plan Catalog rules (%s–%s)\n\n", ordered[0].ID, ordered[len(ordered)-1].ID)
 	b.WriteString("_Generated from `internal/lint` — do not edit by hand; run `make rules`._\n\n")
 	b.WriteString("Every rule the deterministic `plan-lint` gate enforces. Errors block merge; ")
 	b.WriteString("a failing PR comment links each rule here by its anchor (e.g. `#r11`).\n\n")
