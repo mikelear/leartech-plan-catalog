@@ -68,6 +68,11 @@ spec:
               diff -u "$f" "/tmp/schemas-gen/$(basename "$f")" || {
                 echo "plan-lint: schemas/ is stale — run: make schemas"; fail=1; }
             done
+            go run ./cmd/rulesdoc -out /tmp/docs-gen
+            for f in rules.json rules.md; do
+              diff -u "docs/$f" "/tmp/docs-gen/$f" || {
+                echo "plan-lint: docs/$f is stale — run: make rules"; fail=1; }
+            done
             go run github.com/yannh/kubeconform/cmd/kubeconform@v0.8.0 \
               -strict -summary \
               -schema-location './schemas/{{ .ResourceKind }}_{{ .ResourceAPIVersion }}.json' \

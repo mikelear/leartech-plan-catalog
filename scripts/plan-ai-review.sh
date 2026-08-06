@@ -47,7 +47,8 @@ FILES=(plans/**/*.yaml plans/*.yaml templates/**/*.yaml templates/*.yaml)
 [ ${#FILES[@]} -eq 0 ] && { echo "plan-ai-review: no Plan YAML to review."; exit 0; }
 
 set +e  # everything below is best-effort advisory — never fail the gate
-REVIEW_MD="## :robot: Plan ai-review (advisory — via ShipProven AI gateway)\n"
+BASE="https://github.com/${REPO_OWNER:-mikelear}/${REPO_NAME:-leartech-plan-catalog}/blob/main"
+REVIEW_MD="## 🤖 plan-ai-review — advisory  ![advisory](https://img.shields.io/badge/plan--ai--review-advisory-blue)\n\n> [!NOTE]\n> Model design review via the owned AI gateway (models: \`${MODELS}\`). Advisory only — it never blocks; the deterministic \`plan-lint\` gate decides merge-eligibility. Each file gets a one-line VERDICT (PASS/CONCERNS) + specifics an AI submitter can act on.\n"
 for file in "${FILES[@]}"; do
   content=$(cat "$file")
   for model in ${MODELS//,/ }; do
@@ -60,7 +61,7 @@ except Exception as e: print('(review unavailable: '+str(e)+')')" 2>/dev/null)
     REVIEW_MD="${REVIEW_MD}\n### \`${file}\` — model \`${model}\`\n${verdict}\n"
   done
 done
-REVIEW_MD="${REVIEW_MD}\n---\n_Advisory only. The deterministic \`plan-lint\` is the hard gate; merge is a strict human decision (no auto-merge). Routed through the owned gateway — this run also feeds our Plan-quality model flywheel._"
+REVIEW_MD="${REVIEW_MD}\n**References:** [rule catalog](${BASE}/docs/rules.md) · [AGENTS.md](${BASE}/AGENTS.md) · [examples](${BASE}/plans)\n\n---\n_Advisory only. The deterministic \`plan-lint\` is the hard gate; merge is a strict human decision (no auto-merge). Routed through the owned gateway — this run also feeds our Plan-quality model flywheel._"
 
 echo -e "$REVIEW_MD"
 

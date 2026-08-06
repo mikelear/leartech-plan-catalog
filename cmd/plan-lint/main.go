@@ -3,8 +3,9 @@
 // if any Plan/PlanTemplate violates a structural or safety rule. See
 // internal/lint for the rules (R1–R19).
 //
-// With -json it emits a machine-readable verdict record instead of text — the
-// substrate a verdict store / Plan-quality flywheel consumes (see docs/flywheel.md).
+// With -json it emits a machine-readable verdict record — each finding enriched
+// with a `fix` hint and a `doc` anchor — the substrate an AI submitter (or a
+// verdict store / flywheel) reads to self-correct. See docs/flywheel.md.
 package main
 
 import (
@@ -16,17 +17,28 @@ import (
 	"github.com/mikelear/leartech-plan-catalog/internal/lint"
 )
 
+const defaultDocBase = "https://github.com/mikelear/leartech-plan-catalog/blob/main/docs/rules.md"
+
 // report is the structured plan-lint verdict emitted under -json.
 type report struct {
-	Tool         string         `json:"tool"`
-	FilesChecked int            `json:"files_checked"`
-	Pass         bool           `json:"pass"`
-	Errors       []lint.Finding `json:"errors"`
-	Warnings     []lint.Finding `json:"warnings"`
+	Tool         string          `json:"tool"`
+	FilesChecked int             `json:"files_checked"`
+	Pass         bool            `json:"pass"`
+	Errors       []lint.Enriched `json:"errors"`
+	Warnings     []lint.Enriched `json:"warnings"`
+}
+
+func enrich(fs []lint.Finding, docBase string) []lint.Enriched {
+	out := make([]lint.Enriched, 0, len(fs))
+	for _, f := range fs {
+		out = append(out, lint.Enrich(f, docBase))
+	}
+	return out
 }
 
 func main() {
 	asJSON := flag.Bool("json", false, "emit a machine-readable verdict record instead of text")
+	docBase := flag.String("doc-base", defaultDocBase, "base URL of the rules doc for the `doc` anchor in -json")
 	flag.Parse()
 
 	f, n, err := lint.Run([]string{"plans", "templates"})
@@ -43,8 +55,8 @@ func main() {
 			Tool:         "plan-lint",
 			FilesChecked: n,
 			Pass:         pass,
-			Errors:       f.Errors,
-			Warnings:     f.Warns,
+			Errors:       enrich(f.Errors, *docBase),
+			Warnings:     enrich(f.Warns, *docBase),
 		})
 		if !pass {
 			os.Exit(1)

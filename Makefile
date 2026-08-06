@@ -21,13 +21,23 @@ lint: schemas
 schemas:
 	go run ./cmd/crd2schema -out schemas schemas/crd/*.yaml
 
-# Fail if the committed schemas are stale relative to the vendored CRDs.
+# Regenerate the rule catalog (docs/rules.json + rules.md) from internal/lint.
+# Run this whenever the rules change.
+rules:
+	go run ./cmd/rulesdoc -out docs
+
+# Fail if committed schemas or rule docs are stale relative to their sources.
 verify:
 	go run ./cmd/crd2schema -out /tmp/schemas-gen schemas/crd/*.yaml
 	@for f in schemas/*.json; do \
 		diff -u "$$f" "/tmp/schemas-gen/$$(basename $$f)" || \
 		{ echo "schemas/ is stale — run: make schemas"; exit 1; }; \
 	done
-	@echo "schemas up to date"
+	go run ./cmd/rulesdoc -out /tmp/docs-gen
+	@for f in rules.json rules.md; do \
+		diff -u "docs/$$f" "/tmp/docs-gen/$$f" || \
+		{ echo "docs/$$f is stale — run: make rules"; exit 1; }; \
+	done
+	@echo "schemas + rule docs up to date"
 
 all: test verify lint
