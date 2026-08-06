@@ -65,9 +65,17 @@ var (
 	stepKeys         = strset("agentType", "budgetIter", "dependsOn", "fanIn", "fanInValidate", "hold", "inputs", "kind", "name", "repo", "test", "triggeredWhen", "use", "with")
 	paramKeys        = strset("name", "required")
 	// Agent-type input contracts (R21). Dev agents consume an Initiative
-	// (name+repo+goal); the infra agent is action-driven. AgentType CRs carry no
-	// InputSchema, so these known runtime contracts are encoded here.
-	devAgentTypes = strset("leartech-agent-go", "leartech-agent-ng", "leartech-agent-rust")
+	// (name+repo+branch+goal); the infra agent is action-driven. AgentType CRs
+	// carry no InputSchema, so these known runtime contracts are encoded here.
+	//
+	// The dev set is the agentTypes whose AgentType.spec.entrypoint is empty —
+	// they run the image's default entrypoint (job_adapter → run_initiative →
+	// load_initiative), which validates against the Initiative model. On the live
+	// cluster that's go, ng, rust AND py (py shares the default entrypoint). ba and
+	// infra declare their own entrypoints (gate.agent.ba_agent / .infra_agent);
+	// infra is action-driven (checked below). ba's contract isn't encoded here —
+	// it falls through unvalidated rather than risk asserting a wrong shape.
+	devAgentTypes = strset("leartech-agent-go", "leartech-agent-ng", "leartech-agent-rust", "leartech-agent-py")
 )
 
 // lintInputs (R21) checks a concrete step's inputs match what its agentType's
@@ -79,13 +87,20 @@ func lintInputs(agentType string, s map[string]any, sw string, f *Findings) {
 	switch {
 	case devAgentTypes[agentType]:
 		if asStr(inp["name"]) == "" {
-			f.err("R21", sw, "dev-agent step inputs need `name` (the Initiative shape is inputs: {name, repo, goal})")
+			f.err("R21", sw, "dev-agent step inputs need `name` (the Initiative shape is inputs: {name, repo, branch, goal})")
 		}
 		if asStr(inp["goal"]) == "" {
 			f.err("R21", sw, "dev-agent step inputs need `goal` (under inputs, not at step level)")
 		}
-		if asStr(inp["repo"]) == "" && !has(inp, "repos") {
-			f.err("R21", sw, "dev-agent step inputs need `repo` (or repos)")
+		// Initiative: legacy single-repo requires BOTH repo and branch; or the new
+		// `repos: [{repo, branch, base?}]` list. (base defaults to main.)
+		if !has(inp, "repos") {
+			if asStr(inp["repo"]) == "" {
+				f.err("R21", sw, "dev-agent step inputs need `repo` (or a `repos:` list)")
+			}
+			if asStr(inp["branch"]) == "" {
+				f.err("R21", sw, "dev-agent step inputs need `branch` — the Initiative's legacy single-repo shape requires both repo and branch (or use a `repos:` list)")
+			}
 		}
 	case agentType == "leartech-agent-infra":
 		if asStr(inp["action"]) == "" {
