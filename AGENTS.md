@@ -64,8 +64,9 @@ runtime — so it must match what that `agentType` expects, or the agent Job fai
 run time (there is no `goal` field at step level; it goes **inside** `inputs`). R20
 (no unknown CRD fields) + R21 (inputs shape per agentType) enforce this.
 
-- **Dev agents** — `leartech-agent-go`, `leartech-agent-ng`, `leartech-agent-rust`.
-  `inputs` is an **Initiative**:
+- **Dev agents** — `leartech-agent-go`, `leartech-agent-ng`, `leartech-agent-rust`,
+  `leartech-agent-py` (every agentType whose runtime uses the default Initiative
+  entrypoint). `inputs` is an **Initiative**:
   ```yaml
   inputs:
     name: kebab-id            # required — short kebab id (also the branch suffix)
@@ -86,6 +87,9 @@ run time (there is no `goal` field at step level; it goes **inside** `inputs`). 
   Known actions: `chart-config` (`cluster`, `service`, `goal`), `release-health-check`
   (`service`, `namespace`, `budgetMinutes`). Use a canned action — the infra agent does
   not run arbitrary free-form goals.
+- **BA agent** — `leartech-agent-ba` runs its own entrypoint (`gate.agent.ba_agent`),
+  so it is neither the Initiative nor the infra-action shape. R21 does **not** yet
+  enforce its inputs (it passes unvalidated); match an existing BA step if you write one.
 
 The full rule list with rationale + fixes is `docs/rules.md`. A Plan the catalog accepts
 is one the controller will admit **and** the agents can actually run.
