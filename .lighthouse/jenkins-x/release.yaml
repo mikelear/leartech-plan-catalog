@@ -1,0 +1,68 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  creationTimestamp: null
+  name: release
+spec:
+  pipelineSpec:
+    tasks:
+    - name: release
+      resources: {}
+      taskSpec:
+        metadata: {}
+        stepTemplate:
+          env:
+          - name: HOME
+            value: /tekton/home
+          # Which cluster this postsubmit is on — only the primary opens the PR.
+          - name: CLUSTER_ID
+            valueFrom:
+              configMapKeyRef:
+                name: jx-cluster-config
+                key: CLUSTER_ID
+                optional: true
+          # tekton-git basic-auth creds to clone the controller repo + open the PR.
+          - name: GIT_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: tekton-git
+                key: password
+                optional: true
+          - name: GIT_USER
+            valueFrom:
+              secretKeyRef:
+                name: tekton-git
+                key: username
+                optional: true
+          name: ""
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          workingDir: /workspace/source
+        steps:
+        - image: uses:jenkins-x/jx3-pipeline-catalog/tasks/git-clone/git-clone.yaml@versionStream
+          name: ""
+          resources: {}
+        # Auto-release: mirror merged PlanTemplates into the controller's library
+        # as a GitOps PR (the single install path; re-gated + human-merged there).
+        - image: python:3.12-alpine
+          name: sync-templates
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          script: |
+            #!/bin/sh
+            set -u
+            apk add --no-cache bash git curl >/dev/null 2>&1
+            bash scripts/sync-templates-to-controller.sh
+  podTemplate:
+    tolerations:
+    - key: sku
+      operator: Equal
+      value: build
+      effect: NoSchedule
+  serviceAccountName: tekton-bot
+  timeout: 30m0s
+status: {}

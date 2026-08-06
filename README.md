@@ -49,6 +49,20 @@ Every Plan in this catalog **MUST** set `spec.paused: true`. A catalog Plan is a
 separate, explicitly human-gated promote/unpause — the same boundary `plan-api`
 enforces. `plan-lint` rule **R5** makes this un-skippable.
 
+## After merge: templates auto-release via GitOps
+
+Merging **publishes** to the library; it doesn't run anything. On merge, a
+postsubmit ([`scripts/sync-templates-to-controller.sh`](scripts/sync-templates-to-controller.sh))
+mirrors each `templates/*.yaml` into the controller's PlanTemplate library as a
+**GitOps PR** — the single install path for templates. That PR re-runs the
+controller's own quality gates + a human merge → controller release → GitOps
+renders and applies the CRD. So a template is double-gated (here + there) and
+never bypasses GitOps.
+
+Concrete **Plans** are instantiated explicitly (via MCP `create_plan` → `plan-api`,
+or the Portal) and always land **paused** — a second, human-gated promote/unpause
+controls execution.
+
 ## Strict human merge — no auto-merge
 
 There is **no auto-merge** in this repo. Merges are made by a small, explicitly

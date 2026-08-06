@@ -19,3 +19,11 @@ spec:
     always_run: true
     optional: true
     source: plan-ai-review.yaml
+  postsubmits:
+  # On merge to main: auto-release merged PlanTemplates to the controller's
+  # library as a GitOps PR (see scripts/sync-templates-to-controller.sh).
+  - name: release
+    context: release
+    source: release.yaml
+    branches:
+    - ^main$
