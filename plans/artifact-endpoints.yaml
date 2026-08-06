@@ -43,8 +43,9 @@ spec:
     - name: gitops-gsm
       kind: pr
       agentType: leartech-agent-go
-      repo: mikelear/jx-build-cluster-gsm
       inputs:
+        name: gitops-gsm
+        repo: mikelear/jx-build-cluster-gsm
         goal: >-
           Add helmfiles/jx-staging/configs/leartech-artifact-api.yaml. leartech-artifact-api
           currently deploys on chart defaults, so AUTH_ENABLED=true but
@@ -67,8 +68,9 @@ spec:
     - name: gitops-akv
       kind: pr
       agentType: leartech-agent-go
-      repo: mikelear/jx-build-cluster-akv
       inputs:
+        name: gitops-akv
+        repo: mikelear/jx-build-cluster-akv
         goal: >-
           Mirror the gitops-gsm change for the Azure cluster. Identical shape, but the
           per-cluster Hydra issuer is https://hydra-jx-staging.az.leartech.com. Set the
@@ -83,8 +85,9 @@ spec:
     - name: gcs-storage
       kind: pr
       agentType: leartech-agent-go
-      repo: mikelear/leartech-artifact-api
       inputs:
+        name: gcs-storage
+        repo: mikelear/leartech-artifact-api
         goal: >-
           Add an internal/storage package implementing the artifact object layout on
           Google Cloud Storage using the official Go SDK (cloud.google.com/go/storage),
@@ -132,10 +135,11 @@ spec:
     - name: rest-endpoints
       kind: pr
       agentType: leartech-agent-go
-      repo: mikelear/leartech-artifact-api
       dependsOn:
         - gcs-storage
       inputs:
+        name: rest-endpoints
+        repo: mikelear/leartech-artifact-api
         goal: >-
           Add the artifact REST endpoints on /api/v1, backed by internal/storage, and
           enforce scopes AT THE SERVICE.
@@ -175,10 +179,11 @@ spec:
     - name: mcp-tools
       kind: pr
       agentType: leartech-agent-go
-      repo: mikelear/leartech-mcp-servers
       dependsOn:
         - rest-endpoints
       inputs:
+        name: mcp-tools
+        repo: mikelear/leartech-mcp-servers
         goal: >-
           Wire internal/designserver's tools to the new artifact-api endpoints. The
           client, auth and audience plumbing already exist — do not reinvent them; the
@@ -209,53 +214,67 @@ spec:
           request id, outcome) queryable in Loki.
           Done = PR merged (open via open_pr, drive gates green).
 
-    # ── 5. Rollout gate — merged is not deployed ──
-    - name: release-check
+    # ── 5. Rollout gate — merged is NOT deployed ──
+    # Canned infra action: the infra agent is action-driven, not goal-driven (R21).
+    # release-health-check is exactly this gate — it waits for the released version to
+    # be live rather than assuming a merge means a rollout.
+    - name: release-artifact-api
       kind: check
       agentType: leartech-agent-infra
       dependsOn:
         - gitops-gsm
         - gitops-akv
-        - mcp-tools
+        - rest-endpoints
       inputs:
-        goal: >-
-          Gate the round-trip on the new code + config being LIVE, not merely merged —
-          a kind:pr step is done at merge, but release → GitOps → rollout takes minutes,
-          so verifying too early races the old version. Wait (with a deadline) until, on
-          BOTH clusters (gcp + az): leartech-artifact-api rolled out its released version
-          (deploy_health expected_version = the released tag, normalize git-tag →
-          chart-version; healthy = available>=1 AND observed_version == expected); the
-          pods carry the new gitops config (LEARTECH_AUTH_SERVER_URL non-empty,
-          ARTIFACT_GCS_BUCKET / ARTIFACT_GCS_PROJECT set); and leartech-mcp-servers
-          redeployed with the wired design tools. FAIL (exit non-zero) if the new
-          versions are not live within the deadline. Do not open a PR.
+        action: release-health-check
+        service: leartech-artifact-api
+        namespace: jx-staging
+        budgetMinutes: 30
 
-    # ── 6. The acceptance test that matters ──
-    - name: verify-roundtrip
+    - name: release-mcp-servers
       kind: check
       agentType: leartech-agent-infra
       dependsOn:
-        - release-check
+        - mcp-tools
       inputs:
+        action: release-health-check
+        service: leartech-mcp-servers
+        namespace: jx-staging
+        budgetMinutes: 30
+
+    # ── 6. The acceptance test that matters ──
+    # Dev agent, not infra: the infra agent runs only canned actions, and these
+    # assertions are arbitrary functional work. kind:check + a dev agentType is a legal
+    # pairing (no rule couples the two) and it keeps the verdict on the exit code.
+    - name: verify-roundtrip
+      kind: check
+      agentType: leartech-agent-go
+      dependsOn:
+        - release-artifact-api
+        - release-mcp-servers
+      inputs:
+        name: verify-roundtrip
+        repo: mikelear/leartech-artifact-api
         goal: >-
-          Deterministically confirm the artifact path works end to end on jx-staging,
-          on BOTH clusters. FAIL (exit non-zero) if ANY assertion below fails — a
-          kind:check verdict is this step's exit code, so reporting a failure while
-          exiting 0 would wrongly pass the Plan.
+          Deterministically confirm the artifact path works end to end on jx-staging, on
+          BOTH clusters. This is a verification step only — do NOT open a PR and do NOT
+          modify the repo. FAIL (exit non-zero) if ANY assertion below fails; the verdict
+          is this step's exit code, so reporting a failure while exiting 0 would wrongly
+          pass the Plan.
 
           Assertions:
-          - leartech-artifact-api pods are Ready and /openapi.json returns 200 probed
-            from INSIDE the namespace (the service has no ingress by design).
+          - leartech-artifact-api /openapi.json returns 200 probed from INSIDE the
+            namespace (the service has no ingress by design).
           - An unauthenticated request to /api/v1/artifacts returns 401, and a token
             carrying the wrong audience is rejected.
           - Via the design MCP: create_artifact returns a GUID plus a presigned upload
             URL; a PUT of a small tokens.json to that URL succeeds; finalize_artifact
             returns a manifest listing the file with a matching sha256.
-          - get_artifact resolves the same artifact BY LABEL and returns a working
-            signed download URL whose bytes match what was uploaded.
+          - get_artifact resolves the same artifact BY LABEL and returns a working signed
+            download URL whose bytes match what was uploaded.
           - A second revision is created via POST /api/v1/artifacts/{id}/revisions,
-            uploaded and finalized; get_artifact can still retrieve revision 1
-            unchanged, proving revisions are additive not destructive.
-          - A write to an already-finalized revision returns 409 (immutability holds on
-            the revision path, not just the initial revision).
+            uploaded and finalized; get_artifact can still retrieve revision 1 unchanged,
+            proving revisions are additive not destructive.
+          - A write to an already-finalized revision returns 409, so immutability holds on
+            the revision path and not only on the initial revision.
           - Structured logs for the above appear in Loki with the request ids.
