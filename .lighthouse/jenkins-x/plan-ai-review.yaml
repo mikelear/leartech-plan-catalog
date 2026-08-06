@@ -14,6 +14,10 @@ spec:
           env:
           - name: HOME
             value: /tekton/home
+          # The gateway endpoint is not a secret — set it here (the :8080 port is
+          # required). The virtual key comes from the ExternalSecret below.
+          - name: AI_GATEWAY_URL
+            value: http://leartech-ai-gateway.ai-gateway.svc.cluster.local:8080
           envFrom:
           # jx-boot-job-env-vars carries GIT_TOKEN for the sticky PR comment.
           - secretRef:
