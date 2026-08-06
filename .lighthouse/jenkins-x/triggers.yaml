@@ -1,0 +1,19 @@
+apiVersion: config.lighthouse.jenkins-x.io/v1alpha1
+kind: TriggerConfig
+spec:
+  presubmits:
+  # HARD GATE — the deterministic Go linter (R1–R19) + CRD-schema conformance
+  # (kubeconform). This is the context to mark REQUIRED on main: a red plan-lint
+  # must block the merge. Its own GitHub context (<cluster>/plan-lint).
+  - name: plan-lint
+    context: "plan-lint"
+    always_run: true
+    source: plan-lint.yaml
+  # ADVISORY — the multi-model ai-review via the owned gateway. optional:true so
+  # it posts a check + PR comment but never blocks Tide. Its own context so the
+  # advisory verdict is visible independently of the hard gate.
+  - name: plan-ai-review
+    context: "plan-ai-review"
+    always_run: true
+    optional: true
+    source: plan-ai-review.yaml

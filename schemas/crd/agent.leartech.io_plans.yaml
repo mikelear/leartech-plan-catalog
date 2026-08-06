@@ -1,0 +1,1053 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: plans.agent.leartech.io
+spec:
+  group: agent.leartech.io
+  names:
+    kind: Plan
+    listKind: PlanList
+    plural: plans
+    singular: plan
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.paused
+      name: Paused
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Plan is a multi-step DAG that decomposes into owner-ref'd AgentRun CRs.
+
+          The Go plan reconciler is ALWAYS active — it reconciles every Plan on every
+          cluster. (The former LEARTECH_PLAN_RECONCILER_ENABLED enable-gate has been
+          removed now that the Go reconciler is authoritative.)
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              PlanSpec is the desired state of a Plan (a multi-step DAG of AgentRuns).
+
+              The Plan reconciler decomposes the Spec into owner-ref'd AgentRun CRs,
+              creating each step only after every DependsOn step reaches Succeeded. This
+              is the Go replacement for orch's Python plan_runner — SHADOW/GATED in this
+              slice (see cmd/server/main.go), orch remains authoritative until cut-over.
+            properties:
+              command:
+                description: |-
+                  Command is the pending control-surface command. The reconciler
+                  consumes it exactly-once (idempotent via
+                  Status.LastAcknowledgedCommandUID) and translates the verb into
+                  declarative status transitions (see PlanCommandVerb).
+                properties:
+                  reason:
+                    description: |-
+                      Reason is a free-form annotation persisted onto the audit log entry
+                      (Plan.Status.Decisions[]) when the command is consumed. Used by the
+                      re-plan agent to record its rationale.
+                    type: string
+                  uid:
+                    description: |-
+                      UID uniquely identifies this command emission. Idempotency key —
+                      two reconciles of the same UID must produce identical status. Callers
+                      generate this (ULID / UUID / monotonic counter).
+                    minLength: 1
+                    type: string
+                  verb:
+                    description: Verb is one of pause | resume | cancel | replan.
+                    enum:
+                    - pause
+                    - resume
+                    - cancel
+                    - replan
+                    type: string
+                required:
+                - uid
+                - verb
+                type: object
+              paused:
+                description: |-
+                  Paused is the plan-level HALT gate. When true, the reconciler MUST
+                  NOT spawn any AgentRun on this reconcile, regardless of step
+                  readiness. Set by an external actor (agent, kubectl edit) as the
+                  re-plan safety gate. Clearing Paused=false lets normal reconciliation
+                  resume from the current state.
+                type: boolean
+              remediates:
+                description: |-
+                  Remediates lists Plan references this Plan is designed to remediate.
+                  When THIS Plan reaches PlanPhaseSucceeded (and its final verification
+                  step succeeded), each referenced plan's Status.Phase is flipped to
+                  PlanPhaseResolved and its Status.ResolvedBy is set to a PlanRef for
+                  THIS plan. One remediation may resolve MANY referenced plans in a
+                  single reconcile pass — the fan-out is atomic-per-referenced-plan
+                  (individual referenced-plan updates are logged + skipped on error;
+                  the next reconcile retries the remaining).
+
+                  A Plan with Remediates set that itself Fails / Cancels does NOT
+                  resolve its referenced plans — resolution is gated on the
+                  remediating plan's OWN success. The referenced plans retain their
+                  terminal Failed / Cancelled phase, honestly reflecting that no
+                  remediation landed.
+
+                  Loop-guard: a remediation plan is subject to signature-based dedupe
+                  (agent.leartech.io/remediation-signature annotation) and a depth cap
+                  (RemediationMaxDepth) enforced at admission — see
+                  PlanReconciler.enforceRemediationLoopGuard. A duplicate remediation
+                  (same signature as an earlier sibling) OR a chain exceeding the cap
+                  is terminated as Cancelled with an audit-log entry before any step
+                  spawns; the guard is deliberately LOUD (structured log + decision)
+                  rather than silent-drop.
+                items:
+                  description: |-
+                    PlanRef references another Plan by name + optional namespace. Used by
+                    Plan.Spec.Remediates (the list of plans a remediation targets) and
+                    Plan.Status.ResolvedBy (the back-link on a Resolved plan naming the
+                    remediating plan). Kept small + opaque — the controller resolves the
+                    pair to a live Plan CR via a namespaced Get.
+
+                    Empty Namespace defaults to the referencing plan's own namespace at
+                    resolve-time. Cross-namespace references are permitted (a cluster-wide
+                    remediation plan can reference plans in per-tenant namespaces) but the
+                    referencing plan's ServiceAccount must have get/patch on plans in the
+                    target namespace for the resolution to succeed.
+                  properties:
+                    name:
+                      description: Name is the referenced Plan.metadata.name. Required.
+                      minLength: 1
+                      type: string
+                    namespace:
+                      description: |-
+                        Namespace is the referenced Plan.metadata.namespace. Optional —
+                        empty defaults to the referencing plan's own namespace.
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+              steps:
+                description: Steps declares the DAG. Each step Name must be unique.
+                items:
+                  description: |-
+                    PlanStep declares one node in the plan DAG. Each step maps 1:1 to an
+                    AgentRun the reconciler will create when the step's DependsOn are all
+                    Succeeded (or empty). Step Names must be unique within the Plan and stable
+                    (they're used to compute the deterministic AgentRun name — see
+                    PlanReconciler.agentRunName).
+                  properties:
+                    agentType:
+                      description: |-
+                        AgentType names the cluster-scoped AgentType CR the step's AgentRun runs
+                        on (per-language runtime — mirrors AgentRunSpec.AgentType). Optional:
+                        when empty the controller falls back to the configured default
+                        (LEARTECH_DEFAULT_AGENT_TYPE). The BA/Planner normally sets it
+                        explicitly per repo language (the policy path).
+                      type: string
+                    budgetIter:
+                      description: |-
+                        BudgetIter caps AgentRun iterations for this step. When nil, the
+                        AgentType default applies (mirrors AgentRunSpec.BudgetIter).
+                      type: integer
+                    dependsOn:
+                      description: |-
+                        DependsOn lists step Names this step waits on. Empty = ready at t=0.
+                        Cycles are rejected at reconcile time (the DAG walker halts + fails).
+
+                        A step is eligible only when every DependsOn step is *Succeeded*.
+                        A Failed OR Cancelled dependency keeps the dependent BLOCKED
+                        (Cancelled != success). See PlanReconciler.depsReady.
+                      items:
+                        type: string
+                      type: array
+                    fanIn:
+                      description: |-
+                        FanIn marks the step as a fan-in validation step: a NO-AGENT,
+                        read-only check that asserts every file listed in FanInValidate
+                        exists on the repo's main HEAD before the step's dependents may
+                        proceed. A fan-in step does NOT spawn an AgentRun — the reconciler
+                        resolves the repo's main HEAD sha and probes each expected file on
+                        that ref via the wired FanInValidator seam.
+
+                        Semantics:
+                          - All expected files present → step advances to StepPhaseSucceeded
+                            (validation passed) → dependents unblock on the next reconcile.
+                          - Any expected file missing → step advances to StepPhaseFailed
+                            (block dependents; the missing paths are surfaced in a
+                            "fan_in_failed" decision entry).
+
+                        A fan-in step MUST declare ≥1 DependsOn (a step with no upstream
+                        producers has nothing to validate) AND ≥1 FanInValidate path. A
+                        non-fan-in step MUST NOT declare FanInValidate. The DAG validator
+                        terminally fails the Plan on either misuse.
+
+                        Mirrors orch's Python plan_runner execute_fan_in_step /
+                        _resolve_main_head_sha / _file_exists_on_ref path.
+                      type: boolean
+                    fanInValidate:
+                      description: |-
+                        FanInValidate lists repo-relative file paths that MUST exist on the
+                        repo's main HEAD for the fan-in step to succeed. Ignored when FanIn
+                        is false; required (non-empty) when FanIn is true. Paths are opaque
+                        to the reconciler — the FanInValidator seam owns the "does this path
+                        exist on that ref?" answer.
+                      items:
+                        type: string
+                      type: array
+                    hold:
+                      description: |-
+                        Hold, when true, marks the step's PR deliberately held pending human
+                        approval. The plan authors this bit — it tells downstream consumers
+                        "this step's PR is meant to be reviewed by a human, not auto-merged
+                        by Tide once gates go green". The reconciler routes such a step to
+                        StepPhaseAwaitingApproval (distinct from AwaitingReview) once its
+                        agent finishes AND opens a PR — so chat/UX can say "waiting on human
+                        approval" rather than the generic "PR is being reviewed / gates
+                        still running".
+
+                        The two are semantically different:
+
+                          - AwaitingReview (Hold=false): transient. Gates + AI review may
+                            still be running; Tide will merge as soon as the PR is green,
+                            which advances the step to Succeeded on the next reconcile.
+                          - AwaitingApproval (Hold=true): parked. The agent posted /hold to
+                            Lighthouse Keeper; Tide will NOT merge until a human explicitly
+                            posts /hold cancel. The step sits here indefinitely.
+
+                        Both keep dependents blocked (both are non-terminal for depsReady
+                        purposes). Hold does NOT change how depsReady/rollUp key off
+                        StepPhaseSucceeded (still requires PR merged).
+
+                        The AgentRun-level Phase stays Succeeded for a held step — the
+                        agent finished; it is the DELIVERABLE that is parked, not the run.
+                      type: boolean
+                    inputs:
+                      description: |-
+                        Inputs is the run payload projected into the AgentRun (mirrors
+                        AgentRunSpec.Inputs — validated by the AgentType's InputSchema).
+                        Optional: a `use:` step MUST NOT declare inputs (they come from the
+                        expanded template steps), so inputs cannot be schema-required or a
+                        Template-Plan composition is unconstructible via the API. Non-use
+                        steps normally set it; the expander/agent handle an empty payload.
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    kind:
+                      description: "Kind declares HOW the reconciler judges this step
+                        \"done\" — a\nfirst-class dimension distinct from the step's
+                        phase. Three kinds,\neach with its own done-semantics (see
+                        PlanReconciler.deriveStepPhase):\n\n\t\"\"  ≡ \"pr\" (default;
+                        back-compat — an empty Kind is a pr step).\n\t\"pr\"    →
+                        the step's deliverable is a PULL REQUEST; the step is done\n\t
+                        \         when that PR MERGES. AgentRun Succeeded + PR merged
+                        →\n\t          StepPhaseSucceeded; PR closed-unmerged → StepPhaseFailed;
+                        a\n\t          repo-backed run that finished with no PR after
+                        the report-back\n\t          grace → StepPhaseFailed (\"no
+                        deliverable\"). This is the\n\t          historical merge-gated
+                        behaviour, unchanged.\n\t\"apply\" → idempotent / DIRECT work
+                        with NO PR expected (registration,\n\t          to_main pushes,
+                        cluster mutations). The step is done when the\n\t          AgentRun
+                        SUCCEEDS (exit 0) — Succeeded → StepPhaseSucceeded\n\t          with
+                        NO PR required (the no-PR \"no-deliverable\" fail is NEVER\n\t
+                        \         applied). Failed → StepPhaseFailed; Cancelled →
+                        Cancelled.\n\t\"check\" → a VERIFICATION step judged by a
+                        DETERMINISTIC, framework-\n\t          owned verdict (NOT
+                        an LLM narration): AgentRun Succeeded →\n\t          verdict
+                        PASS → StepPhaseSucceeded; AgentRun Failed → verdict\n\t          FAIL
+                        → StepPhaseFailed. Any PR the run opens is IGNORED for\n\t
+                        \         the pass/fail decision. The controller writes the
+                        verdict to\n\t          PlanStepStatus.Verdict.\n\nAn unrecognised
+                        Kind is treated as \"pr\" (the safe default). Kind does\nnot
+                        change DAG gating — depsReady/rollUp still key off StepPhaseSucceeded\nregardless
+                        of kind."
+                      enum:
+                      - pr
+                      - apply
+                      - check
+                      type: string
+                    name:
+                      description: |-
+                        Name uniquely identifies the step within this Plan. Used to compute the
+                        child AgentRun's name (<plan>-<step>), so must be a valid DNS-1123 label
+                        component (kubebuilder validation enforces this at the CRD schema level).
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    repo:
+                      description: Repo, when set, is passed to the AgentRun (git
+                        clone init-container).
+                      type: string
+                    test:
+                      description: |-
+                        Test, when set on a step whose Plan is a test Plan (PlanSpec.Test),
+                        declares the DIRECTED outcome the machinery should simulate for this
+                        step INSTEAD OF spawning a real agent Job. It is the per-step half of
+                        the Plan-level test declaration: PlanSpec.Test marks the whole Plan a
+                        test; PlanStep.Test tells the reconciler how THIS step's synthetic PR
+                        "resolves" (merged / closed / opened).
+
+                        The reconciler consumes this only when the owning Plan is a test Plan:
+                        at child-AgentRun creation it stamps the child with the test-mode
+                        label + the directed-PR-outcome annotation derived from Test.Directed,
+                        so the existing TestModePROutcomeFetcher resolves the outcome at
+                        RUNTIME (not merely in unit tests). See PlanStepTest.Directed.
+
+                        Ignored when PlanSpec.Test is false — a production Plan never simulates
+                        outcomes even if a step carries a stray Test directive.
+                      properties:
+                        directed:
+                          description: "Directed names the outcome the machinery should
+                            simulate for this step.\nThe accepted vocabulary is KIND-SPECIFIC
+                            (see PlanStep.Kind) — the\ncontroller maps (kind, directed)
+                            → the AgentRun terminal phase [+ a\nsynthetic PR outcome
+                            for pr steps] so the SAME step state machine\nresolves
+                            the step exactly as a real run would:\n\n\tkind: pr |
+                            \"\" (merge-gated, the historical vocabulary):\n\t  \"merged\"
+                            \         → PR merged → step Succeeded.\n\t  \"closed_unmerged\"
+                            → PR closed without merging → step Failed.\n\t  \"opened\"
+                            \         → PR open, not yet merged → step AwaitingReview\n\t
+                            \                     (AwaitingApproval when Hold=true).\n\n\tkind:
+                            check (deterministic verdict):\n\t  \"pass\" → AgentRun
+                            Succeeded → verdict PASS → step Succeeded.\n\t  \"fail\"
+                            → AgentRun Failed    → verdict FAIL → step Failed.\n\n\tkind:
+                            apply (run-success, no PR):\n\t  \"succeed\" → AgentRun
+                            Succeeded → step Succeeded (no PR expected).\n\t  \"error\"
+                            \  → AgentRun Failed    → step Failed.\n\nAn empty or
+                            unrecognised Directed leaves the step at its default\nsimulated
+                            outcome (the agent \"Succeeded\" with no directed result),\nwhich
+                            collapses to StepPhaseSucceeded for a repo-less pr step,
+                            an apply\nstep, or a check step (verdict PASS)."
+                          enum:
+                          - merged
+                          - closed_unmerged
+                          - opened
+                          - pass
+                          - fail
+                          - succeed
+                          - error
+                          type: string
+                      type: object
+                    triggeredWhen:
+                      description: |-
+                        TriggeredWhen, when set, spawns this step as soon as the named step
+                        REACHES the given step phase (or a later success phase) — a runtime
+                        handoff distinct from DependsOn's "wait for merged/Succeeded". The
+                        motivating case: a Dev step opens its PR (StepPhaseAwaitingReview) and
+                        an Infra "release-monitor" step should fire immediately to watch it
+                        through review → merge → release → health, rather than waiting for the
+                        Dev step to reach Succeeded.
+
+                        Semantics ("reached-or-beyond", success-path only):
+                          - Satisfied when the target's step phase rank >= TriggeredWhen.Phase's
+                            rank on the success ladder Pending<Running<AwaitingReview≈
+                            AwaitingApproval<Succeeded. So TriggeredWhen{Phase: AwaitingReview}
+                            fires on AwaitingReview, AwaitingApproval, OR a fast Succeeded — no
+                            missed transition.
+                          - A target at Failed/Cancelled NEVER satisfies it (the triggered step
+                            stays unspawned); the Plan still rolls up to Failed via the target,
+                            so nothing hangs.
+                          - Evaluated ALONGSIDE DependsOn: a step with both spawns only when
+                            (all DependsOn Succeeded) AND (TriggeredWhen reached). A step with
+                            only TriggeredWhen fires purely on the trigger.
+                      properties:
+                        phase:
+                          description: |-
+                            Phase is the step phase that (once reached, or surpassed on the success
+                            ladder) spawns the owning step.
+                          enum:
+                          - Running
+                          - AwaitingReview
+                          - AwaitingApproval
+                          - Succeeded
+                          type: string
+                        step:
+                          description: Step is the name of the step to watch (must
+                            be a declared step in the Plan).
+                          type: string
+                      required:
+                      - phase
+                      - step
+                      type: object
+                    use:
+                      description: |-
+                        Use, when set, marks this step as a TEMPLATE-EXPANSION step: a named
+                        PlanTemplate is fetched at plan init, its Steps are substituted with
+                        this step's With params, namespaced under this step's Name (as
+                        "<Name>-<tmplStep>"), and INLINED into the plan's DAG. The
+                        use-step's own DependsOn become the DependsOn of the template's ENTRY
+                        step(s); anything else in the plan that DependsOn THIS step is
+                        rewired to DependsOn the template's TERMINAL step(s) (multi-terminal
+                        = fan-in). The expansion is a pure pre-process — the template's
+                        steps run as normal flat-DAG steps; a controller does NOT spawn
+                        another controller.
+
+                        A step with Use set MUST NOT declare AgentType / Inputs / Repo /
+                        BudgetIter / Hold / FanIn / FanInValidate / TriggeredWhen; only
+                        DependsOn (external entry-wiring) is honoured. The AgentType +
+                        Inputs come from the expanded template steps themselves.
+
+                        See PlanTemplate for the referenced type and the expansion semantics
+                        (~/leartech/Hub/status/plan-templates-and-triggers.md).
+                      type: string
+                    with:
+                      additionalProperties:
+                        type: string
+                      description: |-
+                        With supplies param values for the PlanTemplate referenced by Use.
+                        The expander substitutes "${name}" occurrences in template step
+                        fields (Name, AgentType, Repo, DependsOn entries) and in the raw
+                        JSON of each template step's Inputs with the provided value.
+
+                        A template param declared Required=true whose Name has no With
+                        entry is a terminal expansion error (the Plan is marked Failed,
+                        not a panic). An optional param without a With entry substitutes
+                        to the empty string.
+                      type: object
+                  required:
+                  - name
+                  type: object
+                minItems: 1
+                type: array
+              tenant:
+                description: Tenant is the tenant identity carried into each child
+                  AgentRun.
+                type: string
+              test:
+                description: |-
+                  Test marks the whole Plan a TEST Plan. When true, the reconciler runs
+                  the plan's DAG in MACHINERY test-mode: at each step's child-AgentRun
+                  creation it stamps the child with the test-mode label + the directed
+                  PR-outcome annotation derived from the step's Test.Directed, and the
+                  AgentRun reconciler SKIPS spawning a real Job — it terminalizes the
+                  run (Phase=Succeeded) so the directed PR outcome (via the
+                  TestModePROutcomeFetcher wrapper + deriveStepPhase) decides the STEP's
+                  pass/fail. This exercises the full plan/step state machine — DAG walk,
+                  dep-gating, roll-up, merge-gating — WITHOUT running any agent, so a
+                  committed scenario-Plan library can assert reconciler behaviour
+                  deterministically (see test/scenarios/).
+
+                  A test Plan is otherwise an ordinary Plan: pause/resume/cancel,
+                  fan-in, template expansion, remediation all behave identically. Only
+                  the agent-spawn is machinery-simulated. Production Plans leave this
+                  false and never simulate outcomes.
+                type: boolean
+              triggeredBy:
+                description: TriggeredBy records provenance (mirrors AgentRunSpec.TriggeredBy).
+                type: string
+            required:
+            - steps
+            type: object
+          status:
+            description: PlanStatus is the observed state of a Plan.
+            properties:
+              completionTime:
+                description: CompletionTime is when the Plan reached a terminal phase.
+                format: date-time
+                type: string
+              conditions:
+                description: |-
+                  Conditions record the plan-level state facts: Paused, Cancelled,
+                  CommandAcknowledged. Standard metav1.Condition shape so kubectl +
+                  dashboards render them natively.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              decisions:
+                description: |-
+                  Decisions is the append-only audit log of transitions the reconciler
+                  applied. Bounded at PlanDecisionsMax entries; oldest-first drop on
+                  overflow. Reproduces the key rows of orch's Python plan_runner
+                  plan_decisions table locally on the CR so the re-plan agent can read
+                  the audit without a database round-trip.
+                items:
+                  description: |-
+                    PlanDecision is one entry in the append-only audit log of transitions the
+                    reconciler applied to the Plan. Reproduces the load-bearing rows of the
+                    Python plan_runner's plan_decisions table so resume + idempotency logic can
+                    read the same audit locally on the CR.
+
+                    The log is bounded — the reconciler caps Status.Decisions at
+                    PlanDecisionsMax entries, dropping oldest-first on overflow. Consumers must
+                    not rely on the log being complete over long horizons; for durable audit
+                    use the Maestro plan.* event stream.
+                  properties:
+                    message:
+                      description: Message is a human-readable detail (mirrors metav1.Condition.Message).
+                      type: string
+                    reason:
+                      description: Reason is a short machine-readable rationale (mirrors
+                        metav1.Condition.Reason).
+                      type: string
+                    step:
+                      description: Step is the PlanStep.Name involved, when the type
+                        is step-*.
+                      type: string
+                    time:
+                      description: Time is when the transition was applied (reconciler
+                        clock).
+                      format: date-time
+                      type: string
+                    type:
+                      description: |-
+                        Type identifies the transition:
+                          paused | resumed | cancelled | replan
+                          step-fired | step-terminal
+                      type: string
+                  required:
+                  - time
+                  - type
+                  type: object
+                type: array
+              expandedSteps:
+                description: |-
+                  ExpandedSteps is the frozen, post-template-expansion snapshot of the
+                  plan's DAG. Populated once at plan init when any Spec.Steps entry
+                  declares Use (PlanTemplate reference); left empty otherwise. Once set
+                  it is authoritative — every downstream reconcile pass (depsReady,
+                  spawn, roll-up, roll-up fan-in / anti-stomp) walks the SNAPSHOT rather
+                  than Spec.Steps.
+
+                  This freeze is deliberate: a mid-run template edit MUST NOT mutate an
+                  already-running plan (the same idempotency contract as spec.Steps —
+                  callers edit spec + resume; they don't mutate templates and expect
+                  running plans to pick up the change).
+
+                  A plan with no Use references leaves ExpandedSteps nil forever; the
+                  reconciler transparently walks Spec.Steps in that case (the effective-
+                  steps helper folds the two paths). See PlanReconciler.expandTemplates.
+                items:
+                  description: |-
+                    PlanStep declares one node in the plan DAG. Each step maps 1:1 to an
+                    AgentRun the reconciler will create when the step's DependsOn are all
+                    Succeeded (or empty). Step Names must be unique within the Plan and stable
+                    (they're used to compute the deterministic AgentRun name — see
+                    PlanReconciler.agentRunName).
+                  properties:
+                    agentType:
+                      description: |-
+                        AgentType names the cluster-scoped AgentType CR the step's AgentRun runs
+                        on (per-language runtime — mirrors AgentRunSpec.AgentType). Optional:
+                        when empty the controller falls back to the configured default
+                        (LEARTECH_DEFAULT_AGENT_TYPE). The BA/Planner normally sets it
+                        explicitly per repo language (the policy path).
+                      type: string
+                    budgetIter:
+                      description: |-
+                        BudgetIter caps AgentRun iterations for this step. When nil, the
+                        AgentType default applies (mirrors AgentRunSpec.BudgetIter).
+                      type: integer
+                    dependsOn:
+                      description: |-
+                        DependsOn lists step Names this step waits on. Empty = ready at t=0.
+                        Cycles are rejected at reconcile time (the DAG walker halts + fails).
+
+                        A step is eligible only when every DependsOn step is *Succeeded*.
+                        A Failed OR Cancelled dependency keeps the dependent BLOCKED
+                        (Cancelled != success). See PlanReconciler.depsReady.
+                      items:
+                        type: string
+                      type: array
+                    fanIn:
+                      description: |-
+                        FanIn marks the step as a fan-in validation step: a NO-AGENT,
+                        read-only check that asserts every file listed in FanInValidate
+                        exists on the repo's main HEAD before the step's dependents may
+                        proceed. A fan-in step does NOT spawn an AgentRun — the reconciler
+                        resolves the repo's main HEAD sha and probes each expected file on
+                        that ref via the wired FanInValidator seam.
+
+                        Semantics:
+                          - All expected files present → step advances to StepPhaseSucceeded
+                            (validation passed) → dependents unblock on the next reconcile.
+                          - Any expected file missing → step advances to StepPhaseFailed
+                            (block dependents; the missing paths are surfaced in a
+                            "fan_in_failed" decision entry).
+
+                        A fan-in step MUST declare ≥1 DependsOn (a step with no upstream
+                        producers has nothing to validate) AND ≥1 FanInValidate path. A
+                        non-fan-in step MUST NOT declare FanInValidate. The DAG validator
+                        terminally fails the Plan on either misuse.
+
+                        Mirrors orch's Python plan_runner execute_fan_in_step /
+                        _resolve_main_head_sha / _file_exists_on_ref path.
+                      type: boolean
+                    fanInValidate:
+                      description: |-
+                        FanInValidate lists repo-relative file paths that MUST exist on the
+                        repo's main HEAD for the fan-in step to succeed. Ignored when FanIn
+                        is false; required (non-empty) when FanIn is true. Paths are opaque
+                        to the reconciler — the FanInValidator seam owns the "does this path
+                        exist on that ref?" answer.
+                      items:
+                        type: string
+                      type: array
+                    hold:
+                      description: |-
+                        Hold, when true, marks the step's PR deliberately held pending human
+                        approval. The plan authors this bit — it tells downstream consumers
+                        "this step's PR is meant to be reviewed by a human, not auto-merged
+                        by Tide once gates go green". The reconciler routes such a step to
+                        StepPhaseAwaitingApproval (distinct from AwaitingReview) once its
+                        agent finishes AND opens a PR — so chat/UX can say "waiting on human
+                        approval" rather than the generic "PR is being reviewed / gates
+                        still running".
+
+                        The two are semantically different:
+
+                          - AwaitingReview (Hold=false): transient. Gates + AI review may
+                            still be running; Tide will merge as soon as the PR is green,
+                            which advances the step to Succeeded on the next reconcile.
+                          - AwaitingApproval (Hold=true): parked. The agent posted /hold to
+                            Lighthouse Keeper; Tide will NOT merge until a human explicitly
+                            posts /hold cancel. The step sits here indefinitely.
+
+                        Both keep dependents blocked (both are non-terminal for depsReady
+                        purposes). Hold does NOT change how depsReady/rollUp key off
+                        StepPhaseSucceeded (still requires PR merged).
+
+                        The AgentRun-level Phase stays Succeeded for a held step — the
+                        agent finished; it is the DELIVERABLE that is parked, not the run.
+                      type: boolean
+                    inputs:
+                      description: |-
+                        Inputs is the run payload projected into the AgentRun (mirrors
+                        AgentRunSpec.Inputs — validated by the AgentType's InputSchema).
+                        Optional: a `use:` step MUST NOT declare inputs (they come from the
+                        expanded template steps), so inputs cannot be schema-required or a
+                        Template-Plan composition is unconstructible via the API. Non-use
+                        steps normally set it; the expander/agent handle an empty payload.
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    kind:
+                      description: "Kind declares HOW the reconciler judges this step
+                        \"done\" — a\nfirst-class dimension distinct from the step's
+                        phase. Three kinds,\neach with its own done-semantics (see
+                        PlanReconciler.deriveStepPhase):\n\n\t\"\"  ≡ \"pr\" (default;
+                        back-compat — an empty Kind is a pr step).\n\t\"pr\"    →
+                        the step's deliverable is a PULL REQUEST; the step is done\n\t
+                        \         when that PR MERGES. AgentRun Succeeded + PR merged
+                        →\n\t          StepPhaseSucceeded; PR closed-unmerged → StepPhaseFailed;
+                        a\n\t          repo-backed run that finished with no PR after
+                        the report-back\n\t          grace → StepPhaseFailed (\"no
+                        deliverable\"). This is the\n\t          historical merge-gated
+                        behaviour, unchanged.\n\t\"apply\" → idempotent / DIRECT work
+                        with NO PR expected (registration,\n\t          to_main pushes,
+                        cluster mutations). The step is done when the\n\t          AgentRun
+                        SUCCEEDS (exit 0) — Succeeded → StepPhaseSucceeded\n\t          with
+                        NO PR required (the no-PR \"no-deliverable\" fail is NEVER\n\t
+                        \         applied). Failed → StepPhaseFailed; Cancelled →
+                        Cancelled.\n\t\"check\" → a VERIFICATION step judged by a
+                        DETERMINISTIC, framework-\n\t          owned verdict (NOT
+                        an LLM narration): AgentRun Succeeded →\n\t          verdict
+                        PASS → StepPhaseSucceeded; AgentRun Failed → verdict\n\t          FAIL
+                        → StepPhaseFailed. Any PR the run opens is IGNORED for\n\t
+                        \         the pass/fail decision. The controller writes the
+                        verdict to\n\t          PlanStepStatus.Verdict.\n\nAn unrecognised
+                        Kind is treated as \"pr\" (the safe default). Kind does\nnot
+                        change DAG gating — depsReady/rollUp still key off StepPhaseSucceeded\nregardless
+                        of kind."
+                      enum:
+                      - pr
+                      - apply
+                      - check
+                      type: string
+                    name:
+                      description: |-
+                        Name uniquely identifies the step within this Plan. Used to compute the
+                        child AgentRun's name (<plan>-<step>), so must be a valid DNS-1123 label
+                        component (kubebuilder validation enforces this at the CRD schema level).
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    repo:
+                      description: Repo, when set, is passed to the AgentRun (git
+                        clone init-container).
+                      type: string
+                    test:
+                      description: |-
+                        Test, when set on a step whose Plan is a test Plan (PlanSpec.Test),
+                        declares the DIRECTED outcome the machinery should simulate for this
+                        step INSTEAD OF spawning a real agent Job. It is the per-step half of
+                        the Plan-level test declaration: PlanSpec.Test marks the whole Plan a
+                        test; PlanStep.Test tells the reconciler how THIS step's synthetic PR
+                        "resolves" (merged / closed / opened).
+
+                        The reconciler consumes this only when the owning Plan is a test Plan:
+                        at child-AgentRun creation it stamps the child with the test-mode
+                        label + the directed-PR-outcome annotation derived from Test.Directed,
+                        so the existing TestModePROutcomeFetcher resolves the outcome at
+                        RUNTIME (not merely in unit tests). See PlanStepTest.Directed.
+
+                        Ignored when PlanSpec.Test is false — a production Plan never simulates
+                        outcomes even if a step carries a stray Test directive.
+                      properties:
+                        directed:
+                          description: "Directed names the outcome the machinery should
+                            simulate for this step.\nThe accepted vocabulary is KIND-SPECIFIC
+                            (see PlanStep.Kind) — the\ncontroller maps (kind, directed)
+                            → the AgentRun terminal phase [+ a\nsynthetic PR outcome
+                            for pr steps] so the SAME step state machine\nresolves
+                            the step exactly as a real run would:\n\n\tkind: pr |
+                            \"\" (merge-gated, the historical vocabulary):\n\t  \"merged\"
+                            \         → PR merged → step Succeeded.\n\t  \"closed_unmerged\"
+                            → PR closed without merging → step Failed.\n\t  \"opened\"
+                            \         → PR open, not yet merged → step AwaitingReview\n\t
+                            \                     (AwaitingApproval when Hold=true).\n\n\tkind:
+                            check (deterministic verdict):\n\t  \"pass\" → AgentRun
+                            Succeeded → verdict PASS → step Succeeded.\n\t  \"fail\"
+                            → AgentRun Failed    → verdict FAIL → step Failed.\n\n\tkind:
+                            apply (run-success, no PR):\n\t  \"succeed\" → AgentRun
+                            Succeeded → step Succeeded (no PR expected).\n\t  \"error\"
+                            \  → AgentRun Failed    → step Failed.\n\nAn empty or
+                            unrecognised Directed leaves the step at its default\nsimulated
+                            outcome (the agent \"Succeeded\" with no directed result),\nwhich
+                            collapses to StepPhaseSucceeded for a repo-less pr step,
+                            an apply\nstep, or a check step (verdict PASS)."
+                          enum:
+                          - merged
+                          - closed_unmerged
+                          - opened
+                          - pass
+                          - fail
+                          - succeed
+                          - error
+                          type: string
+                      type: object
+                    triggeredWhen:
+                      description: |-
+                        TriggeredWhen, when set, spawns this step as soon as the named step
+                        REACHES the given step phase (or a later success phase) — a runtime
+                        handoff distinct from DependsOn's "wait for merged/Succeeded". The
+                        motivating case: a Dev step opens its PR (StepPhaseAwaitingReview) and
+                        an Infra "release-monitor" step should fire immediately to watch it
+                        through review → merge → release → health, rather than waiting for the
+                        Dev step to reach Succeeded.
+
+                        Semantics ("reached-or-beyond", success-path only):
+                          - Satisfied when the target's step phase rank >= TriggeredWhen.Phase's
+                            rank on the success ladder Pending<Running<AwaitingReview≈
+                            AwaitingApproval<Succeeded. So TriggeredWhen{Phase: AwaitingReview}
+                            fires on AwaitingReview, AwaitingApproval, OR a fast Succeeded — no
+                            missed transition.
+                          - A target at Failed/Cancelled NEVER satisfies it (the triggered step
+                            stays unspawned); the Plan still rolls up to Failed via the target,
+                            so nothing hangs.
+                          - Evaluated ALONGSIDE DependsOn: a step with both spawns only when
+                            (all DependsOn Succeeded) AND (TriggeredWhen reached). A step with
+                            only TriggeredWhen fires purely on the trigger.
+                      properties:
+                        phase:
+                          description: |-
+                            Phase is the step phase that (once reached, or surpassed on the success
+                            ladder) spawns the owning step.
+                          enum:
+                          - Running
+                          - AwaitingReview
+                          - AwaitingApproval
+                          - Succeeded
+                          type: string
+                        step:
+                          description: Step is the name of the step to watch (must
+                            be a declared step in the Plan).
+                          type: string
+                      required:
+                      - phase
+                      - step
+                      type: object
+                    use:
+                      description: |-
+                        Use, when set, marks this step as a TEMPLATE-EXPANSION step: a named
+                        PlanTemplate is fetched at plan init, its Steps are substituted with
+                        this step's With params, namespaced under this step's Name (as
+                        "<Name>-<tmplStep>"), and INLINED into the plan's DAG. The
+                        use-step's own DependsOn become the DependsOn of the template's ENTRY
+                        step(s); anything else in the plan that DependsOn THIS step is
+                        rewired to DependsOn the template's TERMINAL step(s) (multi-terminal
+                        = fan-in). The expansion is a pure pre-process — the template's
+                        steps run as normal flat-DAG steps; a controller does NOT spawn
+                        another controller.
+
+                        A step with Use set MUST NOT declare AgentType / Inputs / Repo /
+                        BudgetIter / Hold / FanIn / FanInValidate / TriggeredWhen; only
+                        DependsOn (external entry-wiring) is honoured. The AgentType +
+                        Inputs come from the expanded template steps themselves.
+
+                        See PlanTemplate for the referenced type and the expansion semantics
+                        (~/leartech/Hub/status/plan-templates-and-triggers.md).
+                      type: string
+                    with:
+                      additionalProperties:
+                        type: string
+                      description: |-
+                        With supplies param values for the PlanTemplate referenced by Use.
+                        The expander substitutes "${name}" occurrences in template step
+                        fields (Name, AgentType, Repo, DependsOn entries) and in the raw
+                        JSON of each template step's Inputs with the provided value.
+
+                        A template param declared Required=true whose Name has no With
+                        entry is a terminal expansion error (the Plan is marked Failed,
+                        not a panic). An optional param without a With entry substitutes
+                        to the empty string.
+                      type: object
+                  required:
+                  - name
+                  type: object
+                type: array
+              lastAcknowledgedCommandUID:
+                description: |-
+                  LastAcknowledgedCommandUID is the UID of the most-recently consumed
+                  PlanSpec.Command. Idempotency key — the reconciler skips re-applying
+                  a command whose UID already appears here.
+                type: string
+              message:
+                description: Message is a human-readable status detail (e.g. cycle-detected).
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the .metadata.generation the status
+                  reflects.
+                format: int64
+                type: integer
+              phase:
+                description: Phase is the rolled-up lifecycle phase (see PlanReconciler.rollUp).
+                type: string
+              resolvedBy:
+                description: |-
+                  ResolvedBy is the back-link set when a SEPARATE remediation plan
+                  flipped this plan's Phase to PlanPhaseResolved — see PlanPhaseResolved
+                  godoc for the semantics. Nil for any non-Resolved plan.
+
+                  Populated by PlanReconciler.processRemediationResolution when a
+                  remediating plan (whose Spec.Remediates references THIS plan) reaches
+                  Succeeded. The back-link is a name+namespace pair (not a UID) so a
+                  re-created / GC'd remediating plan doesn't dangle the ref — consumers
+                  treat a missing target as "the remediation was archived; the marker
+                  stands".
+
+                  Idempotency: the reconciler NEVER overwrites an existing ResolvedBy —
+                  the first remediation to resolve this plan wins. A second remediation
+                  referencing the same already-Resolved plan is a no-op (see
+                  processRemediationResolution).
+                properties:
+                  name:
+                    description: Name is the referenced Plan.metadata.name. Required.
+                    minLength: 1
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace is the referenced Plan.metadata.namespace. Optional —
+                      empty defaults to the referencing plan's own namespace.
+                    type: string
+                required:
+                - name
+                type: object
+              startTime:
+                description: StartTime is when the first step was spawned.
+                format: date-time
+                type: string
+              steps:
+                description: Steps mirrors Spec.Steps with observed phase + child
+                  AgentRun name.
+                items:
+                  description: |-
+                    PlanStepStatus is the observed state of a single step: its rolled-up phase
+                    and the AgentRun name the reconciler created for it (empty until the step
+                    is spawned).
+                  properties:
+                    agentRunName:
+                      description: |-
+                        AgentRunName is the deterministic name of the child AgentRun
+                        (<plan>-<step>); empty until the step is spawned.
+                      type: string
+                    headBranch:
+                      description: |-
+                        HeadBranch is the source branch the PR was opened from, when known.
+                        Recorded alongside PR so consumers can pull the branch (for local
+                        review, for cross-repo dependency tracking) without an extra GitHub
+                        round-trip. Empty when the AgentRun didn't report a head branch.
+                      type: string
+                    message:
+                      description: |-
+                        Message is a short human-readable diagnostic set by the reconciler
+                        when a step transitions to a terminal StepPhase for a
+                        non-obvious reason. Populated for cases like "repo-backed step's
+                        AgentRun Succeeded but no PR was opened" — surfacing the cause on
+                        the step itself so operators + dashboards don't have to cross-
+                        reference the plan-level decision log. Empty for the common case
+                        (Succeeded via merged PR, ordinary Failed via failed AgentRun, ...).
+                      type: string
+                    name:
+                      description: Name is the PlanSpec.Steps[].Name this status refers
+                        to.
+                      type: string
+                    phase:
+                      description: |-
+                        Phase mirrors the step's AgentRun.Status.Phase (Pending when not yet
+                        spawned).
+
+                        When the Plan is Cancelled (via cancel/replan command), any
+                        non-terminal step's Phase is FORCED to Cancelled — the reconciler
+                        overrides the child AgentRun's observed phase because the plan-level
+                        decision takes precedence.
+
+                        Phase B2 note: this remains the RAW AgentRun phase for backward-compat
+                        signal is StepPhase below, which factors in the PR OUTCOME
+                        (opened/awaiting-review/merged/closed-unmerged) — an agent Succeeded
+                        only means the PR opened, not that its changes landed.
+                      type: string
+                    pr:
+                      description: |-
+                        PR is the pull-request number the step's child AgentRun opened, as
+                        reported via AgentRun.Status.TargetPR. Empty until the agent reports
+                        one. Recorded here so consumers (dashboards, the re-plan agent) can
+                        link a step to its PR without re-listing the child AgentRun.
+
+                        String rather than int because AgentRun.Status.TargetPR is a string
+                        (some callers use "org/repo#123" schemes) — kept opaque to the plan
+                        reconciler.
+                      type: string
+                    prOutcome:
+                      description: |-
+                        PROutcome is the last-observed PR outcome from the outcome fetcher.
+                        One of: "opened" | "awaiting_review" | "merged" | "closed_unmerged".
+                        Empty until the reconciler has queried the outcome at least once (or
+                        when no PR was opened for this step). Advances StepPhase per
+                        _OUTCOME_TRANSITIONS (see plan_controller.go).
+                      type: string
+                    retryCount:
+                      description: |-
+                        RetryCount is the number of times the reconciler has respawned this
+                        step's AgentRun after detecting the previous one went dead — i.e. it
+                        was recorded on Status.Steps[].AgentRunName but is no longer resident
+                        on the apiserver (deleted, GC'd, or otherwise vanished before a clean
+                        terminal transition). Bounded at PlanStepMaxRetries; once exhausted
+                        the reconciler marks the step StepPhaseFailed with a
+                        "step-dead-runner" audit entry and stops re-spawning it.
+
+                        Monotonic per step lifetime. A step that spawned cleanly, ran to a
+                        terminal phase, and never lost its AgentRun stays at RetryCount=0.
+                        A step whose AgentRun vanished N times and was respawned each time
+                        records RetryCount=N (until N reaches the cap, at which point the
+                        step is marked Failed instead of retried).
+
+                        Mirrors orch's Python plan_runner dead_runner_detector + step_retry:
+                        the same bounded-retry semantics ported to the Go reconciler so a
+                        dead runner doesn't leave the plan hanging forever.
+                      type: integer
+                    stepPhase:
+                      description: |-
+                        StepPhase is the step-level lifecycle phase — the authoritative signal
+                        the reconciler uses for depsReady + Plan roll-up. Distinct from Phase
+                        above because a step's work isn't done until its PR is MERGED, not
+                        merely when the agent finishes (agents hold PRs; they don't merge).
+
+                        See PlanStepPhase for the value set + StepPhaseAwaitingReview for the
+                        intermediate state between "agent finished" and "PR merged".
+                      type: string
+                    verdict:
+                      description: |-
+                        Verdict is the DETERMINISTIC, framework-owned pass/fail judgement for a
+                        kind:check step. One of "" | "PASS" | "FAIL". The AGENT does NOT set
+                        this — the controller DERIVES it from the check step's AgentRun outcome
+                        (AgentRun Succeeded → "PASS" → StepPhaseSucceeded; AgentRun Failed →
+                        "FAIL" → StepPhaseFailed) in deriveStepPhase. Left "" for kind:pr and
+                        kind:apply steps (they are not verdict-judged; their pass/fail comes
+                        from PR-merge / run-success respectively).
+
+                        This is what makes a check step's outcome trustworthy: the verdict is
+                        mechanical (keyed off the run's exit) rather than parsed from an LLM's
+                        self-report, so a check can't "narrate" itself green.
+                      enum:
+                      - PASS
+                      - FAIL
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

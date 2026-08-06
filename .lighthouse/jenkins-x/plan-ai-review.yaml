@@ -2,11 +2,11 @@ apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
   creationTimestamp: null
-  name: pullrequest
+  name: plan-ai-review
 spec:
   pipelineSpec:
     tasks:
-    - name: from-build-pack
+    - name: plan-ai-review
       resources: {}
       taskSpec:
         metadata: {}
@@ -19,10 +19,10 @@ spec:
           - secretRef:
               name: jx-boot-job-env-vars
               optional: true
-          # Our OWN AI gateway virtual key for the advisory ai-review step. This
-          # secret holds AI_GATEWAY_URL + AI_GATEWAY_API_KEY (+ optional
-          # REVIEW_MODELS). Optional so plan-lint (the hard gate) still runs even
-          # before the key is provisioned — ai-review just self-skips.
+          # Our OWN AI gateway virtual key for the advisory review. Holds
+          # AI_GATEWAY_URL + AI_GATEWAY_API_KEY (+ optional REVIEW_MODELS).
+          # optional:true so this pipeline still runs (and self-skips) before
+          # the key is provisioned.
           - secretRef:
               name: leartech-plan-catalog-ai-key
               optional: true
@@ -42,26 +42,9 @@ spec:
           script: |
             #!/usr/bin/env sh
             jx gitops variables
-        # ---- HARD GATE: deterministic structural + safety lint (Go) -----------
-        # "golangci for Plans." Non-zero exit blocks the merge. This is the
-        # un-bypassable governance surface; it grows as we add rules. Written in
-        # Go — every deterministic (non-LLM) check in this catalog is Go, with
-        # its own unit tests that run here as part of the gate.
-        - image: golang:1.26-alpine
-          name: plan-lint
-          resources:
-            requests:
-              cpu: 500m
-              memory: 512Mi
-          script: |
-            #!/bin/sh
-            set -e
-            go test ./...
-            go run ./cmd/plan-lint
-        # ---- ADVISORY: multi-model ai-review via the OWNED gateway ------------
-        # Never fails the build (exits 0). Posts a sticky PR comment scoring
-        # design quality a linter can't judge, and feeds our Plan-quality
-        # model flywheel. Routes through our gateway with our own virtual key.
+        # ADVISORY multi-model review via the OWNED gateway. Never fails the
+        # build (exits 0). Posts a sticky PR comment scoring design quality a
+        # linter can't judge, and feeds our Plan-quality model flywheel.
         - image: python:3.12-alpine
           name: plan-ai-review
           resources:
@@ -73,10 +56,7 @@ spec:
             set +e
             apk add --no-cache bash curl >/dev/null 2>&1
             . ./.jx/variables.sh 2>/dev/null || true
-            # Map jx gitops variables → the names plan-ai-review.sh expects.
-            export REPO_OWNER="${REPO_OWNER:-$REPO_OWNER}"
             export REPO_NAME="${REPO_NAME:-$APP_NAME}"
-            export PULL_NUMBER="${PULL_NUMBER:-$PULL_NUMBER}"
             bash scripts/plan-ai-review.sh || true
   podTemplate:
     tolerations:
@@ -85,5 +65,5 @@ spec:
       value: build
       effect: NoSchedule
   serviceAccountName: tekton-bot
-  timeout: 1h0m0s
+  timeout: 30m0s
 status: {}

@@ -7,13 +7,19 @@ LearTech agent platform (`agent.leartech.io/v1alpha1`). Anyone — human or AI �
 open a PR proposing a Plan. Every submission is **gated by the same pipeline-as-judge
 philosophy we apply to code**:
 
-1. **`plan-lint` — the hard gate (deterministic, Go).** Structural + safety checks
-   on every Plan/PlanTemplate. Non-zero exit blocks the merge. This is the
-   un-bypassable governance surface. It _grows_ — each rule encodes a lesson paid
-   for in a real run (see `internal/lint`, rules R1–R19 — structural + safety +
-   DAG/expansion checks ported from the controller's own reconcile-time
-   validation, so a Plan the catalog accepts is one the controller will run).
-   Every deterministic (non-LLM) check in this catalog is Go, with unit tests.
+1. **`plan-lint` — the hard gate (deterministic, Go).** Two layers, both
+   non-zero-exit-blocks-merge:
+   - **Semantic + safety + DAG rules** (`internal/lint`, R1–R19) — ported from the
+     controller's own reconcile-time validation, so a Plan the catalog accepts is
+     one the controller will actually run (hold-by-default, cycle detection,
+     fan-in shape, template expansion, dependsOn resolution, …).
+   - **CRD-schema conformance** (`kubeconform`) — every submission is validated
+     against a JSON Schema auto-derived from the Plan CRD (`schemas/`), catching
+     wrong types, bad enums, missing required fields, and pattern violations. The
+     schema tracks the CRD automatically, so structural rules never drift.
+
+   This is the un-bypassable governance surface, and it _grows_ — every
+   deterministic (non-LLM) check is Go, with unit tests.
 2. **`plan-ai-review` — the judgment layer (advisory).** Routes each submission
    through **our own AI gateway**, with **our own virtual key**, to one or more ML
    models that score design quality a linter can't. Posts a sticky PR comment.
@@ -65,17 +71,25 @@ our product can host their own catalog and manage their own merge policy.
 plans/           concrete Plans (hold-by-default proposals)
 templates/       reusable PlanTemplates (composed via `use:` + `with:`)
 cmd/plan-lint/   the deterministic hard gate (Go entrypoint)
+cmd/crd2schema/  generates schemas/ JSON Schema from the vendored CRDs
 internal/lint/   the rules engine (R1–R19) + unit tests
+schemas/         CRD-derived JSON Schema (kubeconform) + vendored CRDs under crd/
 scripts/         plan-ai-review.sh (advisory, LLM via the owned gateway)
-.lighthouse/     Tekton presubmit wiring both steps
+.lighthouse/     Tekton presubmits: plan-lint (required) + plan-ai-review (advisory)
 OWNERS           trusted maintainers (no auto-merge)
 ```
+
+The two presubmits surface as separate GitHub check contexts
+(`<cluster>/plan-lint`, `<cluster>/plan-ai-review`). Only `plan-lint` is a
+required status check; `plan-ai-review` is advisory (`optional: true`).
 
 ## Running the gate locally
 
 ```sh
-go test ./...          # the rule unit tests
-go run ./cmd/plan-lint # lint plans/ + templates/
+make test     # rule unit tests
+make lint     # rules engine + CRD-schema conformance (kubeconform)
+make verify   # fail if schemas/ is stale vs the vendored CRDs
+make schemas  # regenerate schemas/ after refreshing the CRDs
 ```
 
 Same code runs in CI and on a laptop — no drift.

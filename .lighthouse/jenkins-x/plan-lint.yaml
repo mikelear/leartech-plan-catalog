@@ -1,0 +1,63 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  creationTimestamp: null
+  name: plan-lint
+spec:
+  pipelineSpec:
+    tasks:
+    - name: plan-lint
+      resources: {}
+      taskSpec:
+        metadata: {}
+        stepTemplate:
+          env:
+          - name: HOME
+            value: /tekton/home
+          name: ""
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          workingDir: /workspace/source
+        steps:
+        - image: uses:jenkins-x/jx3-pipeline-catalog/tasks/git-clone/git-clone-pr.yaml@versionStream
+          name: ""
+          resources: {}
+        # The HARD GATE. All deterministic (non-LLM) checks are Go:
+        #   1. unit tests for the rules engine (they ARE part of the gate)
+        #   2. the semantic + DAG + safety linter (R1–R19)
+        #   3. a drift guard: committed JSON schemas must match the vendored CRDs
+        #   4. kubeconform: every Plan/PlanTemplate conforms to the CRD schema
+        #      (types, enums, required, patterns) — auto-derived, stays in sync.
+        - image: golang:1.26-alpine
+          name: plan-lint
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+          script: |
+            #!/bin/sh
+            set -e
+            go test ./...
+            go run ./cmd/plan-lint
+            # Schema drift guard — regenerate from the vendored CRDs and diff.
+            go run ./cmd/crd2schema -out /tmp/schemas-gen schemas/crd/*.yaml
+            for f in schemas/*.json; do
+              diff -u "$f" "/tmp/schemas-gen/$(basename "$f")" || {
+                echo "plan-lint: schemas/ is stale — run: go run ./cmd/crd2schema -out schemas schemas/crd/*.yaml"; exit 1; }
+            done
+            # CRD-schema conformance for every submitted Plan/PlanTemplate.
+            go run github.com/yannh/kubeconform/cmd/kubeconform@v0.8.0 \
+              -strict -summary \
+              -schema-location './schemas/{{ .ResourceKind }}_{{ .ResourceAPIVersion }}.json' \
+              plans/ templates/
+  podTemplate:
+    tolerations:
+    - key: sku
+      operator: Equal
+      value: build
+      effect: NoSchedule
+  serviceAccountName: tekton-bot
+  timeout: 30m0s
+status: {}
