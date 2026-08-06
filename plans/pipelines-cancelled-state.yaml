@@ -39,8 +39,9 @@ spec:
     - name: handle-cancelled
       kind: pr
       agentType: leartech-agent-py
-      repo: mikelear/leartech-automated-agent
       inputs:
+        name: handle-cancelled
+        repo: mikelear/leartech-automated-agent
         goal: >-
           Teach gate/tools/pipelines.py to distinguish a superseded (cancelled) run from a
           genuine failure.
@@ -87,31 +88,34 @@ spec:
           ai-video-review-needs-saliency-calibration entry.
           Done = PR merged (open via open_pr, drive gates green).
 
-    - name: release-check
+    # Canned infra action — the infra agent is action-driven, not goal-driven (R21).
+    - name: release-agent
       kind: check
       agentType: leartech-agent-infra
       dependsOn:
         - handle-cancelled
       inputs:
-        goal: >-
-          Gate verification on the new code being LIVE, not merely merged. Wait (with a
-          deadline) until, on BOTH clusters (gcp + az), leartech-automated-agent has rolled
-          out the released version (deploy_health expected_version = the released tag,
-          normalize git-tag → chart-version; healthy = available>=1 AND observed_version ==
-          expected). FAIL (exit non-zero) if the new version is not live within the deadline.
-          Do not open a PR.
+        action: release-health-check
+        service: leartech-automated-agent
+        namespace: jx-staging
+        budgetMinutes: 30
 
+    # Dev agent, not infra: producing a real superseded run and reading the rollup is
+    # arbitrary functional work, and the infra agent runs only canned actions.
     - name: verify-supersede
       kind: check
-      agentType: leartech-agent-infra
+      agentType: leartech-agent-py
       dependsOn:
-        - release-check
+        - release-agent
       inputs:
+        name: verify-supersede
+        repo: mikelear/leartech-automated-agent
         goal: >-
-          Prove the fix against a REAL superseded run, not only synthetic fixtures — the unit
-          tests cannot prove that GitHub actually reports what we think it reports. FAIL (exit
-          non-zero) if ANY assertion below fails; a kind:check verdict is this step's exit
-          code.
+          Prove the fix against a REAL superseded run, not only synthetic fixtures — the
+          unit tests cannot prove that GitHub actually reports what we think it reports.
+          This is a verification step: do NOT open a PR against this repo and do NOT modify
+          it. FAIL (exit non-zero) if ANY assertion below fails; the verdict is this step's
+          exit code.
 
           Method: on a quiet consumer repo (leartech-auth-admin-ui is a reasonable choice —
           confirm it has no open PRs first), open a throwaway PR and push a SECOND commit
@@ -120,15 +124,14 @@ spec:
 
           Assertions:
           - The superseded check reports GitHub state ERROR with a description beginning
-            "Pipeline cancelled" (confirming the upstream mapping is as traced).
+            "Pipeline cancelled", confirming the upstream mapping is as traced.
           - The fixed PipelineCheck classifies it as cancelled — NOT failed and NOT terminal.
-          - The newer run's check for the same context is present and is the one that reaches
-            a real verdict.
+          - The newer run's check for the same context is present and is the one that
+            reaches a real verdict.
           - A genuinely failing check on the same PR (if one occurs) is still classified as
             failed, so the fix has not blanket-suppressed errors.
           - The cancelled-classification log line is queryable in Loki.
 
-          CLEAN UP AFTERWARDS: close the throwaway PR and delete its branch. Leaving abandoned
-          agent branches and stale open PRs behind is a real cost — they mislead both humans
-          and agents about what the platform currently does. Report the cleanup as part of the
-          verdict.
+          CLEAN UP AFTERWARDS: close the throwaway PR and delete its branch. Abandoned
+          agent branches and stale open PRs mislead both humans and agents about what the
+          platform currently does. Report the cleanup as part of the verdict.
