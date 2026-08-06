@@ -69,6 +69,27 @@ PASS|FAIL`, and one finding per rule violation (rule id in `refs`).
 **Severity** — `must-fix` blocks a healthy run; `should-fix` is strongly advised;
 `nit` is cosmetic; `praise` records what's *right* (useful positive signal for training).
 
+## Notifying a submitter (the standard nudge)
+
+A review lives on the PR; the submitting session self-serves from there. Whoever
+relays (a human today, an auto-notify webhook tomorrow) sends the **same minimal
+message** — everything the session needs is on the PR and in the repo docs:
+
+> **Your PR has been reviewed.** Everything you need is on the PR and in the repo — no
+> extra context from me:
+> - Read the review comment(s) on your PR (marker `leartech-review:*`). Each carries a
+>   `leartech.review/v1` JSON block — parse `verdict` + `findings[]` (`severity`, `fix`, `refs`).
+> - Address every `must-fix` (and ideally `should-fix`), then push — `plan-lint` and
+>   `plan-ai-review` re-run automatically.
+> - Reference: [`AGENTS.md`](../AGENTS.md) (author + repair), this file
+>   (`docs/review-format.md`, the review shape), [`docs/rules.md`](rules.md) (the rules).
+>
+> Fix, push, repeat until green + a maintainer approves.
+
+The relay is deliberately thin: no findings restated, no back-and-forth. The PR is the
+channel; the docs are the contract. When OpenAI/Claude sessions webhook to their own
+PRs, they receive this same pointer automatically and act on the machine block.
+
 ## Why the machine block matters
 
 The block is the training signal. `input` = the Plan YAML (+ `plan-lint`'s structured
