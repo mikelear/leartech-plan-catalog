@@ -40,8 +40,9 @@ spec:
     - name: remove-switch
       kind: pr
       agentType: leartech-agent-go
-      repo: mikelear/leartech-mcp-servers
       inputs:
+        name: remove-switch
+        repo: mikelear/leartech-mcp-servers
         goal: >-
           Make token exchange unconditional. Remove ONLY the master switch; keep the
           incomplete-config safety.
@@ -84,37 +85,52 @@ spec:
           observable in Loki after the flag is gone.
           Done = PR merged (open via open_pr, drive gates green).
 
-    - name: release-check
+    # Canned infra actions — the infra agent is action-driven, not goal-driven (R21).
+    # Both MCP deployments must be live before exchange is re-verified.
+    - name: release-mcp-internal
       kind: check
       agentType: leartech-agent-infra
       dependsOn:
         - remove-switch
       inputs:
-        goal: >-
-          Gate verification on the new code being LIVE, not merely merged. Wait (with a
-          deadline) until, on BOTH clusters (gcp + az), leartech-mcp-servers AND
-          leartech-mcp-servers-public have rolled out the released version (deploy_health
-          expected_version = the released tag, normalize git-tag → chart-version; healthy =
-          available>=1 AND observed_version == expected), and the pods NO LONGER carry a
-          LEARTECH_TOKEN_EXCHANGE_ENABLED env var. FAIL (exit non-zero) if the new versions
-          are not live within the deadline. Do not open a PR.
+        action: release-health-check
+        service: leartech-mcp-servers
+        namespace: jx-staging
+        budgetMinutes: 30
 
-    - name: verify-exchange
+    - name: release-mcp-public
       kind: check
       agentType: leartech-agent-infra
       dependsOn:
-        - release-check
+        - remove-switch
       inputs:
+        action: release-health-check
+        service: leartech-mcp-servers-public
+        namespace: jx-staging
+        budgetMinutes: 30
+
+    # Dev agent, not infra: exercising the RFC 8693 path end to end is arbitrary
+    # functional work, and the infra agent runs only canned actions.
+    - name: verify-exchange
+      kind: check
+      agentType: leartech-agent-go
+      dependsOn:
+        - release-mcp-internal
+        - release-mcp-public
+      inputs:
+        name: verify-exchange
+        repo: mikelear/leartech-mcp-servers
         goal: >-
           Prove exchange still works with the flag gone — this is the whole risk of the
-          change. FAIL (exit non-zero) if ANY assertion below fails; a kind:check verdict is
-          this step's exit code.
+          change. This is a verification step: do NOT open a PR and do NOT modify the repo.
+          FAIL (exit non-zero) if ANY assertion below fails; the verdict is this step's exit
+          code.
 
-          Assertions, on BOTH clusters:
-          - A call through the MCP that requires re-audiencing still succeeds, exercising the
-            RFC 8693 path (the plan MCP's outbound call to leartech-plan-api is the proven
-            reference — a caller token audienced at the public MCP host must reach plan-api,
-            which enforces aud=leartech-plan-api).
+          Assertions, on BOTH clusters (gcp + az):
+          - A call through the MCP that requires re-audiencing still succeeds, exercising
+            the RFC 8693 path. The plan MCP's outbound call to leartech-plan-api is the
+            proven reference: a caller token audienced at the public MCP host must reach
+            plan-api, which enforces aud=leartech-plan-api.
           - The tier-1 path is unaffected: a caller whose token already carries the target
             audience is still forwarded verbatim, not exchanged.
           - The pods carry no LEARTECH_TOKEN_EXCHANGE_ENABLED env var.
@@ -123,10 +139,11 @@ spec:
     - name: gitops-cleanup-gsm
       kind: pr
       agentType: leartech-agent-go
-      repo: mikelear/jx-build-cluster-gsm
       dependsOn:
         - verify-exchange
       inputs:
+        name: gitops-cleanup-gsm
+        repo: mikelear/jx-build-cluster-gsm
         goal: >-
           Remove the now-inert `tokenExchange: { enabled: true }` block from
           helmfiles/jx-staging/configs/leartech-mcp-servers.yaml. The chart no longer consumes
@@ -139,10 +156,11 @@ spec:
     - name: gitops-cleanup-akv
       kind: pr
       agentType: leartech-agent-go
-      repo: mikelear/jx-build-cluster-akv
       dependsOn:
         - verify-exchange
       inputs:
+        name: gitops-cleanup-akv
+        repo: mikelear/jx-build-cluster-akv
         goal: >-
           Mirror gitops-cleanup-gsm for the Azure cluster — remove the inert
           `tokenExchange: { enabled: true }` block from the mcp-servers config, leaving
