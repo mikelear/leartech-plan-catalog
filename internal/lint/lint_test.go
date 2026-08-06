@@ -42,13 +42,11 @@ func lintDocs(t *testing.T, docs ...string) *Findings {
 	return f
 }
 
-// rules returns the set of rule codes present in the given lines (e.g. "R5").
-func rules(lines []string) map[string]bool {
+// rules returns the set of rule codes present in the given findings (e.g. "R5").
+func rules(fs []Finding) map[string]bool {
 	out := map[string]bool{}
-	for _, l := range lines {
-		if i := strings.Index(l, "]"); strings.HasPrefix(l, "[") && i > 0 {
-			out[l[1:i]] = true
-		}
+	for _, f := range fs {
+		out[f.Rule] = true
 	}
 	return out
 }

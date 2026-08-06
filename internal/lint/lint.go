@@ -58,18 +58,32 @@ var (
 	useForbidden = []string{"agentType", "inputs", "repo", "budgetIter", "hold", "fanIn", "fanInValidate"}
 )
 
+// Finding is one structured rule result — machine-readable so a verdict store /
+// training flywheel can consume it (the ai-review layer + real run outcomes are
+// keyed off the same shape).
+type Finding struct {
+	Rule    string `json:"rule"`
+	Where   string `json:"where"`
+	Message string `json:"message"`
+}
+
+// String renders a finding as "[rule] where: message".
+func (f Finding) String() string {
+	return fmt.Sprintf("[%s] %s: %s", f.Rule, f.Where, f.Message)
+}
+
 // Findings accumulates hard errors and advisory warnings.
 type Findings struct {
-	Errors []string
-	Warns  []string
+	Errors []Finding
+	Warns  []Finding
 }
 
 func (f *Findings) err(rule, where, msg string) {
-	f.Errors = append(f.Errors, fmt.Sprintf("[%s] %s: %s", rule, where, msg))
+	f.Errors = append(f.Errors, Finding{Rule: rule, Where: where, Message: msg})
 }
 
 func (f *Findings) warn(rule, where, msg string) {
-	f.Warns = append(f.Warns, fmt.Sprintf("[%s] %s: %s", rule, where, msg))
+	f.Warns = append(f.Warns, Finding{Rule: rule, Where: where, Message: msg})
 }
 
 // TemplateMeta is the cross-document index entry for a PlanTemplate present in
