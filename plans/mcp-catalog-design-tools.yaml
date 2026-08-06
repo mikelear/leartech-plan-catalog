@@ -29,8 +29,9 @@ spec:
     - name: register-mcp
       kind: pr
       agentType: leartech-agent-py
-      repo: mikelear/leartech-automated-agent
       inputs:
+        name: register-mcp
+        repo: mikelear/leartech-automated-agent
         goal: >-
           Add the design/artifact MCP server to gate/agent/mcp_catalog.yaml and reference
           it from the roles that need it.
@@ -66,34 +67,35 @@ spec:
           traced in Loki.
           Done = PR merged (open via open_pr, drive gates green).
 
-    - name: release-check
+    # Canned infra action — the infra agent is action-driven, not goal-driven (R21).
+    - name: release-agent
       kind: check
       agentType: leartech-agent-infra
       dependsOn:
         - register-mcp
       inputs:
-        goal: >-
-          Gate verification on the change being LIVE, not merely merged — a kind:pr step is
-          done at merge, but release → GitOps → rollout takes minutes. Wait (with a
-          deadline) until, on BOTH clusters (gcp + az), leartech-automated-agent has rolled
-          out its released version (deploy_health expected_version = the released tag,
-          normalize git-tag → chart-version; healthy = available>=1 AND observed_version ==
-          expected). FAIL (exit non-zero) if the new version is not live within the
-          deadline. Do not open a PR.
+        action: release-health-check
+        service: leartech-automated-agent
+        namespace: jx-staging
+        budgetMinutes: 30
 
+    # Dev agent, not infra: these assertions are arbitrary functional work, and the
+    # infra agent runs only canned actions.
     - name: verify-catalog
       kind: check
-      agentType: leartech-agent-infra
+      agentType: leartech-agent-go
       dependsOn:
-        - release-check
+        - release-agent
       inputs:
+        name: verify-catalog
+        repo: mikelear/leartech-automated-agent
         goal: >-
-          Deterministically confirm the deployed agent resolves the new MCP — verifying the
-          file alone would not prove the running pod picked it up. FAIL (exit non-zero) if
-          ANY assertion below fails; a kind:check verdict is this step's exit code, so
-          reporting a failure while exiting 0 would wrongly pass the Plan.
+          Deterministically confirm the DEPLOYED agent resolves the new MCP — verifying the
+          committed file alone would not prove the running pod picked it up. This is a
+          verification step only: do NOT open a PR and do NOT modify the repo. FAIL (exit
+          non-zero) if ANY assertion below fails; the verdict is this step's exit code.
 
-          Assertions, on BOTH clusters:
+          Assertions, on BOTH clusters (gcp + az):
           - The deployed leartech-automated-agent's MCP admin/introspection surface (see
             app/routers/mcp_admin.py and app/routers/introspection.py for the exact route)
             lists the design/artifact MCP server in its resolved catalog.
