@@ -46,6 +46,7 @@ spec:
       inputs:
         name: gitops-gsm
         repo: mikelear/jx-build-cluster-gsm
+        branch: feat/gitops-gsm
         goal: >-
           Add helmfiles/jx-staging/configs/leartech-artifact-api.yaml. leartech-artifact-api
           currently deploys on chart defaults, so AUTH_ENABLED=true but
@@ -71,6 +72,7 @@ spec:
       inputs:
         name: gitops-akv
         repo: mikelear/jx-build-cluster-akv
+        branch: feat/gitops-akv
         goal: >-
           Mirror the gitops-gsm change for the Azure cluster. Identical shape, but the
           per-cluster Hydra issuer is https://hydra-jx-staging.az.leartech.com. Set the
@@ -88,6 +90,7 @@ spec:
       inputs:
         name: gcs-storage
         repo: mikelear/leartech-artifact-api
+        branch: feat/gcs-storage
         goal: >-
           Add an internal/storage package implementing the artifact object layout on
           Google Cloud Storage using the official Go SDK (cloud.google.com/go/storage),
@@ -140,6 +143,7 @@ spec:
       inputs:
         name: rest-endpoints
         repo: mikelear/leartech-artifact-api
+        branch: feat/rest-endpoints
         goal: >-
           Add the artifact REST endpoints on /api/v1, backed by internal/storage, and
           enforce scopes AT THE SERVICE.
@@ -184,6 +188,7 @@ spec:
       inputs:
         name: mcp-tools
         repo: mikelear/leartech-mcp-servers
+        branch: feat/mcp-tools
         goal: >-
           Wire internal/designserver's tools to the new artifact-api endpoints. The
           client, auth and audience plumbing already exist — do not reinvent them; the
@@ -255,6 +260,7 @@ spec:
       inputs:
         name: verify-roundtrip
         repo: mikelear/leartech-artifact-api
+        branch: feat/verify-roundtrip
         goal: >-
           Deterministically confirm the artifact path works end to end on jx-staging, on
           BOTH clusters. This is a verification step only — do NOT open a PR and do NOT
