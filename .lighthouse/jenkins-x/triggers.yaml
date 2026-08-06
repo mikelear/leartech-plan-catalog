@@ -19,6 +19,13 @@ spec:
     always_run: true
     optional: true
     source: plan-ai-review.yaml
+  # Authoritative CRD check — server-side dry-run against the live cluster (persists
+  # nothing). Complements the offline Go rules; catches anything the vendored schema
+  # misses. Required-eligible once proven green.
+  - name: plan-cluster-verify
+    context: "plan-cluster-verify"
+    always_run: true
+    source: plan-cluster-verify.yaml
   postsubmits:
   # On merge to main: auto-release merged PlanTemplates to the controller's
   # library as a GitOps PR (see scripts/sync-templates-to-controller.sh).

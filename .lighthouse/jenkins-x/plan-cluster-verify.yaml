@@ -1,0 +1,48 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  creationTimestamp: null
+  name: plan-cluster-verify
+spec:
+  pipelineSpec:
+    tasks:
+    - name: plan-cluster-verify
+      resources: {}
+      taskSpec:
+        metadata: {}
+        stepTemplate:
+          env:
+          - name: HOME
+            value: /tekton/home
+          name: ""
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          workingDir: /workspace/source
+        steps:
+        - image: uses:jenkins-x/jx3-pipeline-catalog/tasks/git-clone/git-clone-pr.yaml@versionStream
+          name: ""
+          resources: {}
+        # Server-side dry-run against the LIVE CRD (authoritative; persists nothing).
+        # Runs in-cluster as tekton-bot, which already has create on plans/plantemplates.
+        # jx-boot image ships kubectl + the in-cluster SA is auto-mounted.
+        - image: ghcr.io/jenkins-x/jx-boot:3.16.59
+          name: cluster-verify
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          script: |
+            #!/usr/bin/env sh
+            set -e
+            sh scripts/plan-cluster-verify.sh
+  podTemplate:
+    tolerations:
+    - key: sku
+      operator: Equal
+      value: build
+      effect: NoSchedule
+  serviceAccountName: tekton-bot
+  timeout: 15m0s
+status: {}
