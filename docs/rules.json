@@ -1,0 +1,119 @@
+{
+  "rules": [
+    {
+      "id": "R1",
+      "title": "Valid document",
+      "why": "A Plan must parse as YAML and have a spec mapping, or the controller can't admit it.",
+      "fix": "Fix the YAML syntax; ensure top-level apiVersion/kind/metadata/spec are present and spec is a mapping."
+    },
+    {
+      "id": "R2",
+      "title": "apiVersion",
+      "why": "Only agent.leartech.io/v1alpha1 is served by the platform CRD.",
+      "fix": "Set apiVersion: agent.leartech.io/v1alpha1."
+    },
+    {
+      "id": "R3",
+      "title": "kind",
+      "why": "The catalog accepts only Plan and PlanTemplate.",
+      "fix": "Set kind to Plan or PlanTemplate."
+    },
+    {
+      "id": "R4",
+      "title": "Name shape",
+      "why": "metadata.name becomes a DNS-1123 label and part of the child AgentRun name; \u003e58 chars risks the 63-byte pod-label cap.",
+      "fix": "Use a lowercase DNS-1123 name (letters, digits, hyphens) of at most 58 characters."
+    },
+    {
+      "id": "R5",
+      "title": "Hold-by-default",
+      "why": "A catalog Plan is a PROPOSAL — it must not execute on merge. Execution is a separate, human-gated promote/unpause.",
+      "fix": "Set spec.paused: true on every Plan."
+    },
+    {
+      "id": "R6",
+      "title": "Step shape",
+      "why": "Each step is either a template include (use:) or a concrete step; a concrete non-fan-in step needs a kind and an agentType.",
+      "fix": "Give the step a name; for a concrete step set kind to pr|apply|check and set agentType; or make it a use:/fanIn step."
+    },
+    {
+      "id": "R7",
+      "title": "Unique step names",
+      "why": "Step names must be unique — they compute the child AgentRun name and dependsOn edges.",
+      "fix": "Rename duplicate steps so every step name is unique."
+    },
+    {
+      "id": "R8",
+      "title": "dependsOn resolves",
+      "why": "A dependsOn that names no declared step leaves the step permanently blocked.",
+      "fix": "Point dependsOn at existing step names, or remove the dangling entry."
+    },
+    {
+      "id": "R9",
+      "title": "Template shape",
+      "why": "A PlanTemplate declares params and steps; its steps are concrete (kind+agentType) and must not nest use: (expansion is depth-1).",
+      "fix": "Give the template params + steps; make each step concrete (kind+agentType) with no nested use:."
+    },
+    {
+      "id": "R10",
+      "title": "No laptop paths",
+      "why": "A Plan runs in a K8s Job with only the target repo checked out — laptop/absolute paths never resolve.",
+      "fix": "Reference only repo-committed or defined-store artifacts; remove /Users/, /home/, or ~/ paths."
+    },
+    {
+      "id": "R11",
+      "title": "No cycle",
+      "why": "A dependsOn cycle makes the DAG un-runnable; the controller marks the Plan Failed.",
+      "fix": "Break the cycle so the dependsOn graph is acyclic."
+    },
+    {
+      "id": "R12",
+      "title": "No self-dependency",
+      "why": "A step depending on itself (via dependsOn or triggeredWhen) can never start.",
+      "fix": "Remove the self-reference."
+    },
+    {
+      "id": "R13",
+      "title": "Fan-in shape",
+      "why": "A fanIn step is a no-agent gate: it must fan in from \u003e=1 dependsOn and assert \u003e=1 fanInValidate path; a non-fan-in step must not set fanInValidate.",
+      "fix": "For fanIn: true add dependsOn + fanInValidate; otherwise remove fanInValidate."
+    },
+    {
+      "id": "R14",
+      "title": "use-step fields",
+      "why": "A use: step must not smuggle runtime fields — the template supplies them; expansion hard-fails otherwise.",
+      "fix": "On a use: step keep only name, use, with, dependsOn (and triggeredWhen); remove agentType/inputs/repo/budgetIter/hold/fanIn/fanInValidate."
+    },
+    {
+      "id": "R15",
+      "title": "Template resolvable",
+      "why": "A use: references a PlanTemplate; if it isn't in this PR it must already exist on the target cluster.",
+      "fix": "Co-submit the referenced template, or confirm it is deployed on the cluster."
+    },
+    {
+      "id": "R16",
+      "title": "Required params",
+      "why": "A template param marked required must be supplied, or expansion fails.",
+      "fix": "Add the missing param(s) to the use-step's with: block."
+    },
+    {
+      "id": "R17",
+      "title": "triggeredWhen",
+      "why": "triggeredWhen must name a declared step and a valid phase, or the trigger never fires.",
+      "fix": "Point triggeredWhen.step at an existing step and set phase to Running|AwaitingReview|AwaitingApproval|Succeeded."
+    },
+    {
+      "id": "R18",
+      "title": "Expanded name length",
+      "why": "An over-long expanded child name (\u003cplan\u003e-\u003cuseStep\u003e-\u003ctmplStep\u003e) is hash-truncated by the controller — it still runs but the name is unreadable.",
+      "fix": "Shorten the plan, use-step, or template step names to keep the expanded name under 57 chars."
+    },
+    {
+      "id": "R19",
+      "title": "Test coherence",
+      "why": "test.directed vocabulary is kind-specific; a mismatch is a silent no-op, and a directive without spec.test is ignored.",
+      "fix": "Match test.directed to the step kind (pr→merged|closed_unmerged|opened, check→pass|fail, apply→succeed|error) and set spec.test: true."
+    }
+  ],
+  "schema_version": "v1"
+}

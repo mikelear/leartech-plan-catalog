@@ -68,16 +68,29 @@ our product can host their own catalog and manage their own merge policy.
 ## Layout
 
 ```
+AGENTS.md        agent-facing authoring guide (how an AI submits + repairs a Plan)
 plans/           concrete Plans (hold-by-default proposals)
 templates/       reusable PlanTemplates (composed via `use:` + `with:`)
-cmd/plan-lint/   the deterministic hard gate (Go entrypoint)
+cmd/plan-lint/   the deterministic hard gate (Go entrypoint; -json for agents)
 cmd/crd2schema/  generates schemas/ JSON Schema from the vendored CRDs
-internal/lint/   the rules engine (R1–R19) + unit tests
+cmd/rulesdoc/    generates docs/rules.{json,md} from the rule catalog
+internal/lint/   the rules engine (R1–R19) + rule metadata + unit tests
 schemas/         CRD-derived JSON Schema (kubeconform) + vendored CRDs under crd/
-scripts/         plan-ai-review.sh (advisory, LLM via the owned gateway)
-.lighthouse/     Tekton presubmits: pullrequest.yaml (hard gate) + plan-ai-review (advisory)
+docs/            rules.json + rules.md (generated) · flywheel.md
+scripts/         plan-ai-review.sh (advisory, LLM via the owned gateway) + plan-lint-comment.sh
+.lighthouse/     Tekton presubmits: pullrequest.yaml (plan-lint hard gate) + plan-ai-review (advisory)
 OWNERS           trusted maintainers (no auto-merge)
 ```
+
+## Feedback is dual-audience
+
+Both checks post a **sticky PR comment** built for humans _and_ the AI that submitted
+the Plan: colored GitHub callouts + a badge + an error table (rule → location →
+problem → fix) for humans, and an embedded machine-readable JSON verdict (each error
+carrying a `fix` hint + a `doc` anchor) an agent parses to self-correct. The comment
+links the machine-legible references — [`AGENTS.md`](AGENTS.md), the generated rule
+catalog ([`docs/rules.md`](docs/rules.md) / [`docs/rules.json`](docs/rules.json)), the
+JSON schema, and the examples — so an agent can read the failure and repair its Plan.
 
 The two presubmits surface as separate GitHub check contexts. `pr`
 (`pullrequest.yaml` — the deterministic Go gate + kubeconform) is the required
