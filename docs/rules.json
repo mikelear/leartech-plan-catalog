@@ -123,7 +123,7 @@
     {
       "id": "R21",
       "title": "Inputs by agent type",
-      "why": "A step's inputs are consumed by the agent runtime, so they must match the agentType's contract or the agent Job fails at run time. Dev agents (go/ng/rust) consume an Initiative (name + goal + repo + branch, or a repos: list); the infra agent is action-driven (action + per-action fields), not goal-driven.",
+      "why": "A step's inputs are consumed by the agent runtime, so they must match the agentType's contract or the agent Job fails at run time. Dev agents (go/ng/rust/py) consume an Initiative (name + goal + repo + branch, or a repos: list); the infra agent is action-driven (action + per-action fields), not goal-driven.",
       "fix": "Dev steps: inputs {name, repo, branch, goal} (branch required for the legacy single-repo shape; or use repos:[{repo,branch}]). Infra steps: inputs {action, …} (e.g. release-health-check / chart-config). See AGENTS.md."
     }
   ],

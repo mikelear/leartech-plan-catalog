@@ -643,6 +643,27 @@ spec:
 	assertErr(t, lintYAML(t, doc), "R21") // legacy single-repo needs branch too
 }
 
+func TestR21PyIsDevAgent(t *testing.T) {
+	// leartech-agent-py shares the default Initiative entrypoint (empty
+	// AgentType.spec.entrypoint), so R21 enforces the Initiative shape on it too —
+	// a py step with only a goal must fail, not pass through unvalidated.
+	doc := `
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: p
+spec:
+  paused: true
+  steps:
+    - name: a
+      kind: pr
+      agentType: leartech-agent-py
+      inputs:
+        goal: do the thing
+`
+	assertErr(t, lintYAML(t, doc), "R21") // py is a dev agent: needs name/repo/branch too
+}
+
 func TestR21InfraInputsMissingAction(t *testing.T) {
 	doc := `
 apiVersion: agent.leartech.io/v1alpha1
