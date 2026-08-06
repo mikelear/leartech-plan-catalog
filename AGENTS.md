@@ -24,6 +24,9 @@ passes the gate — and how to read the gate's feedback and self-correct.
   validate/repair your YAML against these (the gate runs `kubeconform` against them).
 - **Canonical examples:** everything under [`plans/`](plans/) and
   [`templates/`](templates/) is lint-clean — pattern-match them.
+- **Review format:** [`docs/review-format.md`](docs/review-format.md) — the one shape
+  (`leartech.review/v1`) every review comment uses (human, model, or tool). Parse the
+  fenced `json` block in any review to get `verdict` + `findings[{severity, fix, refs}]`.
 
 ## Reading feedback
 

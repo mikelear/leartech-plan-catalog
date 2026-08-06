@@ -106,6 +106,11 @@ links the machine-legible references — [`AGENTS.md`](AGENTS.md), the generated
 catalog ([`docs/rules.md`](docs/rules.md) / [`docs/rules.json`](docs/rules.json)), the
 JSON schema, and the examples — so an agent can read the failure and repair its Plan.
 
+Every review — from a human, a model, or a tool — follows one documented shape,
+[`leartech.review/v1`](docs/review-format.md): a colored human section plus a
+machine-readable `json` block (`verdict` + `findings[{severity, fix, refs}]`). Uniform
+across all reviewers, so each review is one clean row for the Plan-quality flywheel.
+
 The two presubmits surface as separate GitHub check contexts. `pr`
 (`pullrequest.yaml` — the deterministic Go gate + kubeconform) is the required
 status check; `plan-ai-review` is advisory (`optional: true`).
