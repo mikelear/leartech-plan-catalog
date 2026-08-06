@@ -1,0 +1,13 @@
+# ShipProven Plan Catalog — trusted maintainers.
+#
+# STRICT NO AUTO-MERGE. Passing gates (plan-lint + advisory ai-review) makes a PR
+# ELIGIBLE; a human on this list still makes the merge decision. Deliberately small;
+# grows over time as trust is established. No bot is listed as an approver — nothing
+# in this repo self-approves or auto-merges.
+#
+# (In the future, tenants running the product host their own catalog and set their
+# own merge policy.)
+approvers:
+  - mikelear
+reviewers:
+  - mikelear

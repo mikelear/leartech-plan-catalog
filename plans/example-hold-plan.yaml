@@ -1,0 +1,35 @@
+# Example catalog Plan — a HOLD-BY-DEFAULT proposal.
+#
+# This is a minimal, lint-passing reference showing the required shape:
+#   - apiVersion / kind for the platform CRD
+#   - a short DNS-1123 name (≤58 chars so the AgentRun can actually spawn)
+#   - spec.paused: true  <-- MANDATORY. Merging this does NOT run it; execution is a
+#                            separate, human-gated promote/unpause.
+#   - a small DAG of steps, each with a deterministic done-check in mind.
+#
+# Copy this as a starting point. Delete it from your real submission.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: example-hold-plan
+spec:
+  # Hold-by-default: this Plan is a proposal, not a running job.
+  paused: true
+  description: >-
+    Reference example. Adds a README badge to a repo, then verifies the change
+    landed. Demonstrates a two-step pr → check DAG with an explicit done-check.
+  steps:
+    - name: add-badge
+      kind: pr
+      agentType: leartech-agent-go
+      goal: >-
+        Add a ShipProven "proven before it ships" badge to the top of README.md.
+        Open a PR. Done = PR opened via open_pr and CI gates green.
+    - name: verify-badge
+      kind: check
+      agentType: leartech-agent-infra
+      dependsOn:
+        - add-badge
+      goal: >-
+        Deterministically confirm the merged README contains the badge markup.
+        Done = the badge string is present on the default branch.
