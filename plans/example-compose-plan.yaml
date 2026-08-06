@@ -15,13 +15,14 @@ spec:
     - name: build
       kind: pr
       agentType: leartech-agent-go
-      inputs:
+      inputs:                       # dev agent → Initiative shape (R21)
+        name: build-change
+        repo: mikelear/example-service
         goal: >-
-          Make the change and open a PR. Done = PR opened via open_pr and gates green.
+          Make the change and open a PR via open_pr. Done = PR merged and gates green.
     - name: verify
       use: example-verify-arrival
       dependsOn:
         - build
       with:
         service: example-service
-        version: "0.0.1"

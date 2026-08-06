@@ -78,6 +78,10 @@ mkdir -p "$TDIR"
 count=0
 for src in "$OLDPWD"/templates/*.yaml; do
   b=$(basename "$src" .yaml)
+  # Never sync example/reference templates into the shared controller library —
+  # they're documentation, not runtime building blocks. (An example with the old
+  # spec.description shape broke the build-cluster boot once; belt-and-braces.)
+  case "$b" in example-*|*-example) echo "sync-templates: skipping example template $b"; continue;; esac
   dst="$TDIR/catalog-${b}-plantemplate.yaml"
   {
     echo '{{- if .Values.planTemplates.install }}'

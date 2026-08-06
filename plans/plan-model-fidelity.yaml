@@ -1,23 +1,15 @@
-# Bring plan-api + the operator Portal up to the current Plan model.
+# Bring plan-api + the ShipProven Portal up to the current Plan model.
 #
-# CONTEXT / WHY
-# Recent changes added first-class Plan-model surface the downstream consumers never
-# caught up to — this was always the needed follow-up:
-#   - PlanStep gained `kind` (pr | apply | check) — how a step is judged done.
-#   - kind:check steps carry a deterministic `verdict` (PASS/FAIL) on status.
-#   - Steps support `use`/`with` (PlanTemplate composition), plus fanIn / triggeredWhen / hold.
-# The controller CRD is the source of truth and HAS all of this. But:
-#   - leartech-plan-api's DTOs + OpenAPI LAG it — CreatePlanStep has no `kind`, and the
-#     read DTOs expose no `kind`, no status `verdict`, no `use`/`with`. So a Plan posted
-#     through plan-api loses `kind` (every step defaults to pr — a check step silently
-#     becomes a pr step). This also blocks the "plan-api is the single writer" direction.
-#   - leartech-orchestrator-web-ui (the operator Portal) is still a scaffold — no plan
-#     list/detail at all — and would generate its client from plan-api's OpenAPI, so its
-#     plan surface can't render the new fields until plan-api exposes them.
+# WHY (always-needed follow-up to the kind/plan-type work):
+#   - PlanStep gained `kind` (pr|apply|check) + a check `verdict`; steps support
+#     use/with, fanIn, triggeredWhen. The controller CRD has all of this.
+#   - leartech-plan-api's DTOs + OpenAPI LAG it (no kind, no verdict, no use/with) —
+#     a Plan posted via plan-api loses `kind`. Also blocks the single-writer direction.
+#   - the ShipProven Portal generates its client from plan-api's OpenAPI, so its plan
+#     views can't surface the new fields until plan-api exposes them.
 #
-# DEPENDENCY (encoded as the DAG): plan-api DTO fidelity must land AND be RELEASED
-# before the Portal regenerates its client — merged is not deployed, so a release gate
-# sits between them.
+# DAG: plan-api DTO fidelity lands + is released before the Portal regenerates its
+# client (merged != deployed → a release-health gate sits between them).
 apiVersion: agent.leartech.io/v1alpha1
 kind: Plan
 metadata:
@@ -25,117 +17,68 @@ metadata:
 spec:
   paused: true
   steps:
-    # ── 1. plan-api: DTO + OpenAPI fidelity ──
     - name: plan-api-dto
       kind: pr
       agentType: leartech-agent-go
-      repo: mikelear/leartech-plan-api
       inputs:
+        name: plan-api-dto-fidelity
+        repo: mikelear/leartech-plan-api
         goal: >-
-          Bring plan-api's DTOs + OpenAPI up to the controller Plan CRD. The CRD
-          (leartech-orchestrator-controller api/v1alpha1) is the source of truth; mirror it.
-
-          CREATE DTO (internal/dto/create.go — CreatePlanStep): add `kind` (enum
-          pr|apply|check; empty allowed, normalises to pr) and pass-through `use` + `with`
-          (map[string]string) so a Template-composed Plan round-trips (plan-api stores
-          them; the controller expands at reconcile — plan-api must NOT expand). Keep
-          spec.paused FORCED true (unchanged) and triggeredBy from the token (unchanged).
-
-          READ DTO (internal/dto/plan.go — Plan/Step): surface `kind`, the status `verdict`
-          (PASS|FAIL for check steps), and `use`/`with`.
-
-          MAPPER (internal/dto/mapper.go + validator.go ToCRDPlan): set step.Kind on create;
-          surface Kind + Verdict + Use/With on read. VALIDATOR: `kind`, if set, must be one
-          of pr|apply|check (reject others 400); fanIn/agentType rules unchanged.
-
-          OPENAPI: regenerate api/openapi.yaml + swaggo docs so /openapi.json + /docs and the
-          generated clients pick up the new fields.
-
-          TESTS: create with kind=check round-trips to a CRD with Kind=check; read surfaces
-          kind + verdict; create with use/with stores them unexpanded; validator rejects a
-          bad kind. Run with `go test ./...`, no cluster.
-          Done = PR merged (open via open_pr, drive gates green).
-
-    # ── 2. Gate the Portal on plan-api being LIVE (merged != deployed) ──
+          Bring plan-api's DTOs + OpenAPI up to the controller Plan CRD (the source of
+          truth). CreatePlanStep (internal/dto/create.go): add `kind` (enum
+          pr|apply|check; empty→pr) and pass-through `use` + `with` (plan-api stores
+          them unexpanded; the controller expands). Keep spec.paused FORCED true. Read
+          DTOs (internal/dto/plan.go): surface `kind`, status `verdict` (PASS|FAIL),
+          use/with. Update mapper + validator (kind must be pr|apply|check). Regenerate
+          api/openapi.yaml + swaggo docs. Tests: create kind=check round-trips; read
+          surfaces kind+verdict; bad kind rejected. Done = PR merged, gates green.
     - name: plan-api-live
       kind: check
       agentType: leartech-agent-infra
       dependsOn:
         - plan-api-dto
       inputs:
-        goal: >-
-          Confirm the new plan-api is RELEASED and live before the Portal regenerates its
-          client — a kind:pr step is done at merge, but release → GitOps → rollout takes
-          minutes. Wait (with a deadline) until, on BOTH clusters (gcp + az):
-          leartech-plan-api rolled out its released version (deploy_health expected_version
-          = the released tag, normalize git-tag → chart-version; healthy = available>=1 AND
-          observed_version == expected), AND its /openapi.json now advertises the new fields
-          (step `kind`, status `verdict`, `use`/`with`). FAIL (exit non-zero) if not live
-          within the deadline. Do not open a PR.
-
-    # ── 3. ShipProven Portal: regenerate the plan-api client for the new fields ──
+        action: release-health-check
+        service: leartech-plan-api
+        namespace: jx-staging
+        budgetMinutes: 30
     - name: portal-client
       kind: pr
       agentType: leartech-agent-ng
-      repo: mikelear/leartech-ship-proven-portal
       dependsOn:
         - plan-api-live
       inputs:
+        name: portal-plan-client
+        repo: mikelear/leartech-ship-proven-portal
         goal: >-
-          Regenerate the ShipProven Portal's plan-api client from the now-updated OpenAPI.
-          The Portal's Plan/Step types are generated DTOs re-exported in
-          src/app/plan/plan.models.ts (Plan = DtoPlan, Step = DtoStep) — they already carry
-          paused, hold, fanIn, dependsOn, agentType but NOT kind, verdict, or use/with.
-          Regenerate the client against plan-api's updated /openapi.json so DtoPlan/DtoStep
-          gain `kind`, status `verdict`, and `use`/`with`; keep plan.models.ts re-exports in
-          step. Refresh the plan-api URL/audience (leartech-plan-api) in
-          public/api.conf.json + chart config only if not already wired. No UI rendering
-          yet — this step is the typed model only. Update plan-mock.fixture + specs to the
-          new shape so the build stays green.
-          Done = PR merged (open via open_pr, drive gates green).
-
-    # ── 4. ShipProven Portal: render the new model in the existing views ──
+          Regenerate the Portal's plan-api client from the now-updated OpenAPI so the
+          generated DTOs re-exported in src/app/plan/plan.models.ts (Plan=DtoPlan,
+          Step=DtoStep) gain `kind`, status `verdict`, and `use`/`with` (paused/hold/
+          fanIn/dependsOn already present). Refresh plan-api URL/audience only if not
+          wired. Typed model only — no UI rendering yet. Update plan-mock.fixture +
+          specs to the new shape. Done = PR merged, gates green.
     - name: portal-views
       kind: pr
       agentType: leartech-agent-ng
-      repo: mikelear/leartech-ship-proven-portal
       dependsOn:
         - portal-client
       inputs:
+        name: portal-plan-views
+        repo: mikelear/leartech-ship-proven-portal
         goal: >-
-          Update the Portal's EXISTING plan surface (plans-list, plan-detail, create-plan,
-          the DAG view) to render + handle the new model — do not rebuild what's there.
-          - plan-detail: per step show a `kind` badge (pr/apply/check) and, for a
-            kind:check step, its `verdict` as a PASS/FAIL pill; if a step has `use`/`with`,
-            show the PlanTemplate ref + param bindings. (paused/hold/fanIn/dependsOn already
-            render — leave them.)
-          - the DAG: colour nodes by kind / phase / verdict.
-          - create-plan: let the author set `kind` per step (pr/apply/check) and pick a
-            PlanTemplate via `use` + fill `with` params. (approve/unpause stays a future
-            Plan — no unpause endpoint yet.)
-          - plans-list: keep the paused/HELD badge; no change needed unless the regen moved fields.
-          Update end2end-ui (real-auth Playwright) specs to cover the kind badge + verdict pill.
-          Done = PR merged (open via open_pr, drive gates green).
-
-    # ── 5. Verify the Portal renders the new model on staging ──
+          Update the EXISTING plan surface (plans-list, plan-detail, create-plan, DAG)
+          to render the new model: a `kind` badge per step; for a kind:check step its
+          `verdict` as a PASS/FAIL pill; the use/with template ref in detail; colour DAG
+          nodes by kind/verdict; let create-plan set kind + pick a template via use/with.
+          Update end2end-ui (real-auth) specs for the kind badge + verdict pill.
+          Done = PR merged, gates green.
     - name: verify-portal
       kind: check
       agentType: leartech-agent-infra
       dependsOn:
         - portal-views
       inputs:
-        goal: >-
-          Deterministically confirm the ShipProven Portal serves the new plan surface on
-          jx-staging, on BOTH clusters. FAIL (exit non-zero) if ANY assertion fails — a
-          kind:check verdict is this step's exit code, so a bare report must not pass.
-          Assertions:
-          - leartech-ship-proven-portal pods are Ready at the newly-released version
-            (deploy_health, expected == observed) on gcp + az.
-          - For an authenticated operator, the plans list loads and a plan detail renders
-            the step table including a step `kind` badge and (for a check step) a PASS/FAIL
-            verdict pill — verified against a plan present in staging, with REAL auth (mock
-            auth hid a prior blank-render bug).
-          - The Portal's end2end-ui specs for the plan views pass via the
-            leartech-arrivals-observer real-auth staging e2e (the portal is already
-            registered there; extend its packs if needed).
-          Report per-assertion pass/fail; do not open a PR.
+        action: release-health-check
+        service: leartech-ship-proven-portal
+        namespace: jx-staging
+        budgetMinutes: 30
