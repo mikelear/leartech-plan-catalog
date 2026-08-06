@@ -1,0 +1,29 @@
+# Example catalog Plan composing a PlanTemplate via `use:` + `with:`.
+#
+# Demonstrates template composition: the `verify` step includes the
+# example-verify-arrival template (co-submitted under templates/), supplying its
+# required params. plan-lint checks this cross-document (R15 template resolvable,
+# R16 required params supplied, R18 expanded-name length) and kubeconform checks
+# it against the CRD schema. Hold-by-default like every catalog Plan.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: example-compose-plan
+spec:
+  paused: true
+  description: >-
+    Reference example of template composition — build a change, then reuse the
+    example-verify-arrival template to confirm the service arrived at version.
+  steps:
+    - name: build
+      kind: pr
+      agentType: leartech-agent-go
+      goal: >-
+        Make the change and open a PR. Done = PR opened via open_pr and gates green.
+    - name: verify
+      use: example-verify-arrival
+      dependsOn:
+        - build
+      with:
+        service: example-service
+        version: "0.0.1"
