@@ -32,6 +32,7 @@ spec:
       inputs:
         name: register-mcp
         repo: mikelear/leartech-automated-agent
+        branch: feat/register-mcp
         goal: >-
           Add the design/artifact MCP server to gate/agent/mcp_catalog.yaml and reference
           it from the roles that need it.
@@ -89,6 +90,7 @@ spec:
       inputs:
         name: verify-catalog
         repo: mikelear/leartech-automated-agent
+        branch: feat/verify-catalog
         goal: >-
           Deterministically confirm the DEPLOYED agent resolves the new MCP — verifying the
           committed file alone would not prove the running pod picked it up. This is a
