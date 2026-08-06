@@ -11,10 +11,6 @@ kind: PlanTemplate
 metadata:
   name: example-verify-arrival
 spec:
-  description: >-
-    Reusable post-deploy check: confirm a service arrived at the expected version
-    on a cluster. A version-AWARE done-check (not "≥1 replica" — a stale version
-    can be healthy and still be wrong).
   params:
     - name: service
       required: true
@@ -24,7 +20,8 @@ spec:
     - name: check-arrival
       kind: check
       agentType: leartech-agent-infra
-      goal: >-
-        Use deploy_health with expected_version=${version} to confirm ${service}
-        is available AND running exactly ${version}. Done = available>=1 AND
-        observed_version==expected_version (normalize git-tag → chart-version).
+      inputs:
+        goal: >-
+          Use deploy_health with expected_version=${version} to confirm ${service}
+          is available AND running exactly ${version}. Done = available>=1 AND
+          observed_version==expected_version (normalize git-tag → chart-version).
