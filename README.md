@@ -61,7 +61,8 @@ never bypasses GitOps.
 
 Concrete **Plans** are instantiated explicitly (via MCP `create_plan` → `plan-api`,
 or the Portal) and always land **paused** — a second, human-gated promote/unpause
-controls execution.
+controls execution. The full three-gate lifecycle (with `paused` enforced at every
+layer) is documented in [`docs/plan-lifecycle.md`](docs/plan-lifecycle.md).
 
 ## Strict human merge — no auto-merge
 
