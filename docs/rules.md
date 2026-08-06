@@ -1,4 +1,4 @@
-# Plan Catalog rules (R1–R20)
+# Plan Catalog rules (R1–R21)
 
 _Generated from `internal/lint` — do not edit by hand; run `make rules`._
 
@@ -26,6 +26,7 @@ Every rule the deterministic `plan-lint` gate enforces. Errors block merge; a fa
 | [R18](#r18) | Expanded name length | An over-long expanded child name (<plan>-<useStep>-<tmplStep>) is hash-truncated by the controller — it still runs but the name is unreadable. |
 | [R19](#r19) | Test coherence | test.directed vocabulary is kind-specific; a mismatch is a silent no-op, and a directive without spec.test is ignored. |
 | [R20](#r20) | No unknown fields | Fields not in the Plan/PlanTemplate CRD are strict-decoded out by the apiserver at apply, so a Plan carrying them cannot be instantiated. Common offenders: a step-level `goal` (belongs under `inputs`) and a spec-level `description` (not a CRD field). |
+| [R21](#r21) | Inputs by agent type | A step's inputs are consumed by the agent runtime, so they must match the agentType's contract or the agent Job fails at run time. Dev agents (go/ng/rust) consume an Initiative (name+repo+goal); the infra agent is action-driven (action + per-action fields), not goal-driven. |
 
 ## R1 — Valid document
 
@@ -146,4 +147,10 @@ Every rule the deterministic `plan-lint` gate enforces. Errors block merge; a fa
 **Why:** Fields not in the Plan/PlanTemplate CRD are strict-decoded out by the apiserver at apply, so a Plan carrying them cannot be instantiated. Common offenders: a step-level `goal` (belongs under `inputs`) and a spec-level `description` (not a CRD field).
 
 **Fix:** Use only CRD fields. Put a step goal under `inputs:` (inputs.goal); drop spec-level `description` (use a YAML comment for human context).
+
+## R21 — Inputs by agent type
+
+**Why:** A step's inputs are consumed by the agent runtime, so they must match the agentType's contract or the agent Job fails at run time. Dev agents (go/ng/rust) consume an Initiative (name+repo+goal); the infra agent is action-driven (action + per-action fields), not goal-driven.
+
+**Fix:** Dev steps: inputs {name, repo, goal}. Infra steps: inputs {action, …} (e.g. action: release-health-check / chart-config). See AGENTS.md.
 

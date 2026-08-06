@@ -56,5 +56,35 @@ where sound, but only `plan-lint` blocks the merge.
 - **Acyclic** `dependsOn` that resolves to real steps; no self-deps (R7/R8/R11/R12).
 - **No laptop/absolute paths** — reference only repo-committed or defined-store artifacts (R10).
 
-The full list with rationale + fixes is `docs/rules.md`. A Plan the catalog accepts is
-one the controller will actually run — the rules mirror its reconcile-time validation.
+## Step `inputs` by agent type (the shape that most often bites)
+
+A step's `inputs` is projected verbatim into the AgentRun and consumed by the agent
+runtime — so it must match what that `agentType` expects, or the agent Job fails at
+run time (there is no `goal` field at step level; it goes **inside** `inputs`). R20
+(no unknown CRD fields) + R21 (inputs shape per agentType) enforce this.
+
+- **Dev agents** — `leartech-agent-go`, `leartech-agent-ng`, `leartech-agent-rust`.
+  `inputs` is an **Initiative**:
+  ```yaml
+  inputs:
+    name: kebab-id            # required — short kebab id (also the branch suffix)
+    repo: owner/name          # required — owner defaults to mikelear if omitted
+    branch: feat/thing        # optional — defaults from name
+    goal: |                   # required — what the agent must achieve + the done-check
+      …
+  ```
+- **Infra agent** — `leartech-agent-infra`. `inputs` is **action-driven** (a fixed
+  vocabulary, not a free-form goal):
+  ```yaml
+  inputs:
+    action: chart-config             # or: release-health-check, …
+    cluster: gcp                     # action-specific fields
+    service: leartech-plan-api
+    goal: | …                        # config actions take a goal; health checks don't
+  ```
+  Known actions: `chart-config` (`cluster`, `service`, `goal`), `release-health-check`
+  (`service`, `namespace`, `budgetMinutes`). Use a canned action — the infra agent does
+  not run arbitrary free-form goals.
+
+The full rule list with rationale + fixes is `docs/rules.md`. A Plan the catalog accepts
+is one the controller will admit **and** the agents can actually run.

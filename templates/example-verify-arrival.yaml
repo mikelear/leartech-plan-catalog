@@ -1,11 +1,12 @@
 # Example catalog PlanTemplate — a reusable building block.
 #
-# A PlanTemplate is a parameterized, reusable sub-plan. Concrete Plans include it
-# with `use: <template>` + `with: {param: value}`; expansion is depth-1 and the
-# included steps are namespaced `<useStep>-<templateStep>`.
+# A PlanTemplate is a parameterized sub-plan. Concrete Plans include it with
+# `use: <template>` + `with: {param: value}`; expansion is depth-1 and the included
+# steps are namespaced `<useStep>-<templateStep>`.
 #
-# Template rules (enforced by plan-lint R9): declare params + steps; every step is
-# CONCRETE (carries kind + agentType) and must NOT nest another `use:`.
+# Template rules (plan-lint R9): declare params + steps; every step is CONCRETE
+# (kind + agentType) and must NOT nest another `use:`. Step inputs must match the
+# agentType (R21) — here the infra agent's action-driven shape.
 apiVersion: agent.leartech.io/v1alpha1
 kind: PlanTemplate
 metadata:
@@ -14,14 +15,12 @@ spec:
   params:
     - name: service
       required: true
-    - name: version
-      required: true
   steps:
     - name: check-arrival
       kind: check
       agentType: leartech-agent-infra
       inputs:
-        goal: >-
-          Use deploy_health with expected_version=${version} to confirm ${service}
-          is available AND running exactly ${version}. Done = available>=1 AND
-          observed_version==expected_version (normalize git-tag → chart-version).
+        action: release-health-check
+        service: ${service}
+        namespace: jx-staging
+        budgetMinutes: 30

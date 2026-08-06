@@ -64,7 +64,35 @@ var (
 	templateSpecKeys = strset("params", "steps")
 	stepKeys         = strset("agentType", "budgetIter", "dependsOn", "fanIn", "fanInValidate", "hold", "inputs", "kind", "name", "repo", "test", "triggeredWhen", "use", "with")
 	paramKeys        = strset("name", "required")
+	// Agent-type input contracts (R21). Dev agents consume an Initiative
+	// (name+repo+goal); the infra agent is action-driven. AgentType CRs carry no
+	// InputSchema, so these known runtime contracts are encoded here.
+	devAgentTypes = strset("leartech-agent-go", "leartech-agent-ng", "leartech-agent-rust")
 )
+
+// lintInputs (R21) checks a concrete step's inputs match what its agentType's
+// runtime consumes — the agent Job fails at run time otherwise (a `goal`-only
+// input is the classic miss). Dev agents want an Initiative (name+repo+goal);
+// the infra agent wants an action.
+func lintInputs(agentType string, s map[string]any, sw string, f *Findings) {
+	inp := mapOf(s["inputs"])
+	switch {
+	case devAgentTypes[agentType]:
+		if asStr(inp["name"]) == "" {
+			f.err("R21", sw, "dev-agent step inputs need `name` (the Initiative shape is inputs: {name, repo, goal})")
+		}
+		if asStr(inp["goal"]) == "" {
+			f.err("R21", sw, "dev-agent step inputs need `goal` (under inputs, not at step level)")
+		}
+		if asStr(inp["repo"]) == "" && !has(inp, "repos") {
+			f.err("R21", sw, "dev-agent step inputs need `repo` (or repos)")
+		}
+	case agentType == "leartech-agent-infra":
+		if asStr(inp["action"]) == "" {
+			f.err("R21", sw, "infra-agent step inputs need `action` (e.g. chart-config, release-health-check) — the infra agent is action-driven, not goal-driven")
+		}
+	}
+}
 
 func strset(keys ...string) map[string]bool {
 	m := make(map[string]bool, len(keys))
@@ -312,8 +340,10 @@ func lintPlan(planName string, spec map[string]any, where string, f *Findings, i
 			if k := asStr(s["kind"]); !stepKinds[k] {
 				f.err("R6", sw, fmt.Sprintf("kind must be one of %v (got %q)", sortedKinds, k))
 			}
-			if asStr(s["agentType"]) == "" {
+			if at := asStr(s["agentType"]); at == "" {
 				f.err("R6", sw, "concrete step needs agentType")
+			} else {
+				lintInputs(at, s, sw, f) // R21 inputs shape by agentType
 			}
 		}
 		// R19 test/kind coherence
@@ -418,6 +448,9 @@ func lintTemplate(spec map[string]any, where string, f *Findings) {
 		}
 		if k := asStr(s["kind"]); !stepKinds[k] {
 			f.err("R9", sw, fmt.Sprintf("kind must be one of %v (got %q)", sortedKinds, k))
+		}
+		if at := asStr(s["agentType"]); at != "" {
+			lintInputs(at, s, sw, f) // R21 inputs shape by agentType
 		}
 		if asStr(s["agentType"]) == "" {
 			f.err("R9", sw, "template step needs agentType")
