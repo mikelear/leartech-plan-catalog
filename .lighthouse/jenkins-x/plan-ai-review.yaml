@@ -18,19 +18,19 @@ spec:
           # required). The virtual key comes from the ExternalSecret below.
           - name: AI_GATEWAY_URL
             value: http://leartech-ai-gateway.ai-gateway.svc.cluster.local:8080
-          # Git credentials for the sticky PR comment — the tekton-git secret is
-          # the canonical source (matches the pipeline-catalog ai-review task).
+          # Git credentials for the sticky PR comment — tekton-git is a basic-auth
+          # secret (keys username/password), matching the pipeline-catalog ai-review task.
           - name: GIT_TOKEN
             valueFrom:
               secretKeyRef:
                 name: tekton-git
-                key: GIT_TOKEN
+                key: password
                 optional: true
           - name: GIT_USER
             valueFrom:
               secretKeyRef:
                 name: tekton-git
-                key: GIT_USER
+                key: username
                 optional: true
           envFrom:
           # Our OWN AI gateway virtual key for the advisory review — exposes
