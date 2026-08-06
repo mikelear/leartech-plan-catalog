@@ -75,13 +75,13 @@ cmd/crd2schema/  generates schemas/ JSON Schema from the vendored CRDs
 internal/lint/   the rules engine (R1–R19) + unit tests
 schemas/         CRD-derived JSON Schema (kubeconform) + vendored CRDs under crd/
 scripts/         plan-ai-review.sh (advisory, LLM via the owned gateway)
-.lighthouse/     Tekton presubmits: plan-lint (required) + plan-ai-review (advisory)
+.lighthouse/     Tekton presubmits: pullrequest.yaml (hard gate) + plan-ai-review (advisory)
 OWNERS           trusted maintainers (no auto-merge)
 ```
 
-The two presubmits surface as separate GitHub check contexts
-(`<cluster>/plan-lint`, `<cluster>/plan-ai-review`). Only `plan-lint` is a
-required status check; `plan-ai-review` is advisory (`optional: true`).
+The two presubmits surface as separate GitHub check contexts. `pr`
+(`pullrequest.yaml` — the deterministic Go gate + kubeconform) is the required
+status check; `plan-ai-review` is advisory (`optional: true`).
 
 ## Running the gate locally
 
