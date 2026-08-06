@@ -119,6 +119,12 @@
       "title": "No unknown fields",
       "why": "Fields not in the Plan/PlanTemplate CRD are strict-decoded out by the apiserver at apply, so a Plan carrying them cannot be instantiated. Common offenders: a step-level `goal` (belongs under `inputs`) and a spec-level `description` (not a CRD field).",
       "fix": "Use only CRD fields. Put a step goal under `inputs:` (inputs.goal); drop spec-level `description` (use a YAML comment for human context)."
+    },
+    {
+      "id": "R21",
+      "title": "Inputs by agent type",
+      "why": "A step's inputs are consumed by the agent runtime, so they must match the agentType's contract or the agent Job fails at run time. Dev agents (go/ng/rust) consume an Initiative (name+repo+goal); the infra agent is action-driven (action + per-action fields), not goal-driven.",
+      "fix": "Dev steps: inputs {name, repo, goal}. Infra steps: inputs {action, …} (e.g. action: release-health-check / chart-config). See AGENTS.md."
     }
   ],
   "schema_version": "v1"

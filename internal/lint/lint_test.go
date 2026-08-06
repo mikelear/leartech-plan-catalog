@@ -83,9 +83,16 @@ spec:
     - name: a
       kind: pr
       agentType: leartech-agent-go
+      inputs:
+        name: step-a
+        repo: mikelear/x
+        goal: do a
     - name: b
       kind: check
       agentType: leartech-agent-infra
+      inputs:
+        action: release-health-check
+        service: x
       dependsOn: [a]
 `
 
@@ -102,6 +109,9 @@ spec:
     - name: check-it
       kind: check
       agentType: leartech-agent-infra
+      inputs:
+        action: release-health-check
+        service: x
 `
 
 func TestGoodPlanPasses(t *testing.T) {
@@ -592,6 +602,81 @@ spec:
         goal: do the thing
 `
 	assertNoErr(t, lintYAML(t, doc), "R20")
+}
+
+func TestR21DevInputsMissingName(t *testing.T) {
+	doc := `
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: p
+spec:
+  paused: true
+  steps:
+    - name: a
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        goal: do the thing
+`
+	assertErr(t, lintYAML(t, doc), "R21") // missing name + repo
+}
+
+func TestR21InfraInputsMissingAction(t *testing.T) {
+	doc := `
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: p
+spec:
+  paused: true
+  steps:
+    - name: a
+      kind: check
+      agentType: leartech-agent-infra
+      inputs:
+        goal: verify something
+`
+	assertErr(t, lintYAML(t, doc), "R21") // infra needs action, not goal
+}
+
+func TestR21DevInputsValid(t *testing.T) {
+	doc := `
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: p
+spec:
+  paused: true
+  steps:
+    - name: a
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: do-a-thing
+        repo: mikelear/leartech-plan-api
+        goal: do the thing
+`
+	assertNoErr(t, lintYAML(t, doc), "R21")
+}
+
+func TestR21InfraInputsValid(t *testing.T) {
+	doc := `
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: p
+spec:
+  paused: true
+  steps:
+    - name: a
+      kind: check
+      agentType: leartech-agent-infra
+      inputs:
+        action: release-health-check
+        service: leartech-plan-api
+`
+	assertNoErr(t, lintYAML(t, doc), "R21")
 }
 
 func TestUseStepIsValidWithoutKind(t *testing.T) {
