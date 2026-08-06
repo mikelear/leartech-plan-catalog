@@ -1,0 +1,3 @@
+.plan-lint.json
+.plan-lint.status
+.golangci.merged.yml
