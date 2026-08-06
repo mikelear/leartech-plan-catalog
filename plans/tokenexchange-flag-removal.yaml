@@ -43,6 +43,7 @@ spec:
       inputs:
         name: remove-switch
         repo: mikelear/leartech-mcp-servers
+        branch: feat/remove-switch
         goal: >-
           Make token exchange unconditional. Remove ONLY the master switch; keep the
           incomplete-config safety.
@@ -120,6 +121,7 @@ spec:
       inputs:
         name: verify-exchange
         repo: mikelear/leartech-mcp-servers
+        branch: feat/verify-exchange
         goal: >-
           Prove exchange still works with the flag gone — this is the whole risk of the
           change. This is a verification step: do NOT open a PR and do NOT modify the repo.
@@ -144,6 +146,7 @@ spec:
       inputs:
         name: gitops-cleanup-gsm
         repo: mikelear/jx-build-cluster-gsm
+        branch: feat/gitops-cleanup-gsm
         goal: >-
           Remove the now-inert `tokenExchange: { enabled: true }` block from
           helmfiles/jx-staging/configs/leartech-mcp-servers.yaml. The chart no longer consumes
@@ -161,6 +164,7 @@ spec:
       inputs:
         name: gitops-cleanup-akv
         repo: mikelear/jx-build-cluster-akv
+        branch: feat/gitops-cleanup-akv
         goal: >-
           Mirror gitops-cleanup-gsm for the Azure cluster — remove the inert
           `tokenExchange: { enabled: true }` block from the mcp-servers config, leaving
