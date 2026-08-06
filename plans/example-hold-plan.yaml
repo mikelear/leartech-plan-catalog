@@ -22,6 +22,7 @@ spec:
       inputs:                       # dev agent → Initiative shape
         name: add-badge
         repo: mikelear/leartech-go-service-template
+        branch: feat/add-badge
         goal: >-
           Add a ShipProven "proven before it ships" badge to the top of README.md.
           Open a PR via open_pr. Done = PR merged and CI gates green.
