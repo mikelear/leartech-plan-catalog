@@ -42,6 +42,7 @@ spec:
       inputs:
         name: handle-cancelled
         repo: mikelear/leartech-automated-agent
+        branch: feat/handle-cancelled
         goal: >-
           Teach gate/tools/pipelines.py to distinguish a superseded (cancelled) run from a
           genuine failure.
@@ -110,6 +111,7 @@ spec:
       inputs:
         name: verify-supersede
         repo: mikelear/leartech-automated-agent
+        branch: feat/verify-supersede
         goal: >-
           Prove the fix against a REAL superseded run, not only synthetic fixtures — the
           unit tests cannot prove that GitHub actually reports what we think it reports.
