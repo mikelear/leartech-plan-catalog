@@ -1,0 +1,84 @@
+# verify-release-flow — deterministic, Go-MCP-backed verification that a release
+# actually went all the way through, per cluster.
+#
+# This is the "release_verify" composition. It is NOT a monolithic Go tool — it
+# is a PlanTemplate whose steps are `kind: check`, each a THIN DETERMINISTIC infra
+# action that calls exactly ONE Go MCP tool and passes/fails on that tool's typed
+# verdict. No LLM turn-loop, no STAGE_STATUS transcription: all the logic lives in
+# Go; the agent step is a pure relay. The composition is Plan-native (the DAG),
+# so a timed-out/blipped sub-check is re-runnable on its own.
+#
+# The verification questions (mapped to the Go MCP tools in leartech-mcp-servers):
+#   1+2 release fired + passed   → tekton    release_pipeline_status(repo, sha, cluster)
+#   4-6 promote opened/green/merged → jx_release promote_status(service, clusters)
+#   3   deployed version healthy  → k8s       deploy_health(service, namespace, cluster)
+#   7   boot picked up the commit → k8s       bootjob_for_commit(service, cluster)
+#
+# STEP-7 SEMANTICS (locked): a boot can APPLY a commit (deploy correct) yet the
+# boot Job later fail on post-apply housekeeping (e.g. regen-phase-3 git
+# "divergent branches"). deploy_health (step 3) is the authoritative "it landed"
+# signal; boot-job terminal health is a separate cluster-health concern owned by
+# the observer/Alert jobs. So bootjob-for-commit confirms a boot RAN that picked
+# up the commit — it does not false-FAIL a release whose version demonstrably
+# deployed healthy.
+#
+# CROSS-CLUSTER: per-cluster versioned charts mean gcp and az can be on DIFFERENT
+# versions (e.g. gcp 0.0.14 / az 0.0.13) — each check runs per cluster against
+# that cluster's OWN published version (normalized compare), never a shared one.
+#
+# Trigger: an empty commit to the target repo's main → a Plan use:-ing this
+# template with {repo, sha, service} → the checks run per cluster.
+apiVersion: agent.leartech.io/v1alpha1
+kind: PlanTemplate
+metadata:
+  name: verify-release-flow
+spec:
+  params:
+    - name: repo
+      required: true # owner/name of the released service repo (e.g. mikelear/leartech-plan-api)
+    - name: sha
+      required: true # the release-triggering commit on the service repo's main
+    - name: service
+      required: true # the deployed service name (Deployment + promote-PR title key)
+  steps:
+    # 1+2 — did the release pipeline FIRE and PASS for this commit, per cluster?
+    - name: release-fired-passed
+      kind: check
+      agentType: leartech-agent-infra
+      inputs:
+        action: release-pipeline-status # → tekton release_pipeline_status
+        repo: ${repo}
+        sha: ${sha}
+        clusters: [gcp, az]
+    # 4-6 — promote PR opened on BOTH GitOps repos, all green, merged?
+    - name: promote-opened-green-merged
+      kind: check
+      agentType: leartech-agent-infra
+      dependsOn:
+        - release-fired-passed
+      inputs:
+        action: promote-status # → jx_release promote_status (paginated, cluster-filtered)
+        service: ${service}
+        clusters: [gcp, az]
+    # 3 — is each cluster's OWN published version actually deployed + healthy?
+    - name: deploy-version-healthy
+      kind: check
+      agentType: leartech-agent-infra
+      dependsOn:
+        - promote-opened-green-merged
+      inputs:
+        action: deploy-health # → k8s deploy_health (normalised per-cluster version compare)
+        service: ${service}
+        namespace: jx-staging
+        clusters: [gcp, az]
+    # 7 — did a jx-boot Job reconcile this release's promote commit, per cluster?
+    #     (boot-ran signal; deploy-version-healthy above is the authoritative "landed".)
+    - name: bootjob-picked-up-commit
+      kind: check
+      agentType: leartech-agent-infra
+      dependsOn:
+        - promote-opened-green-merged
+      inputs:
+        action: bootjob-for-commit # → k8s bootjob_for_commit
+        service: ${service}
+        clusters: [gcp, az]
