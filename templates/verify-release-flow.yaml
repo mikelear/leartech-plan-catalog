@@ -8,19 +8,32 @@
 # Go; the agent step is a pure relay. The composition is Plan-native (the DAG),
 # so a timed-out/blipped sub-check is re-runnable on its own.
 #
-# The verification questions (mapped to the Go MCP tools in leartech-mcp-servers):
-#   1+2 release fired + passed   → tekton    release_pipeline_status(repo, sha, cluster)
-#   4-6 promote opened/green/merged → jx_release promote_status(service, clusters)
-#   3   deployed version healthy  → k8s       deploy_health(service, namespace, cluster)
-#   7   boot picked up the commit → k8s       bootjob_for_commit(service, cluster)
+# QUESTIONS VERIFIED (canonical release checklist, Q1–Q7) and which STEP covers each.
+# The four steps run in TEMPORAL order (release → promote → boot → deployed); one
+# Go tool answers a whole group of questions, so several Q's fold into one step:
 #
-# STEP-7 SEMANTICS (locked): a boot can APPLY a commit (deploy correct) yet the
-# boot Job later fail on post-apply housekeeping (e.g. regen-phase-3 git
-# "divergent branches"). deploy_health (step 3) is the authoritative "it landed"
-# signal; boot-job terminal health is a separate cluster-health concern owned by
-# the observer/Alert jobs. So bootjob-for-commit confirms a boot RAN that picked
-# up the commit — it does not false-FAIL a release whose version demonstrably
-# deployed healthy.
+#   Step 1  release-fired-passed          Q1 release fired + Q2 tekton passed
+#   Step 2  promote-opened-green-merged    Q4 promote PR opened + Q5 green + Q6 merged
+#   Step 3  bootjob-picked-up-commit       Q7 a jx-boot Job ran that applied the promote
+#   Step 4  deploy-version-healthy         Q3 the right version is deployed + healthy
+#
+# Note the labels: Q's are the canonical checklist you asked for (fixed numbering);
+# STEPS are renumbered 1–4 in execution order to avoid confusion. Q3 ("right
+# version, per cluster") is verified LAST because "deployed + healthy" can only be
+# true after promote merges (Step 2) and the boot applies it (Step 3).
+#
+# Tool mapping:
+#   Step 1 → tekton    release_pipeline_status(repo, sha)      fired && passed
+#   Step 2 → jx_release promote_status(service, clusters)      opened + green + merged
+#   Step 3 → k8s        bootjob_for_commit(service, cluster)   a boot ran (see step-3 note)
+#   Step 4 → k8s        deploy_health(service, namespace, cluster)  healthy && version match
+#
+# STEP-3/4 SEMANTICS (locked): a boot can APPLY a commit (deploy correct) yet the
+# boot Job later fail on post-apply housekeeping (e.g. regen-phase-3 git "divergent
+# branches"). Step 4 (deploy_health) is the AUTHORITATIVE "it landed" signal; Step 3
+# only confirms a boot RAN and does not false-FAIL a release whose version
+# demonstrably deployed. That is why Step 4 depends on Step 2 (not Step 3): the
+# unreliable boot-Job correlation must never gate the authoritative deploy check.
 #
 # CROSS-CLUSTER: per-cluster versioned charts mean gcp and az can be on DIFFERENT
 # versions (e.g. gcp 0.0.14 / az 0.0.13) — each check runs per cluster against
@@ -41,7 +54,7 @@ spec:
     - name: service
       required: true # the deployed service name (Deployment + promote-PR title key)
   steps:
-    # 1+2 — did the release pipeline FIRE and PASS for this commit, per cluster?
+    # Step 1 (Q1+Q2) — did the release pipeline FIRE and PASS for this commit?
     - name: release-fired-passed
       kind: check
       agentType: leartech-agent-infra
@@ -50,7 +63,7 @@ spec:
         repo: ${repo}
         sha: ${sha}
         clusters: [gcp, az]
-    # 4-6 — promote PR opened on BOTH GitOps repos, all green, merged?
+    # Step 2 (Q4+Q5+Q6) — promote PR opened on BOTH GitOps repos, all green, merged?
     - name: promote-opened-green-merged
       kind: check
       agentType: leartech-agent-infra
@@ -60,7 +73,20 @@ spec:
         action: promote-status # → jx_release promote_status (paginated, cluster-filtered)
         service: ${service}
         clusters: [gcp, az]
-    # 3 — is each cluster's OWN published version actually deployed + healthy?
+    # Step 3 (Q7) — did a jx-boot Job reconcile this release's promote commit?
+    #   (boot-ran signal; Step 4 below is the authoritative "landed" check.)
+    - name: bootjob-picked-up-commit
+      kind: check
+      agentType: leartech-agent-infra
+      dependsOn:
+        - promote-opened-green-merged
+      inputs:
+        action: bootjob-for-commit # → k8s bootjob_for_commit
+        service: ${service}
+        clusters: [gcp, az]
+    # Step 4 (Q3) — is each cluster's OWN published version deployed + healthy?
+    #   AUTHORITATIVE "it landed" gate. Depends on Step 2 (NOT Step 3) so the
+    #   unreliable boot-Job correlation can't block this check.
     - name: deploy-version-healthy
       kind: check
       agentType: leartech-agent-infra
@@ -70,15 +96,4 @@ spec:
         action: deploy-health # → k8s deploy_health (normalised per-cluster version compare)
         service: ${service}
         namespace: jx-staging
-        clusters: [gcp, az]
-    # 7 — did a jx-boot Job reconcile this release's promote commit, per cluster?
-    #     (boot-ran signal; deploy-version-healthy above is the authoritative "landed".)
-    - name: bootjob-picked-up-commit
-      kind: check
-      agentType: leartech-agent-infra
-      dependsOn:
-        - promote-opened-green-merged
-      inputs:
-        action: bootjob-for-commit # → k8s bootjob_for_commit
-        service: ${service}
         clusters: [gcp, az]
