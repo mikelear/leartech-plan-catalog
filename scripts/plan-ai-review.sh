@@ -27,11 +27,40 @@ if [ -z "$GW" ] || [ -z "$KEY" ]; then
   exit 0
 fi
 
-SYS='You are the Plan-quality reviewer for the ShipProven Plan Catalog. You review agent.leartech.io Plans/PlanTemplates (declarative DAGs of agent steps). Judge ONLY what a linter cannot: (1) sound decomposition + DAG; (2) every step has a DETERMINISTIC done-check, not "trust the agent exit code"; (3) correct step kinds (pr=PR-lifecycle, apply=idempotent, check=verdict); (4) NO known anti-patterns — opening-a-PR treated as success, ghost-prone/absent teardown, version-blind release checks, three-writers-one-branch, missing webhook/wiring post-conditions; (5) safety — hold-by-default, scoped perms, budgets; (6) proper Template reuse vs reinvention. Reply with a one-line "VERDICT: PASS" or "VERDICT: CONCERNS", then <=6 terse bullets of specifics. Be concrete and short.'
+SYS='You are the Plan-quality reviewer for the ShipProven Plan Catalog. You review agent.leartech.io Plans/PlanTemplates (declarative DAGs of agent steps). Judge ONLY what a linter cannot: (1) sound decomposition + DAG; (2) every step has a DETERMINISTIC done-check, not "trust the agent exit code"; (3) correct step kinds (pr=PR-lifecycle, apply=idempotent, check=verdict); (4) NO known anti-patterns — opening-a-PR treated as success, ghost-prone/absent teardown, version-blind release checks, three-writers-one-branch, missing webhook/wiring post-conditions; (5) safety — hold-by-default, scoped perms, budgets; (6) proper Template reuse vs reinvention; (7) TEMPLATE GUIDANCE — actively point the submitter at PlanTemplates (from the AVAILABLE TEMPLATES list in the user message) they should COMPOSE via a `use:` step instead of hand-authoring. In particular, for any kind:pr step that lands a change to a DEPLOYED service, recommend adding a `use: verify-release-flow` gate AFTER it (a step with dependsOn on that PR step) so the release is verified before dependents proceed — show the exact `use:`/`with:` block with the params you can derive (repo/service). Recommend ONLY templates in the AVAILABLE list; if none fits, say a new PlanTemplate should be proposed (never hand-author an infra step — lint R22 rejects that). Call out every place a template was MISSED and exactly where to add it. Reply with a one-line "VERDICT: PASS" or "VERDICT: CONCERNS", then <=6 terse bullets of specifics (include the template suggestions as bullets). Be concrete and short.'
 
 shopt -s nullglob
 FILES=(plans/**/*.yaml plans/*.yaml templates/**/*.yaml templates/*.yaml)
 [ ${#FILES[@]} -eq 0 ] && { echo "plan-ai-review: no Plan YAML to review."; exit 0; }
+
+# AVAILABLE-TEMPLATE catalog: name + params for every PlanTemplate in the repo.
+# Fed to the reviewer so it can point submitters at templates they should COMPOSE
+# via `use:` (e.g. verify-release-flow) rather than hand-author — the near-term
+# "suggest" half of the suggest→auto-inject plan. Advisory only.
+TEMPLATES_CATALOG=$(python3 - <<'PY'
+import glob, sys
+try:
+    import yaml
+except Exception:
+    print("(template catalog unavailable — pyyaml missing)"); sys.exit(0)
+seen, lines = set(), []
+for f in sorted(set(glob.glob("templates/**/*.yaml", recursive=True) + glob.glob("templates/*.yaml"))):
+    try:
+        for d in yaml.safe_load_all(open(f)):
+            if not isinstance(d, dict) or d.get("kind") != "PlanTemplate":
+                continue
+            name = (d.get("metadata") or {}).get("name", "?")
+            if name in seen:
+                continue
+            seen.add(name)
+            params = [p.get("name") for p in ((d.get("spec") or {}).get("params") or []) if isinstance(p, dict)]
+            req = [p.get("name") for p in ((d.get("spec") or {}).get("params") or []) if isinstance(p, dict) and p.get("required")]
+            lines.append(f"- {name} (params: {', '.join(params) or 'none'}; required: {', '.join(req) or 'none'})")
+    except Exception:
+        continue
+print("\n".join(lines) if lines else "(no PlanTemplates in catalog)")
+PY
+)
 
 set +e  # everything below is best-effort advisory — never fail the gate
 BASE="https://github.com/${REPO_OWNER:-mikelear}/${REPO_NAME:-leartech-plan-catalog}/blob/main"
@@ -66,7 +95,7 @@ RESULTS=$(mktemp); : > "$RESULTS"
 for file in "${FILES[@]}"; do
   content=$(cat "$file")
   for model in ${MODELS//,/ }; do
-    payload=$(python3 -c "import json,sys; print(json.dumps({'model':sys.argv[1],'messages':[{'role':'system','content':sys.argv[2]},{'role':'user','content':'Review this Plan file '+sys.argv[3]+':\n\n'+sys.argv[4]}],'max_tokens':400,'temperature':0}))" "$model" "$SYS" "$file" "$content")
+    payload=$(python3 -c "import json,sys; print(json.dumps({'model':sys.argv[1],'messages':[{'role':'system','content':sys.argv[2]},{'role':'user','content':'AVAILABLE PlanTemplates you may recommend via use: (name — params):\n'+sys.argv[5]+'\n\nReview this Plan file '+sys.argv[3]+':\n\n'+sys.argv[4]}],'max_tokens':500,'temperature':0}))" "$model" "$SYS" "$file" "$content" "$TEMPLATES_CATALOG")
     resp=$(curl -fsS -m 60 -X POST "$GW/v1/chat/completions" \
       -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" -d "$payload" 2>/dev/null)
     printf '%s' "$resp" | python3 "$PARSE" "$file" "$model" >> "$RESULTS"

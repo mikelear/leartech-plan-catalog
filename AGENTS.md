@@ -8,7 +8,7 @@ passes the gate — and how to read the gate's feedback and self-correct.
 
 1. Write a Plan to `plans/<name>.yaml` (or a PlanTemplate to `templates/<name>.yaml`).
 2. Open a PR. Three checks run:
-   - **`plan-lint`** — the deterministic HARD gate (rules R1–R21 + kubeconform; must pass).
+   - **`plan-lint`** — the deterministic HARD gate (rules R1–R22 + kubeconform; must pass).
    - **`plan-cluster-verify`** — server-side dry-run against the live CRD (must pass).
    - **`plan-ai-review`** — an advisory model review (never blocks).
 3. Read the feedback (see "Reading feedback" below), fix, push again.
@@ -75,7 +75,12 @@ run time (there is no `goal` field at step level; it goes **inside** `inputs`). 
     goal: |                   # required — what the agent must achieve + the done-check
       …
   ```
-- **Infra agent** — `leartech-agent-infra`. `inputs` is **action-driven** (a fixed
+- **Infra agent** — `leartech-agent-infra`. **Infra steps are TEMPLATE-ONLY (R22):**
+  a plain `kind: Plan` MUST NOT hand-author a `leartech-agent-infra` step — infra is
+  privileged, cross-cutting work (release-verify / deploy-health / chart-config) that
+  lives in curated, OWNERS-gated **PlanTemplates** and is composed into a Plan via a
+  `use:` step (e.g. `use: verify-release-flow`). The `inputs` shape below is what you
+  put on the infra step **inside a PlanTemplate**; it is **action-driven** (a fixed
   vocabulary, not a free-form goal):
   ```yaml
   inputs:
@@ -86,7 +91,8 @@ run time (there is no `goal` field at step level; it goes **inside** `inputs`). 
   ```
   Known actions: `chart-config` (`cluster`, `service`, `goal`), `release-health-check`
   (`service`, `namespace`, `budgetMinutes`). Use a canned action — the infra agent does
-  not run arbitrary free-form goals.
+  not run arbitrary free-form goals. If no template covers your need, PROPOSE a new
+  PlanTemplate (OWNERS review it) rather than hand-authoring the infra step.
 - **BA agent** — `leartech-agent-ba` runs its own entrypoint (`gate.agent.ba_agent`),
   so it is neither the Initiative nor the infra-action shape. R21 does **not** yet
   enforce its inputs (it passes unvalidated); match an existing BA step if you write one.
