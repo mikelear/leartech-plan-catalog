@@ -12,10 +12,10 @@
 # The four steps run in TEMPORAL order (release → promote → boot → deployed); one
 # Go tool answers a whole group of questions, so several Q's fold into one step:
 #
-#   Step 1  release-fired-passed          Q1 release fired + Q2 tekton passed
-#   Step 2  promote-opened-green-merged    Q4 promote PR opened + Q5 green + Q6 merged
-#   Step 3  bootjob-picked-up-commit       Q7 a jx-boot Job ran that applied the promote
-#   Step 4  deploy-version-healthy         Q3 the right version is deployed + healthy
+#   Step 1  release-passed          Q1 release fired + Q2 tekton passed
+#   Step 2  promote-merged    Q4 promote PR opened + Q5 green + Q6 merged
+#   Step 3  bootjob-ran       Q7 a jx-boot Job ran that applied the promote
+#   Step 4  deploy-healthy         Q3 the right version is deployed + healthy
 #
 # Note the labels: Q's are the canonical checklist you asked for (fixed numbering);
 # STEPS are renumbered 1–4 in execution order to avoid confusion. Q3 ("right
@@ -70,7 +70,7 @@ spec:
       required: true # the deployed service name (Deployment + promote-PR title key)
   steps:
     # Step 1 (Q1+Q2) — did the release pipeline FIRE and PASS for this commit?
-    - name: release-fired-passed
+    - name: release-passed
       kind: check
       agentType: leartech-agent-infra
       inputs:
@@ -83,11 +83,11 @@ spec:
         context:
           hint: "read the release Tekton PipelineRun's failing step; a missing run means the main-push trigger/webhook did not fire"
     # Step 2 (Q4+Q5+Q6) — promote PR opened on BOTH GitOps repos, all green, merged?
-    - name: promote-opened-green-merged
+    - name: promote-merged
       kind: check
       agentType: leartech-agent-infra
       dependsOn:
-        - release-fired-passed
+        - release-passed
       inputs:
         action: promote-status # → jx_release promote_status (paginated, cluster-filtered)
         service: ${service}
@@ -98,11 +98,11 @@ spec:
           hint: "inspect the promote PR's qa-gate/verify on the failing cluster's GitOps repo; a persistent red gate is a cross-plan hand-off"
     # Step 3 (Q7) — did a jx-boot Job reconcile this release's promote commit?
     #   (boot-ran signal; Step 4 below is the authoritative "landed" check.)
-    - name: bootjob-picked-up-commit
+    - name: bootjob-ran
       kind: check
       agentType: leartech-agent-infra
       dependsOn:
-        - promote-opened-green-merged
+        - promote-merged
       inputs:
         action: bootjob-for-commit # → k8s bootjob_for_commit
         service: ${service}
@@ -110,7 +110,7 @@ spec:
       onFailure:
         escalate: ba
         context:
-          hint: "check the jx-boot Job logs in jx-git-operator; NO boot at all means the promote merge did not reconcile (deploy-version-healthy is the authoritative landed signal)"
+          hint: "check the jx-boot Job logs in jx-git-operator; NO boot at all means the promote merge did not reconcile (deploy-healthy is the authoritative landed signal)"
     # Step 4 (Q3) — is each cluster's OWN promoted NEW version deployed + healthy?
     #   The AUTHORITATIVE "the release is out" gate (>=1 ready replica AND running
     #   image == this cluster's promoted version). Reads the Deployment directly, so
@@ -119,11 +119,11 @@ spec:
     #   promote_status (by service) and FAILS CLOSED if it can't, so it never passes
     #   version-blind. Depends on Step 2 (NOT Step 3) so the unreliable boot-Job
     #   correlation can't block this check.
-    - name: deploy-version-healthy
+    - name: deploy-healthy
       kind: check
       agentType: leartech-agent-infra
       dependsOn:
-        - promote-opened-green-merged
+        - promote-merged
       inputs:
         action: deploy-health # → k8s deploy_health (version-aware; expected version from promote_status)
         service: ${service}

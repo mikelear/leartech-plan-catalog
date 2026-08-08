@@ -1,0 +1,27 @@
+# Example catalog Plan that consumes the verify-release-flow template.
+#
+# Demonstrates the intended usage: a Plan `use:`-es verify-release-flow, supplying
+# its required params (repo, sha, service). The template's four kind:check steps
+# then verify — per cluster — that the release fired+passed, the promote PRs
+# opened/green/merged, a boot picked up the commit, and the NEW version is deployed
+# healthy; each step opts in to a BA escalation on failure (onFailure.escalate: ba).
+#
+# `sha` is the release-triggering commit on the service repo's main (an empty commit
+# to main is the canonical trigger). The value below is illustrative — a real
+# consumer supplies the actual commit.
+#
+# Hold-by-default (R5): a catalog Plan is a PROPOSAL. It does not execute on merge;
+# unpausing is a separate, human-gated action.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: example-verify-release
+spec:
+  paused: true
+  steps:
+    - name: verify
+      use: verify-release-flow
+      with:
+        repo: mikelear/leartech-plan-api
+        sha: "0f490c0cd88fb43c53507771f739b8effe5a291d" # illustrative release-triggering commit
+        service: leartech-plan-api
