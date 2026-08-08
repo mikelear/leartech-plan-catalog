@@ -1,0 +1,109 @@
+# Register the design/artifact MCP server in the agent MCP catalog so Plans can fetch
+# artifacts referenced in a step goal.
+#
+# WHY THIS EXISTS
+# Disclosed as a cross-repo follow-up on plan-catalog#2 (artifact-endpoints). That Plan
+# wires leartech-mcp-servers/internal/designserver to the artifact-api endpoints, but
+# deliberately does NOT edit gate/agent/mcp_catalog.yaml because it lives in a different
+# repo (leartech-automated-agent). Without this registration an AGENT cannot reach the
+# artifact tools — only external MCP clients (Claude sessions) can. That breaks the
+# intended loop: a session publishes an artifact, the GUID goes in a Plan goal, and the
+# Plan's agent fetches it.
+#
+# The catalog's own contract (gate/agent/mcp_catalog.yaml header): "Adding an MCP requires
+# three changes: add to the `mcp_servers` map, add any required env to the chart's
+# externalSecrets, and reference it in the right role's `mcps` list. No agent code changes."
+#
+# NOTE an alternative path exists — app/routers/mcp_admin.py exposes POST /mcps which
+# opens its own PR. A reviewed Plan PR is preferred here so the role wiring gets the same
+# scrutiny as code.
+#
+# DEPENDS ON plan-catalog#2 landing first: the tools must exist before they are advertised.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mcp-catalog-design-tools
+spec:
+  paused: true
+  steps:
+    - name: register-mcp
+      kind: pr
+      agentType: leartech-agent-py
+      inputs:
+        name: register-mcp
+        repo: mikelear/leartech-automated-agent
+        branch: feat/register-mcp
+        goal: >-
+          Add the design/artifact MCP server to gate/agent/mcp_catalog.yaml and reference
+          it from the roles that need it.
+
+          Follow the file's own stated contract exactly: add an entry to the `mcp_servers`
+          map, add any required env to the chart's externalSecrets, and reference it in the
+          right role's `mcps` list. No agent code changes.
+
+          SERVER ENTRY: type http_sse, served by the existing leartech-mcp-servers
+          deployment, so use the same ${LEARTECH_PLATFORM_MCPS_URL:-http://localhost:8899}
+          shape as the sibling leartech-jx3-flow / leartech-pr-context entries. Do NOT
+          hardcode a *.jx.leartech.com cluster URL in source — the chart injects the env var
+          per cluster; the fallback is dev-only localhost. Description should say what the
+          tools do (list/get/create/finalize artifacts) and that artifacts are guidance
+          consumed by Plans.
+
+          ROLES: add it to initiative_agent and ba_agent at minimum — those are the roles
+          that consume guidance to do work. Justify in the PR description which roles you
+          added and why any were left out; do NOT add it to review_agent unless you can say
+          why a read-only reviewer needs it.
+
+          DO NOT change the scopes or auth story. The MCP server enforces the caller's own
+          leartechapi:artifact:read / :write via the existing three-tier forwarder; this
+          change is catalog wiring only.
+
+          ISOLATE TESTING: extend tests/test_mcp_catalog.py so the new entry is covered by
+          the existing loader/validation tests — the server resolves, its type is valid, the
+          env-var placeholder shape matches its siblings, and every role that references it
+          exists. Runnable with no cluster and no LLM.
+
+          LOGGING TO VERIFY: no new logging required (config-only change), but confirm the
+          existing catalog-load log line lists the new server at startup so a session can be
+          traced in Loki.
+          Done = PR merged (open via open_pr, drive gates green).
+
+    # Canned infra action — the infra agent is action-driven, not goal-driven (R21).
+    - name: release-agent
+      kind: check
+      agentType: leartech-agent-infra
+      dependsOn:
+        - register-mcp
+      inputs:
+        action: release-health-check
+        service: leartech-automated-agent
+        namespace: jx-staging
+        budgetMinutes: 30
+
+    # Dev agent, not infra: these assertions are arbitrary functional work, and the
+    # infra agent runs only canned actions.
+    - name: verify-catalog
+      kind: check
+      agentType: leartech-agent-go
+      dependsOn:
+        - release-agent
+      inputs:
+        name: verify-catalog
+        repo: mikelear/leartech-automated-agent
+        branch: feat/verify-catalog
+        goal: >-
+          Deterministically confirm the DEPLOYED agent resolves the new MCP — verifying the
+          committed file alone would not prove the running pod picked it up. This is a
+          verification step only: do NOT open a PR and do NOT modify the repo. FAIL (exit
+          non-zero) if ANY assertion below fails; the verdict is this step's exit code.
+
+          Assertions, on BOTH clusters (gcp + az):
+          - The deployed leartech-automated-agent's MCP admin/introspection surface (see
+            app/routers/mcp_admin.py and app/routers/introspection.py for the exact route)
+            lists the design/artifact MCP server in its resolved catalog.
+          - The roles changed in register-mcp resolve with the new server present in their
+            mcps list, and roles NOT changed do not list it.
+          - The resolved URL points at the cluster-local platform-mcps deployment, not the
+            dev-only localhost fallback — a localhost URL in a cluster means
+            LEARTECH_PLATFORM_MCPS_URL was not injected and the tools are unreachable.
+          - The startup catalog-load log line for the new server is queryable in Loki.
