@@ -43,11 +43,12 @@
 # CRITICAL: "the NEW version is out" is only asserted when Step 4 knows the expected
 # version — deploy_health's version check is vacuously true when no version is given,
 # so a version-BLIND check only proves "something healthy is running", which would
-# wrongly pass the boot-dies-early-old-version-still-up case. So Step 4 is given `repo`
-# and derives each cluster's published version (latest v<ver>-<cluster> tag) to compare
-# against the running image — that is what makes it a true "new release is out" gate.
-# Step 4 depends on Step 2 (NOT Step 3): the boot-Job correlation is unreliable, so it
-# must never gate the authoritative deploy check.
+# wrongly pass the boot-dies-early-old-version-still-up case. So Step 4 derives each
+# cluster's promoted version (from promote_status — the "promote <svc> to version X"
+# PR title) and compares it against the running image; if it cannot establish that
+# version it FAILS CLOSED rather than pass blind. That is what makes it a true "the
+# new release is out" gate. Step 4 depends on Step 2 (NOT Step 3): the boot-Job
+# correlation is unreliable, so it must never gate the authoritative deploy check.
 #
 # CROSS-CLUSTER: per-cluster versioned charts mean gcp and az can be on DIFFERENT
 # versions (e.g. gcp 0.0.14 / az 0.0.13) — each check runs per cluster against
@@ -98,22 +99,21 @@ spec:
         action: bootjob-for-commit # → k8s bootjob_for_commit
         service: ${service}
         clusters: [gcp, az]
-    # Step 4 (Q3) — is each cluster's OWN published NEW version deployed + healthy?
+    # Step 4 (Q3) — is each cluster's OWN promoted NEW version deployed + healthy?
     #   The AUTHORITATIVE "the release is out" gate (>=1 ready replica AND running
-    #   image == this cluster's published version). Reads the Deployment directly, so
+    #   image == this cluster's promoted version). Reads the Deployment directly, so
     #   it is TRUE regardless of boot-Job health — and FALSE if the boot died before
-    #   applying the new version. `repo` lets it derive each cluster's published
-    #   version to assert the NEW version is out (not merely "something healthy").
-    #   Depends on Step 2 (NOT Step 3) so the unreliable boot-Job correlation can't
-    #   block this check.
+    #   applying the new version. Derives each cluster's expected version from
+    #   promote_status (by service) and FAILS CLOSED if it can't, so it never passes
+    #   version-blind. Depends on Step 2 (NOT Step 3) so the unreliable boot-Job
+    #   correlation can't block this check.
     - name: deploy-version-healthy
       kind: check
       agentType: leartech-agent-infra
       dependsOn:
         - promote-opened-green-merged
       inputs:
-        action: deploy-health # → k8s deploy_health (normalised per-cluster version compare)
+        action: deploy-health # → k8s deploy_health (version-aware; expected version from promote_status)
         service: ${service}
-        repo: ${repo} # derive each cluster's published version (latest v<ver>-<cluster>)
         namespace: jx-staging
         clusters: [gcp, az]
