@@ -1,4 +1,4 @@
-# Plan Catalog rules (R1–R21)
+# Plan Catalog rules (R1–R22)
 
 _Generated from `internal/lint` — do not edit by hand; run `make rules`._
 
@@ -27,6 +27,7 @@ Every rule the deterministic `plan-lint` gate enforces. Errors block merge; a fa
 | [R19](#r19) | Test coherence | test.directed vocabulary is kind-specific; a mismatch is a silent no-op, and a directive without spec.test is ignored. |
 | [R20](#r20) | No unknown fields | Fields not in the Plan/PlanTemplate CRD are strict-decoded out by the apiserver at apply, so a Plan carrying them cannot be instantiated. Common offenders: a step-level `goal` (belongs under `inputs`) and a spec-level `description` (not a CRD field). |
 | [R21](#r21) | Inputs by agent type | A step's inputs are consumed by the agent runtime, so they must match the agentType's contract or the agent Job fails at run time. Dev agents (go/ng/rust/py) consume an Initiative (name + goal + repo + branch, or a repos: list); the infra agent is action-driven (action + per-action fields), not goal-driven. |
+| [R22](#r22) | Infra steps live in templates | Infra steps (agentType leartech-agent-infra) are privileged, cross-cutting operations — release-verify, deploy-health, chart-config. In the PUBLIC catalog a plain Plan must not hand-author them: they belong in curated, OWNERS-gated PlanTemplates and are composed via use:. Hand-authored infra in a submitted Plan is a governance + security hole (a submitter declaring privileged infra work directly) and duplicates the standard verification the deployment path injects. Infra steps are allowed ONLY in kind: PlanTemplate. |
 
 ## R1 — Valid document
 
@@ -153,4 +154,10 @@ Every rule the deterministic `plan-lint` gate enforces. Errors block merge; a fa
 **Why:** A step's inputs are consumed by the agent runtime, so they must match the agentType's contract or the agent Job fails at run time. Dev agents (go/ng/rust/py) consume an Initiative (name + goal + repo + branch, or a repos: list); the infra agent is action-driven (action + per-action fields), not goal-driven.
 
 **Fix:** Dev steps: inputs {name, repo, branch, goal} (branch required for the legacy single-repo shape; or use repos:[{repo,branch}]). Infra steps: inputs {action, …} (e.g. release-health-check / chart-config). See AGENTS.md.
+
+## R22 — Infra steps live in templates
+
+**Why:** Infra steps (agentType leartech-agent-infra) are privileged, cross-cutting operations — release-verify, deploy-health, chart-config. In the PUBLIC catalog a plain Plan must not hand-author them: they belong in curated, OWNERS-gated PlanTemplates and are composed via use:. Hand-authored infra in a submitted Plan is a governance + security hole (a submitter declaring privileged infra work directly) and duplicates the standard verification the deployment path injects. Infra steps are allowed ONLY in kind: PlanTemplate.
+
+**Fix:** Remove the infra step from the Plan and compose the right PlanTemplate via a use: step instead (e.g. `use: verify-release-flow`). If no template covers your need, propose a new PlanTemplate (which OWNERS review) rather than hand-authoring the infra step.
 

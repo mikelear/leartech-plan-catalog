@@ -9,7 +9,7 @@ philosophy we apply to code**:
 
 1. **`plan-lint` — the hard gate (deterministic, Go).** Two layers, both
    non-zero-exit-blocks-merge:
-   - **Semantic + safety + DAG rules** (`internal/lint`, R1–R21) — ported from the
+   - **Semantic + safety + DAG rules** (`internal/lint`, R1–R22) — ported from the
      controller's own reconcile-time validation, so a Plan the catalog accepts is
      one the controller will actually run (hold-by-default, cycle detection,
      fan-in shape, template expansion, dependsOn resolution, …).
@@ -22,9 +22,13 @@ philosophy we apply to code**:
    deterministic (non-LLM) check is Go, with unit tests.
 2. **`plan-ai-review` — the judgment layer (advisory).** Routes each submission
    through **our own AI gateway**, with **our own virtual key**, to one or more ML
-   models that score design quality a linter can't. Posts a sticky PR comment.
-   Never blocks — but every call feeds a **proprietary Plan-quality dataset** that
-   trains models we own.
+   models that score design quality a linter can't. It is fed the catalog's
+   available PlanTemplates and **points submitters at the templates they should
+   compose via `use:`** — e.g. flagging a `kind:pr` step that lands a deployed
+   service but has no `use: verify-release-flow` gate after it, and showing where
+   to add it. Posts a sticky PR comment. Never blocks — but every call feeds a
+   **proprietary Plan-quality dataset** that trains models we own. (Those accepted
+   suggestions are the same policy the deployment path will later auto-inject.)
 
 ## Why this exists (the product story)
 
@@ -100,7 +104,7 @@ templates/       reusable PlanTemplates (composed via `use:` + `with:`)
 cmd/plan-lint/   the deterministic hard gate (Go entrypoint; -json for agents)
 cmd/crd2schema/  generates schemas/ JSON Schema from the vendored CRDs
 cmd/rulesdoc/    generates docs/rules.{json,md} from the rule catalog
-internal/lint/   the rules engine (R1–R21) + rule metadata + unit tests
+internal/lint/   the rules engine (R1–R22) + rule metadata + unit tests
 schemas/         CRD-derived JSON Schema (kubeconform) + vendored CRDs under crd/
 docs/            rules.json + rules.md (generated) · flywheel.md
 scripts/         plan-ai-review.sh + plan-lint-comment.sh + plan-cluster-verify.sh (live-CRD dry-run)
@@ -124,7 +128,7 @@ machine-readable `json` block (`verdict` + `findings[{severity, fix, refs}]`). U
 across all reviewers, so each review is one clean row for the Plan-quality flywheel.
 
 The presubmits surface as separate GitHub check contexts:
-- **`plan-lint`** (`pullrequest.yaml`) — the deterministic Go gate (R1–R21) + kubeconform. **Required.**
+- **`plan-lint`** (`pullrequest.yaml`) — the deterministic Go gate (R1–R22) + kubeconform. **Required.**
 - **`plan-cluster-verify`** — server-side dry-run of every Plan/PlanTemplate against the
   **live CRD** (structural schema + admission; persists nothing). The authoritative,
   drift-free check that a submission will actually apply — complements the offline Go

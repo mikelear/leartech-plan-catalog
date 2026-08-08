@@ -78,6 +78,11 @@ var (
 	devAgentTypes = strset("leartech-agent-go", "leartech-agent-ng", "leartech-agent-rust", "leartech-agent-py")
 )
 
+// infraAgentType is the privileged infra agent (release-verify / deploy-health /
+// chart-config). Concrete steps using it are allowed ONLY in PlanTemplates (R22):
+// a plain catalog Plan must compose infra via a use: template, never hand-author it.
+const infraAgentType = "leartech-agent-infra"
+
 // lintInputs (R21) checks a concrete step's inputs match what its agentType's
 // runtime consumes — the agent Job fails at run time otherwise (a `goal`-only
 // input is the classic miss). Dev agents want an Initiative (name+repo+goal);
@@ -358,6 +363,12 @@ func lintPlan(planName string, spec map[string]any, where string, f *Findings, i
 			if at := asStr(s["agentType"]); at == "" {
 				f.err("R6", sw, "concrete step needs agentType")
 			} else {
+				// R22 infra steps are template-only. lintPlan runs for kind: Plan
+				// only, so any concrete infra step here is a violation — infra is
+				// composed via a use: PlanTemplate, never hand-authored in a Plan.
+				if at == infraAgentType {
+					f.err("R22", sw, "infra steps (agentType leartech-agent-infra) are not allowed in a plain Plan — compose a PlanTemplate via `use:` (e.g. use: verify-release-flow); infra steps belong only in PlanTemplates")
+				}
 				lintInputs(at, s, sw, f) // R21 inputs shape by agentType
 			}
 		}
