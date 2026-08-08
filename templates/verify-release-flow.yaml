@@ -28,12 +28,26 @@
 #   Step 3 → k8s        bootjob_for_commit(service, cluster)   a boot ran (see step-3 note)
 #   Step 4 → k8s        deploy_health(service, namespace, cluster)  healthy && version match
 #
-# STEP-3/4 SEMANTICS (locked): a boot can APPLY a commit (deploy correct) yet the
-# boot Job later fail on post-apply housekeeping (e.g. regen-phase-3 git "divergent
-# branches"). Step 4 (deploy_health) is the AUTHORITATIVE "it landed" signal; Step 3
-# only confirms a boot RAN and does not false-FAIL a release whose version
-# demonstrably deployed. That is why Step 4 depends on Step 2 (not Step 3): the
-# unreliable boot-Job correlation must never gate the authoritative deploy check.
+# STEP 4 IS THE "RELEASE IS OUT" GATE (locked semantics). deploy_health reads the
+# live Deployment DIRECTLY — healthy := (>=1 available/ready replica) AND (the running
+# image tag == this cluster's OWN published version, normalized). It checks the RESULT
+# (the Deployment), NOT the process (the boot Job). It says nothing about whether the
+# boot Job succeeded. Consequently:
+#   * boot APPLIES the new version, THEN fails on housekeeping (e.g. regen-phase-3 git
+#     "divergent branches")  → the new version is up + ready → Step 4 PASSES. The
+#     release genuinely went out; the boot's later failure is a SEPARATE operational
+#     concern (Step 3 confirms a boot ran; the observer/Alert jobs own boot-Job health).
+#   * boot fails BEFORE applying the new version  → the new version never lands → the
+#     Deployment is still on the OLD version (or 0 available) → Step 4 FAILS. A boot
+#     that dies early can NOT pass this gate.
+# CRITICAL: "the NEW version is out" is only asserted when Step 4 knows the expected
+# version — deploy_health's version check is vacuously true when no version is given,
+# so a version-BLIND check only proves "something healthy is running", which would
+# wrongly pass the boot-dies-early-old-version-still-up case. So Step 4 is given `repo`
+# and derives each cluster's published version (latest v<ver>-<cluster> tag) to compare
+# against the running image — that is what makes it a true "new release is out" gate.
+# Step 4 depends on Step 2 (NOT Step 3): the boot-Job correlation is unreliable, so it
+# must never gate the authoritative deploy check.
 #
 # CROSS-CLUSTER: per-cluster versioned charts mean gcp and az can be on DIFFERENT
 # versions (e.g. gcp 0.0.14 / az 0.0.13) — each check runs per cluster against
@@ -84,9 +98,14 @@ spec:
         action: bootjob-for-commit # → k8s bootjob_for_commit
         service: ${service}
         clusters: [gcp, az]
-    # Step 4 (Q3) — is each cluster's OWN published version deployed + healthy?
-    #   AUTHORITATIVE "it landed" gate. Depends on Step 2 (NOT Step 3) so the
-    #   unreliable boot-Job correlation can't block this check.
+    # Step 4 (Q3) — is each cluster's OWN published NEW version deployed + healthy?
+    #   The AUTHORITATIVE "the release is out" gate (>=1 ready replica AND running
+    #   image == this cluster's published version). Reads the Deployment directly, so
+    #   it is TRUE regardless of boot-Job health — and FALSE if the boot died before
+    #   applying the new version. `repo` lets it derive each cluster's published
+    #   version to assert the NEW version is out (not merely "something healthy").
+    #   Depends on Step 2 (NOT Step 3) so the unreliable boot-Job correlation can't
+    #   block this check.
     - name: deploy-version-healthy
       kind: check
       agentType: leartech-agent-infra
@@ -95,5 +114,6 @@ spec:
       inputs:
         action: deploy-health # → k8s deploy_health (normalised per-cluster version compare)
         service: ${service}
+        repo: ${repo} # derive each cluster's published version (latest v<ver>-<cluster>)
         namespace: jx-staging
         clusters: [gcp, az]
