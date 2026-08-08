@@ -62,7 +62,7 @@ var (
 	// `inputs`) or a spec-level `description` (not a CRD field). R20 catches these.
 	planSpecKeys     = strset("command", "paused", "remediates", "steps", "tenant", "test", "triggeredBy")
 	templateSpecKeys = strset("params", "steps")
-	stepKeys         = strset("agentType", "budgetIter", "dependsOn", "fanIn", "fanInValidate", "hold", "inputs", "kind", "name", "repo", "test", "triggeredWhen", "use", "with")
+	stepKeys         = strset("agentType", "budgetIter", "dependsOn", "fanIn", "fanInValidate", "hold", "inputs", "kind", "name", "onFailure", "repo", "test", "triggeredWhen", "use", "with")
 	paramKeys        = strset("name", "required")
 	// Agent-type input contracts (R21). Dev agents consume an Initiative
 	// (name+repo+branch+goal); the infra agent is action-driven. AgentType CRs
