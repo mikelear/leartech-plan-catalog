@@ -1,5 +1,5 @@
 # verify-release-flow — deterministic, Go-MCP-backed verification that a release
-# actually went all the way through, per cluster.
+# actually went all the way through, for the LOCAL cluster this plan runs on.
 #
 # This is the "release_verify" composition. It is NOT a monolithic Go tool — it
 # is a PlanTemplate whose steps are `kind: check`, each a THIN DETERMINISTIC infra
@@ -25,8 +25,8 @@
 # Tool mapping:
 #   Step 1 → tekton    release_pipeline_status(repo, sha)      fired && passed
 #   Step 2 → jx_release promote_status(service, clusters)      opened + green + merged
-#   Step 3 → k8s        bootjob_for_commit(service, cluster)   a boot ran (see step-3 note)
-#   Step 4 → k8s        deploy_health(service, namespace, cluster)  healthy && version match
+#   Step 3 → k8s        bootjob_for_commit(service)             a boot ran (local cluster; see step-3 note)
+#   Step 4 → k8s        deploy_health(service, namespace)       healthy && version match (local cluster)
 #
 # STEP 4 IS THE "RELEASE IS OUT" GATE (locked semantics). deploy_health reads the
 # live Deployment DIRECTLY — healthy := (>=1 available/ready replica) AND (the running
@@ -50,9 +50,13 @@
 # new release is out" gate. Step 4 depends on Step 2 (NOT Step 3): the boot-Job
 # correlation is unreliable, so it must never gate the authoritative deploy check.
 #
-# CROSS-CLUSTER: per-cluster versioned charts mean gcp and az can be on DIFFERENT
-# versions (e.g. gcp 0.0.14 / az 0.0.13) — each check runs per cluster against
-# that cluster's OWN published version (normalized compare), never a shared one.
+# LOCAL-CLUSTER: each step verifies the cluster this plan RUNS on — the steps omit
+# `clusters`, so the infra agent defaults to its own cluster (LEARTECH_CLUSTER,
+# injected per-cluster by the controller chart). Each cluster's controller runs its
+# OWN verify against its OWN cluster-local Tekton/promote/deploy state — no
+# cross-cluster fan-out (which needed a reachable peer MCP endpoint per cluster and
+# failed "shares one MCP endpoint"). Per-cluster versioned charts still hold: the
+# check compares against THIS cluster's own published version (normalized).
 #
 # Trigger: an empty commit to the target repo's main → a Plan use:-ing this
 # template with {repo, sha, service} → the checks run per cluster.
@@ -61,23 +65,30 @@ kind: PlanTemplate
 metadata:
   name: verify-release-flow
 spec:
+  # {repo, pr} is all the controller has at auto-inject time (it tracks the merged
+  # dev PR, not a release sha). repo is the only required param: the checks resolve
+  # pr→merge_commit_sha and default service to the repo name. sha/service remain
+  # accepted overrides. One of {pr, sha} is needed for release-passed (enforced at
+  # check time — a PlanTemplate can't express "one of").
   params:
     - name: repo
       required: true # owner/name of the released service repo (e.g. mikelear/leartech-plan-api)
+    - name: pr
+      required: false # the merged PR number; release/bootjob resolve its merge_commit_sha
     - name: sha
-      required: true # the release-triggering commit on the service repo's main
+      required: false # explicit release commit (overrides pr); the main-push commit
     - name: service
-      required: true # the deployed service name (Deployment + promote-PR title key)
+      required: false # deployed service name; defaults to the bare repo name when omitted
   steps:
     # Step 1 (Q1+Q2) — did the release pipeline FIRE and PASS for this commit?
     - name: release-passed
       kind: check
-      agentType: leartech-agent-infra
+      agentType: leartech-agent-infra-go
       inputs:
         action: release-pipeline-status # → tekton release_pipeline_status
         repo: ${repo}
+        pr: ${pr} # resolved to merge_commit_sha when sha is empty
         sha: ${sha}
-        clusters: [gcp, az]
       onFailure:
         escalate: ba # a failed release pipeline needs a BA to diagnose
         context:
@@ -85,13 +96,13 @@ spec:
     # Step 2 (Q4+Q5+Q6) — promote PR opened on BOTH GitOps repos, all green, merged?
     - name: promote-merged
       kind: check
-      agentType: leartech-agent-infra
+      agentType: leartech-agent-infra-go
       dependsOn:
         - release-passed
       inputs:
         action: promote-status # → jx_release promote_status (paginated, cluster-filtered)
+        repo: ${repo} # service defaults to the bare repo name when service is empty
         service: ${service}
-        clusters: [gcp, az]
       onFailure:
         escalate: ba
         context:
@@ -100,13 +111,14 @@ spec:
     #   (boot-ran signal; Step 4 below is the authoritative "landed" check.)
     - name: bootjob-ran
       kind: check
-      agentType: leartech-agent-infra
+      agentType: leartech-agent-infra-go
       dependsOn:
         - promote-merged
       inputs:
         action: bootjob-for-commit # → k8s bootjob_for_commit
-        service: ${service}
-        clusters: [gcp, az]
+        repo: ${repo} # boot repo_url + resolve pr→merge_commit_sha (best-effort)
+        pr: ${pr}
+        sha: ${sha}
       onFailure:
         escalate: ba
         context:
@@ -121,14 +133,14 @@ spec:
     #   correlation can't block this check.
     - name: deploy-healthy
       kind: check
-      agentType: leartech-agent-infra
+      agentType: leartech-agent-infra-go
       dependsOn:
         - promote-merged
       inputs:
         action: deploy-health # → k8s deploy_health (version-aware; expected version from promote_status)
+        repo: ${repo} # service defaults to the bare repo name when service is empty
         service: ${service}
         namespace: jx-staging
-        clusters: [gcp, az]
       onFailure:
         escalate: ba # the authoritative "release is out" gate failing is the highest-signal escalation
         context:
