@@ -76,7 +76,7 @@ spec:
     # Step 1 (Q1+Q2) — did the release pipeline FIRE and PASS for this commit?
     - name: release-passed
       kind: check
-      agentType: leartech-agent-infra
+      agentType: leartech-agent-infra-go
       inputs:
         action: release-pipeline-status # → tekton release_pipeline_status
         repo: ${repo}
@@ -88,7 +88,7 @@ spec:
     # Step 2 (Q4+Q5+Q6) — promote PR opened on BOTH GitOps repos, all green, merged?
     - name: promote-merged
       kind: check
-      agentType: leartech-agent-infra
+      agentType: leartech-agent-infra-go
       dependsOn:
         - release-passed
       inputs:
@@ -102,7 +102,7 @@ spec:
     #   (boot-ran signal; Step 4 below is the authoritative "landed" check.)
     - name: bootjob-ran
       kind: check
-      agentType: leartech-agent-infra
+      agentType: leartech-agent-infra-go
       dependsOn:
         - promote-merged
       inputs:
@@ -122,7 +122,7 @@ spec:
     #   correlation can't block this check.
     - name: deploy-healthy
       kind: check
-      agentType: leartech-agent-infra
+      agentType: leartech-agent-infra-go
       dependsOn:
         - promote-merged
       inputs:
