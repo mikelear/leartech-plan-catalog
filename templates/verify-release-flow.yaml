@@ -65,13 +65,20 @@ kind: PlanTemplate
 metadata:
   name: verify-release-flow
 spec:
+  # {repo, pr} is all the controller has at auto-inject time (it tracks the merged
+  # dev PR, not a release sha). repo is the only required param: the checks resolve
+  # pr→merge_commit_sha and default service to the repo name. sha/service remain
+  # accepted overrides. One of {pr, sha} is needed for release-passed (enforced at
+  # check time — a PlanTemplate can't express "one of").
   params:
     - name: repo
       required: true # owner/name of the released service repo (e.g. mikelear/leartech-plan-api)
+    - name: pr
+      required: false # the merged PR number; release/bootjob resolve its merge_commit_sha
     - name: sha
-      required: true # the release-triggering commit on the service repo's main
+      required: false # explicit release commit (overrides pr); the main-push commit
     - name: service
-      required: true # the deployed service name (Deployment + promote-PR title key)
+      required: false # deployed service name; defaults to the bare repo name when omitted
   steps:
     # Step 1 (Q1+Q2) — did the release pipeline FIRE and PASS for this commit?
     - name: release-passed
@@ -80,6 +87,7 @@ spec:
       inputs:
         action: release-pipeline-status # → tekton release_pipeline_status
         repo: ${repo}
+        pr: ${pr} # resolved to merge_commit_sha when sha is empty
         sha: ${sha}
       onFailure:
         escalate: ba # a failed release pipeline needs a BA to diagnose
@@ -93,6 +101,7 @@ spec:
         - release-passed
       inputs:
         action: promote-status # → jx_release promote_status (paginated, cluster-filtered)
+        repo: ${repo} # service defaults to the bare repo name when service is empty
         service: ${service}
       onFailure:
         escalate: ba
@@ -107,7 +116,9 @@ spec:
         - promote-merged
       inputs:
         action: bootjob-for-commit # → k8s bootjob_for_commit
-        service: ${service}
+        repo: ${repo} # boot repo_url + resolve pr→merge_commit_sha (best-effort)
+        pr: ${pr}
+        sha: ${sha}
       onFailure:
         escalate: ba
         context:
@@ -127,6 +138,7 @@ spec:
         - promote-merged
       inputs:
         action: deploy-health # → k8s deploy_health (version-aware; expected version from promote_status)
+        repo: ${repo} # service defaults to the bare repo name when service is empty
         service: ${service}
         namespace: jx-staging
       onFailure:
