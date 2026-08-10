@@ -1,0 +1,25 @@
+# Dogfood Plan for the catalog GH submission route (Phase 3 / cmd/plan-submit).
+#
+# On merge, the release postsubmit submits this to plan-api on BOTH clusters,
+# where it lands as a PAUSED proposal — proving the catalog route reaches the
+# same POST /plans (validate + inject + create) that the plan MCP's create_plan
+# uses, just with an s2s token. It is NOT meant to run: it stays paused (R5), and
+# is cleaned up after the route is confirmed.
+#
+# Shape mirrors example-verify-release.yaml (a Plan that use:-es a curated
+# template) but with an explicit kind:check on the use step — the exact shape
+# proven to expand in the live e2e.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: dogfood-catalog-route
+spec:
+  paused: true # R5 — a proposal, held until a human unpauses (we won't)
+  steps:
+    - name: verify
+      kind: check
+      use: verify-release-flow
+      with:
+        repo: mikelear/leartech-qa-canary
+        service: leartech-qa-canary
+        sha: "0f490c0cd88fb43c53507771f739b8effe5a291d" # illustrative; unused while paused
