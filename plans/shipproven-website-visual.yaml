@@ -28,6 +28,23 @@
 #     docs/          · WEBSITE-DESIGN · VISUAL-STARTER · VISUAL-BUILD-SPEC · WEBSITE-CONTENT
 #     refs/          · 4 Plan-graph captures, each captioned, ALL flagged sanitise:true
 #
+# RUN HISTORY — this Plan RAN on 2026-08-10 and FAILED SILENTLY. Read before re-running.
+# The agent could not reach the bundle: its Job had no GCS credential (jobspawn projects
+# secrets as named pairs — GitHub/Anthropic/auth-client — and there was no pair for GCS).
+# It tried ~30 routes, wrote /tmp/artifact/listing.json at 0 BYTES, then continued WITHOUT
+# ERRORING and built from this goal's prose alone. Outcome:
+#   ✅ correct — everything stated in the goal: attribution (BY VERRIAN x9), #16A34A,
+#      #E2E8F0, #F3F6F9, inline SVG with aria + reduced-motion, og-default.png generated
+#   ❌ invented — everything that was bundle-only: ink #0B1220 used 24 TIMES in place of
+#      #0B1F3A (the PRIMARY brand colour), accent-hover, muted, pill colours; fonts left as
+#      var(--sp-font-sans, system-ui) with Inter/JetBrains Mono never named
+# leartech-ship-proven-website PR #7 was CLOSED, not merged. A wrong navy that close to the
+# real one is not visible without the spec open, which is why silent degradation is worse
+# than failing.
+# PREREQUISITE: plan `agent-gcs-artifact-read` must have landed, or this will fail the same
+# way. That Plan adds the opt-in GCS secret pair and ends with a self-test that reads THIS
+# bundle.
+#
 # ⚠️ SANITISATION IS A HARD REQUIREMENT
 # Every refs/ image is an internal Plan-portal capture carrying *.jx.leartech.com preview
 # hosts, cluster tags, GCS paths and real repo/PR ids. This is a PUBLIC site. Anything
@@ -63,6 +80,22 @@ spec:
           direction comes from an ARTIFACT, not from this goal — fetch and read it first,
           in full, before writing any code.
 
+          STOP CONDITION — READ THIS FIRST. Fetching the artifact is a HARD PRECONDITION,
+          not a best effort. Before any other work: write
+          $GOOGLE_APPLICATION_CREDENTIALS_JSON to a file, export
+          GOOGLE_APPLICATION_CREDENTIALS pointing at it, then read the bundle's
+          manifest.json and confirm its label is "shipproven-website-visual-layer".
+
+          If you cannot read it — no credential in the environment, a 403, an empty
+          listing, anything — STOP IMMEDIATELY. Fail the step with the exact error. Do NOT
+          proceed from this goal's prose, do NOT substitute the live site or portal HTML,
+          do NOT infer brand values. This Plan already failed once by doing exactly that
+          and produced a wrong primary brand colour that looked plausible. An honest
+          failure here is worth far more than a PR that has to be thrown away.
+
+          Once the manifest reads, confirm you can also read tokens.json and that it
+          contains ink #0B1F3A. If that value is missing you have the wrong bundle.
+
           ARTIFACT: gs://artifacts-product-first/artifact/84a0eddb-5d20-4322-87c5-afebbae2c176/1/
           Read manifest.json first (it indexes everything and captions every ref), then
           intent.md (the authoritative MUST / MUST NOT / MAY), then tokens.json, then the
@@ -71,7 +104,12 @@ spec:
           what you chose.
 
           THE FOUR GAPS TO CLOSE (all verified missing on staging, see intent.md):
-          1. Brand palette + type from tokens.json — light theme, dark navy hero and footer,
+          1. Brand palette + type from tokens.json — take EVERY value from the file, not
+             from this goal. This goal deliberately does not restate the palette; the last
+             run guessed ten of thirteen colours because it never read the file. tokens.json
+             is authoritative for ink, accent, accent-hover, amber, muted, border, panel,
+             on-dark and all four status-pill colours, and for the Inter / JetBrains Mono
+             font stacks. Light theme, dark navy hero and footer,
              ONE signal-green accent, bordered cards (1px #E2E8F0, radius 14px, soft shadow),
              3px green top-border on featured cards, alternating white / #F3F6F9 sections,
              content max-width ~1120px. The current stylesheet is 640 bytes; that is the
