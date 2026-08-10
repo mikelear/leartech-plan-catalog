@@ -2,12 +2,15 @@
 
 How a **concrete Plan** (not a PlanTemplate) goes from a catalog PR to actually
 running. Three gates, with `paused` enforced at every layer. Merging a Plan
-**publishes** it; it does **not** run, deploy, or instantiate anything.
+**publishes** it and **auto-submits it to `plan-api` as a paused proposal** — but
+it does **not** run or deploy anything. Execution still requires a separate,
+explicit unpause (Gate 3).
 
-> PlanTemplates are different — see the auto-release path in the
-> [README](../README.md#after-merge-templates-auto-release-via-gitops). A merged
-> concrete Plan triggers **no** controller PR (the postsubmit syncs `templates/`
-> only).
+> PlanTemplates take a different path — see the auto-release path in the
+> [README](../README.md#after-merge-templates-auto-release-via-gitops). On merge,
+> the release postsubmit syncs `templates/` to the controller (a GitOps PR) **and**
+> submits `plans/*.yaml` to `plan-api` (this doc). A merged concrete Plan triggers
+> **no** controller PR.
 
 ## Gate 1 — Submit (catalog PR)
 
@@ -16,19 +19,26 @@ running. Three gates, with `paused` enforced at every layer. Merging a Plan
 - Result: a **published, quality-approved, paused-by-declaration proposal**. Nothing
   is created in any cluster.
 
-## Gate 2 — Instantiate (create the Plan CRD) — EXPLICIT
+## Gate 2 — Instantiate (create the Plan CRD, always paused)
 
-A merged Plan is a *library entry*. Turning it into a running-capable Plan CRD is a
-**deliberate, explicit act** — never automatic on merge:
+A merged Plan becomes a Plan CRD via **`plan-api`** — the single writer, which
+**force-creates it `paused`** (`spec.paused` set `true` *regardless of what the
+caller sent*, `validator.go` / `dto/create.go`). A catalog Plan can never be
+instantiated running, even by a direct API call. Two front doors reach plan-api:
 
-- Via **MCP `create_plan`** (an AI/human session) or the **Portal**, always through
-  **`plan-api`** (the single writer).
-- **`plan-api` force-creates it `paused`** — `spec.paused` is set to `true`
-  *regardless of what the caller sent* (`validator.go` / `dto/create.go`). A
-  catalog Plan can never be instantiated running, even by a direct API call.
-- The **target** (cluster / namespace / tenant) and any **params** are chosen at
-  instantiation, because a catalog Plan is generic.
-- Requires the `leartechapi:mcp:write` (or `internal-services` / PlatformAdmin) scope.
+- **Automatic on merge** — the catalog release postsubmit
+  ([`cmd/plan-submit`](../cmd/plan-submit)) submits every `plans/*.yaml`
+  (excluding `example-*`) to plan-api on **both clusters**, using the
+  `plan-catalog-internal-services` s2s client (scope `leartechapi.internal_services`,
+  audience `leartech-plan-api`). This is the catalog GH route — the automation
+  sibling of `create_plan`.
+- **Explicit** — **MCP `create_plan`** or the **Portal** (a user/AI session), for
+  targeted or parameterized instantiation where the **target** (cluster / namespace
+  / tenant) and **params** are chosen per-call.
+
+Either way the result is a **paused** Plan CRD. Write access requires the
+`leartechapi.internal_services` scope (the catalog s2s client) OR
+`leartechapi:mcp:write` / PlatformAdmin.
 
 ## Gate 3 — Approve & run (unpause) — ADMIN ONLY
 

@@ -1,0 +1,26 @@
+# BAD (R23) — verify-release-flow is auto-injected after a deployable PR step, so
+# hand-authoring `use: verify-release-flow` that dependsOn the PR step duplicates
+# the injected verification (two expansions). Drop it; the platform composes it on
+# submission, wired to the real merged PR.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: bad-verify-after-pr
+spec:
+  paused: true
+  steps:
+    - name: implement
+      kind: pr
+      agentType: leartech-agent-go
+      repo: mikelear/example # step-level repo → the injection trigger fires here
+      inputs:
+        name: implement
+        repo: mikelear/example
+        branch: feat/example
+        goal: implement the example feature
+    - name: verify
+      use: verify-release-flow # ← R23: the platform injects this after `implement`
+      dependsOn: [implement]
+      with:
+        repo: mikelear/example
+        service: example

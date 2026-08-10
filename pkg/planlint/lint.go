@@ -76,6 +76,13 @@ var (
 	// infra is action-driven (checked below). ba's contract isn't encoded here —
 	// it falls through unvalidated rather than risk asserting a wrong shape.
 	devAgentTypes = strset("leartech-agent-go", "leartech-agent-ng", "leartech-agent-rust", "leartech-agent-py")
+	// autoInjectedTemplates are PlanTemplates the platform auto-composes on
+	// submission (plan-api injection) after a deployable PR step. A Plan must not
+	// hand-author them after its own PR step — that duplicates the injection (R23).
+	autoInjectedTemplates = strset("verify-release-flow")
+	// shaRE matches a git commit sha (7–40 hex). A with.sha that isn't one (e.g.
+	// the literal HEAD or a branch name) never resolves at check time (R24).
+	shaRE = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
 )
 
 // infraAgentType is the privileged infra agent (release-verify / deploy-health /
@@ -389,7 +396,50 @@ func lintPlan(planName string, spec map[string]any, where string, f *Findings, i
 		lintTestDirected(planIsTest, s, sw, f)
 	}
 
+	lintAutoInject(steps, where, f)
 	graphChecks(steps, where, f)
+}
+
+// lintAutoInject (R23) rejects a hand-authored use:<auto-injected-template> step
+// that dependsOn a deployable PR step — the platform injects that verification on
+// submission (wired to the merged PR), so hand-authoring it duplicates the
+// expansion (and usually carries a broken hand-set sha). The deployable-PR test
+// mirrors the plan-api injection trigger: a concrete (non-use, non-fanIn) step
+// whose kind is pr (empty coerces to pr) AND that carries a repo. A STANDALONE
+// verify-release-flow (no dependsOn on such a step — verifying an already-deployed
+// service by explicit sha) is legitimate and left alone. Runs on the SUBMITTED
+// plan; plan-api validates BEFORE it injects, so its own injected step (added
+// after validation) never trips this.
+func lintAutoInject(steps []any, where string, f *Findings) {
+	prSteps := map[string]bool{}
+	for _, raw := range steps {
+		s := mapOf(raw)
+		if has(s, "use") || truthy(s["fanIn"]) {
+			continue
+		}
+		if normalizeKind(asStr(s["kind"])) == "pr" && asStr(s["repo"]) != "" {
+			if n := asStr(s["name"]); n != "" {
+				prSteps[n] = true
+			}
+		}
+	}
+	if len(prSteps) == 0 {
+		return
+	}
+	for i, raw := range steps {
+		s := mapOf(raw)
+		use := asStr(s["use"])
+		if !autoInjectedTemplates[use] {
+			continue
+		}
+		sw := fmt.Sprintf("%s step[%d]=%s", where, i, orQ(asStr(s["name"])))
+		for _, dep := range strSlice(s["dependsOn"]) {
+			if prSteps[dep] {
+				f.err("R23", sw, fmt.Sprintf("`use: %s` dependsOn PR step %q — the platform auto-injects this verification after deployable PR steps (wired to the merged PR). Remove this step; injection composes it.", use, dep))
+				break
+			}
+		}
+	}
 }
 
 func lintUseStep(planName string, s map[string]any, sw string, f *Findings, idx TemplateIndex) {
@@ -405,6 +455,13 @@ func lintUseStep(planName string, s map[string]any, sw string, f *Findings, idx 
 	if len(bad) > 0 {
 		sort.Strings(bad)
 		f.err("R14", sw, fmt.Sprintf("a `use:` step MUST NOT declare: %s (the template supplies these)", strings.Join(bad, ", ")))
+	}
+
+	// R24 a supplied with.sha must be a resolvable commit sha (7–40 hex); the
+	// literal HEAD or a branch name never resolves at check time. Checked here so
+	// it applies whether or not the template is co-submitted.
+	if sha := asStr(mapOf(s["with"])["sha"]); sha != "" && !shaRE.MatchString(sha) {
+		f.err("R24", sw, fmt.Sprintf("with.sha %q is not a commit sha — use a full 40-hex sha, or omit sha (the injected verify uses the merged PR); HEAD/branch names never resolve", sha))
 	}
 
 	tmplName := asStr(s["use"])
