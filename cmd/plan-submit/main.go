@@ -168,8 +168,12 @@ func fetchToken(ctx context.Context) (string, error) {
 	tokenURL := os.Getenv("LEARTECH_AUTH_TOKEN_URL")
 	clientID := os.Getenv("LEARTECH_PLAN_SUBMIT_CLIENT_ID")
 	clientSecret := os.Getenv("LEARTECH_PLAN_SUBMIT_CLIENT_SECRET")
-	scope := envOr("LEARTECH_PLAN_SUBMIT_SCOPE", "internal_services")
-	audience := envOr("LEARTECH_PLAN_SUBMIT_AUDIENCE", "plan-api")
+	// Estate conventions (see leartech-auth-service setup-internal-clients.sh +
+	// the controller's LEARTECH_AUTH_SCOPE): the s2s scope is the dotted
+	// leartechapi.internal_services, and plan-api's audience is the stable
+	// logical name leartech-plan-api (LEARTECH_AUTH_AUDIENCE).
+	scope := envOr("LEARTECH_PLAN_SUBMIT_SCOPE", "leartechapi.internal_services")
+	audience := envOr("LEARTECH_PLAN_SUBMIT_AUDIENCE", "leartech-plan-api")
 	if tokenURL == "" || clientID == "" || clientSecret == "" {
 		return "", errors.New("LEARTECH_AUTH_TOKEN_URL, LEARTECH_PLAN_SUBMIT_CLIENT_ID and LEARTECH_PLAN_SUBMIT_CLIENT_SECRET must be set")
 	}

@@ -72,43 +72,32 @@ spec:
               cpu: 250m
               memory: 512Mi
           env:
+          # In-cluster literals — identical on both clusters (service DNS), so no
+          # per-cluster config is needed. Hydra stamps its public issuer on the
+          # minted token regardless of the in-cluster endpoint hit, so plan-api's
+          # iss/aud validation still passes. Scope (leartechapi.internal_services)
+          # and audience (leartech-plan-api) come from the tool's defaults.
           - name: LEARTECH_PLAN_API_URL
-            valueFrom:
-              secretKeyRef:
-                name: plan-catalog-release
-                key: plan-api-url
-                optional: true
+            value: http://leartech-plan-api.jx-staging:8080
           - name: LEARTECH_AUTH_TOKEN_URL
-            valueFrom:
-              secretKeyRef:
-                name: plan-catalog-release
-                key: token-url
-                optional: true
+            value: http://leartech-auth-service-hydra-public.jx-staging:4444/oauth2/token
           - name: LEARTECH_PLAN_SUBMIT_CLIENT_ID
-            valueFrom:
-              secretKeyRef:
-                name: plan-catalog-release
-                key: client-id
-                optional: true
+            value: plan-catalog-internal-services
+          # The client SECRET is the ONLY backend-sourced value — synced from the
+          # leartech-secrets store by the plan-catalog-internal-services
+          # ExternalSecret (jx namespace). optional:true → the env stays empty and
+          # the step self-skips until that secret is provisioned.
           - name: LEARTECH_PLAN_SUBMIT_CLIENT_SECRET
             valueFrom:
               secretKeyRef:
-                name: plan-catalog-release
+                name: plan-catalog-internal-services
                 key: client-secret
-                optional: true
-          - name: LEARTECH_PLAN_SUBMIT_AUDIENCE
-            valueFrom:
-              secretKeyRef:
-                name: plan-catalog-release
-                key: audience
                 optional: true
           script: |
             #!/bin/sh
             set -u
-            if [ -z "${LEARTECH_PLAN_SUBMIT_CLIENT_ID:-}" ] || \
-               [ -z "${LEARTECH_PLAN_SUBMIT_CLIENT_SECRET:-}" ] || \
-               [ -z "${LEARTECH_PLAN_API_URL:-}" ]; then
-              echo "submit-plans: plan-catalog-release s2s creds/URL not set — skipping (route dormant until provisioned)."
+            if [ -z "${LEARTECH_PLAN_SUBMIT_CLIENT_SECRET:-}" ]; then
+              echo "submit-plans: plan-catalog-internal-services secret not provisioned — skipping (route dormant)."
               exit 0
             fi
             apk add --no-cache git >/dev/null 2>&1
