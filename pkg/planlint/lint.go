@@ -352,10 +352,23 @@ func lintPlan(planName string, spec map[string]any, where string, f *Findings, i
 		lintUnknown(s, stepKeys, "step", sw, f)
 		switch {
 		case has(s, "use"):
+			// A use-step's kind must still be a valid enum — kind: gremlin + use
+			// would otherwise slip past the concrete-only check in default.
+			if k := asStr(s["kind"]); k != "" && !stepKinds[k] {
+				f.err("R6", sw, fmt.Sprintf("kind must be one of %v (got %q)", sortedKinds, k))
+			}
 			lintUseStep(planName, s, sw, f, idx)
 		case truthy(s["fanIn"]):
-			// fan-in is a no-agent step; its shape is checked in graphChecks
-			// (R13). It legitimately has no agentType/kind.
+			// fan-in is a no-agent GATE step; its DAG shape is checked in
+			// graphChecks (R13). Its kind must still be a valid enum, and it must
+			// NOT carry agentType — mixing a gate with a dev-agent step is a
+			// wiring bug the controller would silently drop.
+			if k := asStr(s["kind"]); k != "" && !stepKinds[k] {
+				f.err("R6", sw, fmt.Sprintf("kind must be one of %v (got %q)", sortedKinds, k))
+			}
+			if at := asStr(s["agentType"]); at != "" {
+				f.err("R13", sw, "fan-in step must not declare agentType (it is a no-agent gate — the agent work belongs in the steps it fans in from)")
+			}
 		default:
 			if k := asStr(s["kind"]); !stepKinds[k] {
 				f.err("R6", sw, fmt.Sprintf("kind must be one of %v (got %q)", sortedKinds, k))
