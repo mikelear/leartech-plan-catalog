@@ -1,4 +1,4 @@
-// Package lint is the DETERMINISTIC gate for the ShipProven Plan Catalog.
+// Package planlint is the DETERMINISTIC gate for the ShipProven Plan Catalog.
 //
 // This is the "golangci for Plans": deterministic, un-bypassable structural +
 // safety checks on every Plan / PlanTemplate submitted to the catalog. It is the
@@ -15,7 +15,7 @@
 // ExpandPlanSteps in leartech-orchestrator-controller) so that a Plan the catalog
 // accepts is a Plan the controller will actually run — the gate catches at PR time
 // exactly what would otherwise become a terminal Failed at reconcile.
-package lint
+package planlint
 
 import (
 	"bytes"

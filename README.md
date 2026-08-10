@@ -9,7 +9,7 @@ philosophy we apply to code**:
 
 1. **`plan-lint` — the hard gate (deterministic, Go).** Two layers, both
    non-zero-exit-blocks-merge:
-   - **Semantic + safety + DAG rules** (`internal/lint`, R1–R22) — ported from the
+   - **Semantic + safety + DAG rules** (`pkg/planlint`, R1–R22) — ported from the
      controller's own reconcile-time validation, so a Plan the catalog accepts is
      one the controller will actually run (hold-by-default, cycle detection,
      fan-in shape, template expansion, dependsOn resolution, …).
@@ -78,7 +78,7 @@ our product can host their own catalog and manage their own merge policy.
 ### Judged by current rules, never a stale copy
 
 The linter is Go that lives **in this repo**, and the presubmit builds it from the
-submission — so a PR that changes `internal/lint` tests its own change. To keep that
+submission — so a PR that changes `pkg/planlint` tests its own change. To keep that
 from letting a Plan pass against an _old_ contract, `main` requires every PR to be
 **up to date before merge** (branch-protection strict checks). A branch that forked
 before a rule landed cannot merge until it pulls `main`, which rebuilds the linter
@@ -104,7 +104,7 @@ templates/       reusable PlanTemplates (composed via `use:` + `with:`)
 cmd/plan-lint/   the deterministic hard gate (Go entrypoint; -json for agents)
 cmd/crd2schema/  generates schemas/ JSON Schema from the vendored CRDs
 cmd/rulesdoc/    generates docs/rules.{json,md} from the rule catalog
-internal/lint/   the rules engine (R1–R22) + rule metadata + unit tests
+pkg/planlint/   the rules engine (R1–R22) + rule metadata + unit tests
 schemas/         CRD-derived JSON Schema (kubeconform) + vendored CRDs under crd/
 docs/            rules.json + rules.md (generated) · flywheel.md
 scripts/         plan-ai-review.sh + plan-lint-comment.sh + plan-cluster-verify.sh (live-CRD dry-run)

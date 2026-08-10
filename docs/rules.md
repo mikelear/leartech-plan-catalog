@@ -1,6 +1,6 @@
 # Plan Catalog rules (R1–R22)
 
-_Generated from `internal/lint` — do not edit by hand; run `make rules`._
+_Generated from `pkg/planlint` — do not edit by hand; run `make rules`._
 
 Every rule the deterministic `plan-lint` gate enforces. Errors block merge; a failing PR comment links each rule here by its anchor (e.g. `#r11`).
 
