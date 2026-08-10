@@ -63,10 +63,26 @@ controller's own quality gates + a human merge → controller release → GitOps
 renders and applies the CRD. So a template is double-gated (here + there) and
 never bypasses GitOps.
 
-Concrete **Plans** are instantiated explicitly (via MCP `create_plan` → `plan-api`,
-or the Portal) and always land **paused** — a second, human-gated promote/unpause
-controls execution. The full three-gate lifecycle (with `paused` enforced at every
-layer) is documented in [`docs/plan-lifecycle.md`](docs/plan-lifecycle.md).
+Concrete **Plans** reach the estate through `plan-api` — the single writer that
+validates, applies the auto-composition injection policy, and creates the Plan CRD.
+Three front doors converge on it: MCP `create_plan` (forwards a user bearer), the
+Portal, and — on merge — this repo's release postsubmit
+([`cmd/plan-submit`](cmd/plan-submit)), which submits every `plans/*.yaml`
+(excluding `example-*`) to plan-api with an s2s token. The release runs on **both
+clusters**, each self-submitting to its local plan-api, so both estates receive the
+proposal. However it arrives, a Plan always lands **paused** — a second,
+human-gated promote/unpause controls execution. The full three-gate lifecycle
+(with `paused` enforced at every layer) is documented in
+[`docs/plan-lifecycle.md`](docs/plan-lifecycle.md).
+
+> The catalog auto-submit leg stays **dormant** until the s2s client
+> `plan-catalog-internal-services` is provisioned: register it in
+> leartech-auth-service `setup-internal-clients` (scope
+> `leartechapi.internal_services`, audience `leartech-plan-api`), seed its secret
+> in the platform backend (`plan-catalog-internal-client-secret`), and sync it to
+> a `plan-catalog-internal-services` k8s Secret (key `client-secret`) in the `jx`
+> namespace via an ExternalSecret. Until that Secret exists the release step
+> self-skips, so merging this repo is safe before provisioning lands.
 
 ## Strict human merge — no auto-merge
 
