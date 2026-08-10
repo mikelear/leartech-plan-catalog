@@ -57,6 +57,62 @@ spec:
             set -u
             apk add --no-cache bash git curl >/dev/null 2>&1
             bash scripts/sync-templates-to-controller.sh
+        # Phase-3 catalog GH route: submit merged plans/*.yaml to plan-api (the
+        # SINGLE writer — it validates, applies the auto-composition injection
+        # policy, and creates a PAUSED proposal). This is the automation sibling
+        # of the plan MCP's create_plan (same POST /plans; s2s token instead of a
+        # forwarded user bearer). Runs on BOTH clusters; each self-submits to its
+        # LOCAL plan-api, so both estates receive the proposal with no cross-cluster
+        # networking. Dormant until the plan-catalog-release s2s secret is
+        # provisioned (optional secret envs stay empty → the step self-skips).
+        - image: golang:1.24-alpine
+          name: submit-plans
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+          env:
+          - name: LEARTECH_PLAN_API_URL
+            valueFrom:
+              secretKeyRef:
+                name: plan-catalog-release
+                key: plan-api-url
+                optional: true
+          - name: LEARTECH_AUTH_TOKEN_URL
+            valueFrom:
+              secretKeyRef:
+                name: plan-catalog-release
+                key: token-url
+                optional: true
+          - name: LEARTECH_PLAN_SUBMIT_CLIENT_ID
+            valueFrom:
+              secretKeyRef:
+                name: plan-catalog-release
+                key: client-id
+                optional: true
+          - name: LEARTECH_PLAN_SUBMIT_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: plan-catalog-release
+                key: client-secret
+                optional: true
+          - name: LEARTECH_PLAN_SUBMIT_AUDIENCE
+            valueFrom:
+              secretKeyRef:
+                name: plan-catalog-release
+                key: audience
+                optional: true
+          script: |
+            #!/bin/sh
+            set -u
+            if [ -z "${LEARTECH_PLAN_SUBMIT_CLIENT_ID:-}" ] || \
+               [ -z "${LEARTECH_PLAN_SUBMIT_CLIENT_SECRET:-}" ] || \
+               [ -z "${LEARTECH_PLAN_API_URL:-}" ]; then
+              echo "submit-plans: plan-catalog-release s2s creds/URL not set — skipping (route dormant until provisioned)."
+              exit 0
+            fi
+            apk add --no-cache git >/dev/null 2>&1
+            go run ./cmd/plan-submit -dir plans
   podTemplate:
     tolerations:
     - key: sku
