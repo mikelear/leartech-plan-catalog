@@ -12,10 +12,9 @@ spec:
     - name: implement
       kind: pr
       agentType: leartech-agent-go
-      repo: mikelear/example # step-level repo → the injection trigger fires here
       inputs:
         name: implement
-        repo: mikelear/example
+        repo: mikelear/example # repo under inputs (the natural R21 shape) → still deployable
         branch: feat/example
         goal: implement the example feature
     - name: verify
