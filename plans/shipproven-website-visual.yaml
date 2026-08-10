@@ -38,9 +38,12 @@
 # no JS. It is the reason the site is crawlable and it will fail this PR if prerendering,
 # the hero h1, the meta set, robots.txt or sitemap.xml regress. Do not weaken it.
 #
-# VERIFICATION
-# Per R22, infra steps are template-only, so the release/deploy verification is composed
-# via `use: verify-release-flow` rather than hand-authored.
+# VERIFICATION — auto-injected, deliberately NOT hand-authored
+# R23: the platform auto-composes verify-release-flow after every deployable PR step,
+# wired to the REAL merged PR (pr=${steps.<step>.pr}). Hand-authoring
+# `use: verify-release-flow` here would produce a DUPLICATE expansion, and R24 rules out
+# the `sha: HEAD` such a step would need (HEAD never resolves at check time). So this Plan
+# is a single PR step and the release/deploy verification arrives on submission.
 apiVersion: agent.leartech.io/v1alpha1
 kind: Plan
 metadata:
@@ -117,12 +120,3 @@ spec:
           Runnable against the PR preview; no new infrastructure.
 
           Done = PR merged (open via open_pr, drive gates green, seo-preview included).
-
-    - name: verify-release
-      use: verify-release-flow
-      dependsOn:
-        - apply-visual-layer
-      with:
-        repo: mikelear/leartech-ship-proven-website
-        sha: HEAD
-        service: leartech-ship-proven-website
