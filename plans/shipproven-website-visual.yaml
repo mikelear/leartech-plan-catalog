@@ -1,0 +1,122 @@
+# Apply the ShipProven brand visual layer to the marketing site, guided by an
+# ARTIFACT (design-guidance bundle) rather than by inline prose.
+#
+# WHY THIS PLAN EXISTS
+# The site's content + crawlability shipped (prerender/SSG + full SEO). The VISUAL layer
+# never did. Verified against staging on 2026-08-10:
+#   https://leartech-ship-proven-website-jx-staging.jx.leartech.com/
+#   ✅ 9 content sections present, correct order
+#   ✅ 10,266 chars of visible text with NO JS executed; 1 h1; JSON-LD present
+#   ✅ robots.txt / sitemap.xml / llms.txt / llms-full.txt all 200
+#   ❌ stylesheet is 640 BYTES — none of the brand palette appears
+#   ❌ 0 <svg> and 0 <img> on the entire page (spec wants 6 signature diagrams)
+#   ❌ og-default.png is 404, yet og:image already points at it (live broken preview)
+#   ❌ eyebrow reads "by LearTech" — Verrian x0, leartech x17
+#
+# FIRST ARTIFACT-DRIVEN PLAN
+# This is the first Plan whose design direction comes from an artifact rather than from
+# prose in the goal. The bundle carries the brand tokens as DTCG, the four Plan-portal
+# captures as CAPTIONED refs, and the four source design docs copied in so it is
+# self-contained. The step goal tells the agent to fetch and read it — it does not
+# restate it, because restating is how a bundle and a goal drift apart.
+#
+# ARTIFACT (guidance, not contract):
+#   gs://artifacts-product-first/artifact/84a0eddb-5d20-4322-87c5-afebbae2c176/1/
+#     manifest.json  · label shipproven-website-visual-layer · binding: guidance
+#     intent.md      · verified staging state + MUST / MUST NOT / MAY
+#     tokens.json    · DTCG, lifted verbatim from VISUAL-STARTER.md
+#     docs/          · WEBSITE-DESIGN · VISUAL-STARTER · VISUAL-BUILD-SPEC · WEBSITE-CONTENT
+#     refs/          · 4 Plan-graph captures, each captioned, ALL flagged sanitise:true
+#
+# ⚠️ SANITISATION IS A HARD REQUIREMENT
+# Every refs/ image is an internal Plan-portal capture carrying *.jx.leartech.com preview
+# hosts, cluster tags, GCS paths and real repo/PR ids. This is a PUBLIC site. Anything
+# derived from them must have that redacted. WEBSITE-DESIGN.md §4.6 requires it.
+#
+# WHAT MUST NOT REGRESS
+# .lighthouse/jenkins-x/seo-preview.yaml is a BLOCKING presubmit that fetches RAW HTML with
+# no JS. It is the reason the site is crawlable and it will fail this PR if prerendering,
+# the hero h1, the meta set, robots.txt or sitemap.xml regress. Do not weaken it.
+#
+# VERIFICATION — auto-injected, deliberately NOT hand-authored
+# R23: the platform auto-composes verify-release-flow after every deployable PR step,
+# wired to the REAL merged PR (pr=${steps.<step>.pr}). Hand-authoring
+# `use: verify-release-flow` here would produce a DUPLICATE expansion, and R24 rules out
+# the `sha: HEAD` such a step would need (HEAD never resolves at check time). So this Plan
+# is a single PR step and the release/deploy verification arrives on submission.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: shipproven-website-visual
+spec:
+  paused: true
+  steps:
+    - name: apply-visual-layer
+      kind: pr
+      agentType: leartech-agent-ng
+      inputs:
+        name: apply-visual-layer
+        repo: mikelear/leartech-ship-proven-website
+        branch: feat/brand-visual-layer
+        goal: >-
+          Apply the ShipProven brand visual layer to the marketing site. Your design
+          direction comes from an ARTIFACT, not from this goal — fetch and read it first,
+          in full, before writing any code.
+
+          ARTIFACT: gs://artifacts-product-first/artifact/84a0eddb-5d20-4322-87c5-afebbae2c176/1/
+          Read manifest.json first (it indexes everything and captions every ref), then
+          intent.md (the authoritative MUST / MUST NOT / MAY), then tokens.json, then the
+          four docs under docs/. The bundle is self-contained: everything you need is in it.
+          binding=guidance, so intent.md's MAY list is real latitude — use it, and report
+          what you chose.
+
+          THE FOUR GAPS TO CLOSE (all verified missing on staging, see intent.md):
+          1. Brand palette + type from tokens.json — light theme, dark navy hero and footer,
+             ONE signal-green accent, bordered cards (1px #E2E8F0, radius 14px, soft shadow),
+             3px green top-border on featured cards, alternating white / #F3F6F9 sections,
+             content max-width ~1120px. The current stylesheet is 640 bytes; that is the
+             measure of how much is missing.
+          2. The signature visuals from docs/VISUAL-BUILD-SPEC.md as INLINE SVG — not
+             <img>, not canvas, not a JS chart library. Inline SVG is prerender-safe,
+             themeable and crawlable, which is why the spec requires it. Honour
+             prefers-reduced-motion and give every diagram alt/aria text.
+          3. og-default.png at 1200x630. It is a 404 today and og:image already points at
+             it, so every social and AI preview of this site is currently broken.
+          4. Attribution to Verrian. Per docs/WEBSITE-DESIGN.md §3 the eyebrow is
+             "SHIPPROVEN · BY VERRIAN" and the footer reads "product of Verrian Ltd, UK".
+             LearTech must appear ONLY as a Showcase customer. Staging currently presents
+             LearTech as the producer, which is backwards — this is a brand/legal
+             correction, not a style preference.
+
+          SANITISATION — HARD REQUIREMENT. Every image in refs/ is an internal Plan-portal
+          capture containing *.jx.leartech.com preview hostnames, cluster tags, GCS paths and
+          real repo/PR identifiers. This site is PUBLIC. If you derive a Showcase visual from
+          any ref, redact or replace that detail with plausible neutral values. Do not ship a
+          raw capture. Per-ref notes are in manifest.json; the rule is docs/WEBSITE-DESIGN.md §4.6.
+
+          DO NOT REGRESS CRAWLABILITY. .lighthouse/jenkins-x/seo-preview.yaml is a BLOCKING
+          presubmit that fetches RAW HTML with no JS and asserts the hero h1 verbatim,
+          /fleet-status prerendering independently, the full meta set, robots.txt with a
+          Sitemap: line, and a well-formed sitemap.xml. Keep prerender/SSG
+          (outputMode: static). No JS-only routes. No content behind interaction. Do not
+          weaken or skip that gate to make a visual change pass — if it goes red, the visual
+          change is wrong.
+
+          DO NOT CHANGE THE COPY. docs/WEBSITE-CONTENT.md is the source of truth for wording.
+
+          ACCESSIBILITY: WCAG 2.2 AA. Explicitly verify #16A34A contrast on white AND on
+          #F3F6F9 — green-on-white is the known risk in this palette. Keep the skip-link,
+          visible focus and keyboard nav.
+
+          REPORT IN THE PR DESCRIPTION: every derivation and choice you made under the MAY
+          latitude — what you cropped or generated from refs/, exactly what you sanitised,
+          which shades you used and where, and how you expressed the tokens. Latitude is
+          granted on condition it is recorded.
+
+          ISOLATE TESTING: extend end2end-ui specs to assert the visual layer landed —
+          brand colours resolve on the rendered page, each signature diagram is present as
+          inline SVG with accessible text, og-default.png returns 200, the eyebrow and
+          footer name Verrian, and LearTech appears only within the Showcase section.
+          Runnable against the PR preview; no new infrastructure.
+
+          Done = PR merged (open via open_pr, drive gates green, seo-preview included).
