@@ -61,23 +61,31 @@ kind: PlanTemplate
 metadata:
   name: verify-release-flow
 spec:
+  # {repo, pr} is all the controller has at auto-inject time (it tracks the merged
+  # dev PR, not a release sha). So repo is the only required param: the checks
+  # resolve pr→merge_commit_sha themselves and default service to the repo name.
+  # sha/service remain accepted as explicit overrides (manual/testing). One of
+  # {pr, sha} must be given for release-passed — enforced at check time, since a
+  # PlanTemplate can't express "one of" (an absent optional param → empty string).
   params:
     - name: repo
       required: true # owner/name of the released service repo (e.g. mikelear/leartech-plan-api)
+    - name: pr
+      required: false # the merged PR number; release/bootjob resolve its merge_commit_sha
     - name: sha
-      required: true # the release-triggering commit on the service repo's main
+      required: false # explicit release commit (overrides pr); the main-push commit
     - name: service
-      required: true # the deployed service name (Deployment + promote-PR title key)
+      required: false # deployed service name; defaults to the bare repo name when omitted
   steps:
     # Step 1 (Q1+Q2) — did the release pipeline FIRE and PASS for this commit?
     - name: release-passed
       kind: check
-      agentType: leartech-agent-infra
+      agentType: leartech-agent-infra-go
       inputs:
         action: release-pipeline-status # → tekton release_pipeline_status
         repo: ${repo}
+        pr: ${pr} # resolved to merge_commit_sha when sha is empty
         sha: ${sha}
-        clusters: [gcp, az]
       onFailure:
         escalate: ba # a failed release pipeline needs a BA to diagnose
         context:
@@ -85,13 +93,13 @@ spec:
     # Step 2 (Q4+Q5+Q6) — promote PR opened on BOTH GitOps repos, all green, merged?
     - name: promote-merged
       kind: check
-      agentType: leartech-agent-infra
+      agentType: leartech-agent-infra-go
       dependsOn:
         - release-passed
       inputs:
         action: promote-status # → jx_release promote_status (paginated, cluster-filtered)
+        repo: ${repo} # service defaults to the bare repo name when service is empty
         service: ${service}
-        clusters: [gcp, az]
       onFailure:
         escalate: ba
         context:
@@ -100,13 +108,14 @@ spec:
     #   (boot-ran signal; Step 4 below is the authoritative "landed" check.)
     - name: bootjob-ran
       kind: check
-      agentType: leartech-agent-infra
+      agentType: leartech-agent-infra-go
       dependsOn:
         - promote-merged
       inputs:
         action: bootjob-for-commit # → k8s bootjob_for_commit
-        service: ${service}
-        clusters: [gcp, az]
+        repo: ${repo} # used as the boot repo_url + to resolve pr→merge_commit_sha (best-effort)
+        pr: ${pr}
+        sha: ${sha}
       onFailure:
         escalate: ba
         context:
@@ -121,14 +130,14 @@ spec:
     #   correlation can't block this check.
     - name: deploy-healthy
       kind: check
-      agentType: leartech-agent-infra
+      agentType: leartech-agent-infra-go
       dependsOn:
         - promote-merged
       inputs:
         action: deploy-health # → k8s deploy_health (version-aware; expected version from promote_status)
+        repo: ${repo} # service defaults to the bare repo name when service is empty
         service: ${service}
         namespace: jx-staging
-        clusters: [gcp, az]
       onFailure:
         escalate: ba # the authoritative "release is out" gate failing is the highest-signal escalation
         context:
