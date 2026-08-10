@@ -18,6 +18,9 @@ func TestTestdataFixtures(t *testing.T) {
 		"use-step-invalid-kind.yaml": {"R6"},  // kind enum enforced on use: steps
 		"fanin-with-agenttype.yaml":  {"R13"}, // fan-in gate must not carry agentType
 		"infra-in-plan.yaml":         {"R22"}, // infra steps are template-only
+		"verify-after-pr.yaml":       {"R23"}, // verify-release-flow after a PR step is auto-injected (duplicate)
+		"bad-sha-ref.yaml":           {"R24"}, // with.sha: HEAD is not a resolvable commit sha
+		"standalone-verify.yaml":     {},      // standalone verify (no PR step, real sha) is legitimate — R23 must NOT fire
 	}
 	for file, want := range cases {
 		t.Run(file, func(t *testing.T) {
