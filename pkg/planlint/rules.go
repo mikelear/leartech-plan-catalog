@@ -1,4 +1,4 @@
-package lint
+package planlint
 
 // RuleMeta is the human- + machine-readable description of a lint rule. It is the
 // single source for: the generated rule catalog (docs/rules.json + rules.md), the

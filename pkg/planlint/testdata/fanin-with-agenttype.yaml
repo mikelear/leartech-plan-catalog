@@ -1,0 +1,24 @@
+# BAD (R13) — a fan-in step is a no-agent GATE (it validates the steps it fans in
+# from); it must NOT declare an agentType. Mixing a gate with a dev-agent step is
+# a wiring bug the controller would silently drop.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: bad-fanin-agenttype
+spec:
+  paused: true
+  steps:
+    - name: build
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: build
+        repo: mikelear/example
+        branch: feat/example
+        goal: build it
+    - name: gate
+      kind: check
+      fanIn: true
+      agentType: leartech-agent-go # ← invalid on a fan-in gate; R13 rejects it
+      dependsOn: [build]
+      fanInValidate: [docs/example.md]
