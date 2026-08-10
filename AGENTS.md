@@ -12,8 +12,10 @@ passes the gate — and how to read the gate's feedback and self-correct.
    - **`plan-cluster-verify`** — server-side dry-run against the live CRD (must pass).
    - **`plan-ai-review`** — an advisory model review (never blocks).
 3. Read the feedback (see "Reading feedback" below), fix, push again.
-4. A human maintainer merges. Merging does **not** run the Plan — execution is a
-   separate, human-gated promote/unpause.
+4. A human maintainer merges. On merge the release **auto-submits** your Plan to
+   `plan-api` as a **paused proposal** (both clusters) — merging does **not** run
+   it; execution is a separate, human-gated unpause. See
+   [docs/plan-lifecycle.md](docs/plan-lifecycle.md).
 
 ## Machine-readable references (read these to author + repair)
 
