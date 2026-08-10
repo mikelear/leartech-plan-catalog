@@ -75,14 +75,14 @@ human-gated promote/unpause controls execution. The full three-gate lifecycle
 (with `paused` enforced at every layer) is documented in
 [`docs/plan-lifecycle.md`](docs/plan-lifecycle.md).
 
-> The catalog auto-submit leg stays **dormant** until the s2s client
-> `plan-catalog-internal-services` is provisioned: register it in
-> leartech-auth-service `setup-internal-clients` (scope
-> `leartechapi.internal_services`, audience `leartech-plan-api`), seed its secret
-> in the platform backend (`plan-catalog-internal-client-secret`), and sync it to
-> a `plan-catalog-internal-services` k8s Secret (key `client-secret`) in the `jx`
-> namespace via an ExternalSecret. Until that Secret exists the release step
-> self-skips, so merging this repo is safe before provisioning lands.
+> The catalog auto-submit leg runs as the `plan-catalog-internal-services` s2s
+> client (scope `leartechapi.internal_services`, audience `leartech-plan-api`),
+> provisioned on both clusters: a Hydra client (registered via leartech-auth-service
+> `setup-internal-clients`), its secret in the platform backend
+> (`plan-catalog-internal-client-secret`), synced to a `plan-catalog-internal-services`
+> k8s Secret (key `client-secret`) in the `jx` namespace by an ExternalSecret. If
+> that Secret is ever absent the release step self-skips (safe no-op), so the repo
+> stays mergeable even mid-provisioning.
 
 ## Strict human merge — no auto-merge
 
