@@ -1,6 +1,6 @@
-# Plan Catalog rules (R1–R22)
+# Plan Catalog rules (R1–R24)
 
-_Generated from `internal/lint` — do not edit by hand; run `make rules`._
+_Generated from `pkg/planlint` — do not edit by hand; run `make rules`._
 
 Every rule the deterministic `plan-lint` gate enforces. Errors block merge; a failing PR comment links each rule here by its anchor (e.g. `#r11`).
 
@@ -28,6 +28,8 @@ Every rule the deterministic `plan-lint` gate enforces. Errors block merge; a fa
 | [R20](#r20) | No unknown fields | Fields not in the Plan/PlanTemplate CRD are strict-decoded out by the apiserver at apply, so a Plan carrying them cannot be instantiated. Common offenders: a step-level `goal` (belongs under `inputs`) and a spec-level `description` (not a CRD field). |
 | [R21](#r21) | Inputs by agent type | A step's inputs are consumed by the agent runtime, so they must match the agentType's contract or the agent Job fails at run time. Dev agents (go/ng/rust/py) consume an Initiative (name + goal + repo + branch, or a repos: list); the infra agent is action-driven (action + per-action fields), not goal-driven. |
 | [R22](#r22) | Infra steps live in templates | Infra steps (agentType leartech-agent-infra) are privileged, cross-cutting operations — release-verify, deploy-health, chart-config. In the PUBLIC catalog a plain Plan must not hand-author them: they belong in curated, OWNERS-gated PlanTemplates and are composed via use:. Hand-authored infra in a submitted Plan is a governance + security hole (a submitter declaring privileged infra work directly) and duplicates the standard verification the deployment path injects. Infra steps are allowed ONLY in kind: PlanTemplate. |
+| [R23](#r23) | verify-release-flow is auto-injected | The platform auto-composes verify-release-flow after every deployable PR step (kind:pr carrying a repo), wired to the REAL merged PR (pr=${steps.<step>.pr}). A hand-authored `use: verify-release-flow` that dependsOn such a step therefore duplicates that injection — two verify-release-flow expansions — and typically also carries a broken hand-set sha. (A standalone verify-release-flow that does NOT dependsOn a PR step — verifying an already-deployed service by explicit sha — is legitimate and allowed.) |
+| [R24](#r24) | Resolvable commit sha | A supplied `with.sha` must be a real commit sha (7–40 hex) so the release/verify checks can resolve the commit; a ref like HEAD or a branch name never resolves at check time and the check fails. With auto-injection you normally omit sha entirely — the injected verify uses the merged PR. |
 
 ## R1 — Valid document
 
@@ -160,4 +162,16 @@ Every rule the deterministic `plan-lint` gate enforces. Errors block merge; a fa
 **Why:** Infra steps (agentType leartech-agent-infra) are privileged, cross-cutting operations — release-verify, deploy-health, chart-config. In the PUBLIC catalog a plain Plan must not hand-author them: they belong in curated, OWNERS-gated PlanTemplates and are composed via use:. Hand-authored infra in a submitted Plan is a governance + security hole (a submitter declaring privileged infra work directly) and duplicates the standard verification the deployment path injects. Infra steps are allowed ONLY in kind: PlanTemplate.
 
 **Fix:** Remove the infra step from the Plan and compose the right PlanTemplate via a use: step instead (e.g. `use: verify-release-flow`). If no template covers your need, propose a new PlanTemplate (which OWNERS review) rather than hand-authoring the infra step.
+
+## R23 — verify-release-flow is auto-injected
+
+**Why:** The platform auto-composes verify-release-flow after every deployable PR step (kind:pr carrying a repo), wired to the REAL merged PR (pr=${steps.<step>.pr}). A hand-authored `use: verify-release-flow` that dependsOn such a step therefore duplicates that injection — two verify-release-flow expansions — and typically also carries a broken hand-set sha. (A standalone verify-release-flow that does NOT dependsOn a PR step — verifying an already-deployed service by explicit sha — is legitimate and allowed.)
+
+**Fix:** Remove the `use: verify-release-flow` step that dependsOn your PR step — the platform injects it on submission. Keep a hand-authored verify-release-flow only to verify a service NOT produced by a PR step in this Plan (and then supply an explicit commit sha).
+
+## R24 — Resolvable commit sha
+
+**Why:** A supplied `with.sha` must be a real commit sha (7–40 hex) so the release/verify checks can resolve the commit; a ref like HEAD or a branch name never resolves at check time and the check fails. With auto-injection you normally omit sha entirely — the injected verify uses the merged PR.
+
+**Fix:** Set with.sha to a full commit sha (40 hex), or omit it and rely on the injected PR token. Do not use HEAD or a branch name.
 

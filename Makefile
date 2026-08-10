@@ -21,7 +21,7 @@ lint: schemas
 schemas:
 	go run ./cmd/crd2schema -out schemas schemas/crd/*.yaml
 
-# Regenerate the rule catalog (docs/rules.json + rules.md) from internal/lint.
+# Regenerate the rule catalog (docs/rules.json + rules.md) from pkg/planlint.
 # Run this whenever the rules change.
 rules:
 	go run ./cmd/rulesdoc -out docs

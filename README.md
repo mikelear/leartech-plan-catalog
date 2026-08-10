@@ -9,7 +9,7 @@ philosophy we apply to code**:
 
 1. **`plan-lint` — the hard gate (deterministic, Go).** Two layers, both
    non-zero-exit-blocks-merge:
-   - **Semantic + safety + DAG rules** (`internal/lint`, R1–R22) — ported from the
+   - **Semantic + safety + DAG rules** (`pkg/planlint`, R1–R22) — ported from the
      controller's own reconcile-time validation, so a Plan the catalog accepts is
      one the controller will actually run (hold-by-default, cycle detection,
      fan-in shape, template expansion, dependsOn resolution, …).
@@ -63,10 +63,26 @@ controller's own quality gates + a human merge → controller release → GitOps
 renders and applies the CRD. So a template is double-gated (here + there) and
 never bypasses GitOps.
 
-Concrete **Plans** are instantiated explicitly (via MCP `create_plan` → `plan-api`,
-or the Portal) and always land **paused** — a second, human-gated promote/unpause
-controls execution. The full three-gate lifecycle (with `paused` enforced at every
-layer) is documented in [`docs/plan-lifecycle.md`](docs/plan-lifecycle.md).
+Concrete **Plans** reach the estate through `plan-api` — the single writer that
+validates, applies the auto-composition injection policy, and creates the Plan CRD.
+Three front doors converge on it: MCP `create_plan` (forwards a user bearer), the
+Portal, and — on merge — this repo's release postsubmit
+([`cmd/plan-submit`](cmd/plan-submit)), which submits every `plans/*.yaml`
+(excluding `example-*`) to plan-api with an s2s token. The release runs on **both
+clusters**, each self-submitting to its local plan-api, so both estates receive the
+proposal. However it arrives, a Plan always lands **paused** — a second,
+human-gated promote/unpause controls execution. The full three-gate lifecycle
+(with `paused` enforced at every layer) is documented in
+[`docs/plan-lifecycle.md`](docs/plan-lifecycle.md).
+
+> The catalog auto-submit leg runs as the `plan-catalog-internal-services` s2s
+> client (scope `leartechapi.internal_services`, audience `leartech-plan-api`),
+> provisioned on both clusters: a Hydra client (registered via leartech-auth-service
+> `setup-internal-clients`), its secret in the platform backend
+> (`plan-catalog-internal-client-secret`), synced to a `plan-catalog-internal-services`
+> k8s Secret (key `client-secret`) in the `jx` namespace by an ExternalSecret. If
+> that Secret is ever absent the release step self-skips (safe no-op), so the repo
+> stays mergeable even mid-provisioning.
 
 ## Strict human merge — no auto-merge
 
@@ -78,7 +94,7 @@ our product can host their own catalog and manage their own merge policy.
 ### Judged by current rules, never a stale copy
 
 The linter is Go that lives **in this repo**, and the presubmit builds it from the
-submission — so a PR that changes `internal/lint` tests its own change. To keep that
+submission — so a PR that changes `pkg/planlint` tests its own change. To keep that
 from letting a Plan pass against an _old_ contract, `main` requires every PR to be
 **up to date before merge** (branch-protection strict checks). A branch that forked
 before a rule landed cannot merge until it pulls `main`, which rebuilds the linter
@@ -104,7 +120,7 @@ templates/       reusable PlanTemplates (composed via `use:` + `with:`)
 cmd/plan-lint/   the deterministic hard gate (Go entrypoint; -json for agents)
 cmd/crd2schema/  generates schemas/ JSON Schema from the vendored CRDs
 cmd/rulesdoc/    generates docs/rules.{json,md} from the rule catalog
-internal/lint/   the rules engine (R1–R22) + rule metadata + unit tests
+pkg/planlint/   the rules engine (R1–R22) + rule metadata + unit tests
 schemas/         CRD-derived JSON Schema (kubeconform) + vendored CRDs under crd/
 docs/            rules.json + rules.md (generated) · flywheel.md
 scripts/         plan-ai-review.sh + plan-lint-comment.sh + plan-cluster-verify.sh (live-CRD dry-run)

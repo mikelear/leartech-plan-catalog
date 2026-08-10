@@ -1,5 +1,5 @@
 // Command rulesdoc generates the machine- + human-readable rule catalog from the
-// single source (internal/lint.Rules): docs/rules.json (agents) and docs/rules.md
+// single source (pkg/planlint.Rules): docs/rules.json (agents) and docs/rules.md
 // (humans + the `doc` anchors the PR comment links to). Regenerate whenever the
 // rules change:
 //
@@ -18,7 +18,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mikelear/leartech-plan-catalog/internal/lint"
+	"github.com/mikelear/leartech-plan-catalog/pkg/planlint"
 )
 
 func main() {
@@ -29,15 +29,15 @@ func main() {
 	}
 
 	// Deterministic order: R1, R2, … R19 (numeric, not lexical).
-	ids := make([]string, 0, len(lint.Rules))
-	for id := range lint.Rules {
+	ids := make([]string, 0, len(planlint.Rules))
+	for id := range planlint.Rules {
 		ids = append(ids, id)
 	}
 	sort.Slice(ids, func(i, j int) bool { return ruleNum(ids[i]) < ruleNum(ids[j]) })
 
-	ordered := make([]lint.RuleMeta, 0, len(ids))
+	ordered := make([]planlint.RuleMeta, 0, len(ids))
 	for _, id := range ids {
-		ordered = append(ordered, lint.Rules[id])
+		ordered = append(ordered, planlint.Rules[id])
 	}
 
 	// rules.json
@@ -55,7 +55,7 @@ func main() {
 	// rules.md
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Plan Catalog rules (%s–%s)\n\n", ordered[0].ID, ordered[len(ordered)-1].ID)
-	b.WriteString("_Generated from `internal/lint` — do not edit by hand; run `make rules`._\n\n")
+	b.WriteString("_Generated from `pkg/planlint` — do not edit by hand; run `make rules`._\n\n")
 	b.WriteString("Every rule the deterministic `plan-lint` gate enforces. Errors block merge; ")
 	b.WriteString("a failing PR comment links each rule here by its anchor (e.g. `#r11`).\n\n")
 	b.WriteString("| Rule | Title | What it checks |\n|---|---|---|\n")
