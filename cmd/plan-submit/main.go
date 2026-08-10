@@ -178,9 +178,15 @@ func fetchToken(ctx context.Context) (string, error) {
 		return "", errors.New("LEARTECH_AUTH_TOKEN_URL, LEARTECH_PLAN_SUBMIT_CLIENT_ID and LEARTECH_PLAN_SUBMIT_CLIENT_SECRET must be set")
 	}
 
+	// client_secret_post: credentials go in the BODY, not a Basic header — this
+	// is the token_endpoint_auth_method the estate's s2s clients are registered
+	// with (see leartech-auth-service setup-internal-clients.sh). Sending Basic
+	// auth against a client_secret_post client 401s with invalid_client.
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
 	form.Set("scope", scope)
+	form.Set("client_id", clientID)
+	form.Set("client_secret", clientSecret)
 	if audience != "" {
 		form.Set("audience", audience)
 	}
@@ -188,7 +194,6 @@ func fetchToken(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	req.SetBasicAuth(clientID, clientSecret)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 
