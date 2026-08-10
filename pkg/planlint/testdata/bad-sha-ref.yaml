@@ -1,0 +1,18 @@
+# BAD (R24) — a standalone verify-release-flow is legitimate (no PR step to
+# duplicate), but with.sha: HEAD is not a resolvable commit sha; the release/verify
+# checks can't resolve a ref at check time. Use a full 40-hex commit sha, or omit
+# it and rely on the injected PR token.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: bad-sha-ref
+spec:
+  paused: true
+  steps:
+    - name: verify
+      kind: check
+      use: verify-release-flow
+      with:
+        repo: mikelear/example
+        service: example
+        sha: HEAD # ← R24: not a commit sha
