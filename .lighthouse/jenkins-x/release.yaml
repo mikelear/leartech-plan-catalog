@@ -57,6 +57,51 @@ spec:
             set -u
             apk add --no-cache bash git curl >/dev/null 2>&1
             bash scripts/sync-templates-to-controller.sh
+        # Phase-3 catalog GH route: submit merged plans/*.yaml to plan-api (the
+        # SINGLE writer — it validates, applies the auto-composition injection
+        # policy, and creates a PAUSED proposal). This is the automation sibling
+        # of the plan MCP's create_plan (same POST /plans; s2s token instead of a
+        # forwarded user bearer). Runs on BOTH clusters; each self-submits to its
+        # LOCAL plan-api, so both estates receive the proposal with no cross-cluster
+        # networking. Dormant until the plan-catalog-release s2s secret is
+        # provisioned (optional secret envs stay empty → the step self-skips).
+        - image: golang:1.24-alpine
+          name: submit-plans
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+          env:
+          # In-cluster literals — identical on both clusters (service DNS), so no
+          # per-cluster config is needed. Hydra stamps its public issuer on the
+          # minted token regardless of the in-cluster endpoint hit, so plan-api's
+          # iss/aud validation still passes. Scope (leartechapi.internal_services)
+          # and audience (leartech-plan-api) come from the tool's defaults.
+          - name: LEARTECH_PLAN_API_URL
+            value: http://leartech-plan-api.jx-staging:8080
+          - name: LEARTECH_AUTH_TOKEN_URL
+            value: http://leartech-auth-service-hydra-public.jx-staging:4444/oauth2/token
+          - name: LEARTECH_PLAN_SUBMIT_CLIENT_ID
+            value: plan-catalog-internal-services
+          # The client SECRET is the ONLY backend-sourced value — synced from the
+          # leartech-secrets store by the plan-catalog-internal-services
+          # ExternalSecret (jx namespace). optional:true → the env stays empty and
+          # the step self-skips until that secret is provisioned.
+          - name: LEARTECH_PLAN_SUBMIT_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: plan-catalog-internal-services
+                key: client-secret
+                optional: true
+          script: |
+            #!/bin/sh
+            set -u
+            if [ -z "${LEARTECH_PLAN_SUBMIT_CLIENT_SECRET:-}" ]; then
+              echo "submit-plans: plan-catalog-internal-services secret not provisioned — skipping (route dormant)."
+              exit 0
+            fi
+            apk add --no-cache git >/dev/null 2>&1
+            go run ./cmd/plan-submit -dir plans
   podTemplate:
     tolerations:
     - key: sku

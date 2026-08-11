@@ -1,0 +1,14 @@
+# BAD (R6) — a `use:` step with an invalid kind.
+# `kind` must be one of pr|apply|check on EVERY step shape, including use: steps.
+# Before the rule was extended, `kind: gremlin` slipped through on use-steps
+# because the enum check only ran on concrete (agent) steps.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: bad-use-kind
+spec:
+  paused: true
+  steps:
+    - name: verify
+      kind: gremlin # ← invalid; R6 rejects it even though this is a use: step
+      use: verify-release-flow

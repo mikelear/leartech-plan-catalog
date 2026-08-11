@@ -35,6 +35,16 @@ spec:
                 name: tekton-git
                 key: username
                 optional: true
+          # Boot/variables bookkeeping env (AZURE_* creds + JX_REPOSITORY_*). Every
+          # buildpack stepTemplate carries this; the hand-written plan pipelines were
+          # missing it, so `jx gitops variables` couldn't allocate a per-context build
+          # number on AZ. All three sibling presubmits (plan-lint/plan-ai-review/
+          # plan-cluster-verify) then defaulted to build 1 and collided creating the
+          # same PipelineActivity — build-setup failed and the review step was skipped.
+          envFrom:
+          - secretRef:
+              name: jx-boot-job-env-vars
+              optional: true
           name: ""
           resources:
             requests:

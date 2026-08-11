@@ -1,4 +1,4 @@
-// Package lint is the DETERMINISTIC gate for the ShipProven Plan Catalog.
+// Package planlint is the DETERMINISTIC gate for the ShipProven Plan Catalog.
 //
 // This is the "golangci for Plans": deterministic, un-bypassable structural +
 // safety checks on every Plan / PlanTemplate submitted to the catalog. It is the
@@ -15,7 +15,7 @@
 // ExpandPlanSteps in leartech-orchestrator-controller) so that a Plan the catalog
 // accepts is a Plan the controller will actually run — the gate catches at PR time
 // exactly what would otherwise become a terminal Failed at reconcile.
-package lint
+package planlint
 
 import (
 	"bytes"
@@ -62,7 +62,7 @@ var (
 	// `inputs`) or a spec-level `description` (not a CRD field). R20 catches these.
 	planSpecKeys     = strset("command", "paused", "remediates", "steps", "tenant", "test", "triggeredBy")
 	templateSpecKeys = strset("params", "steps")
-	stepKeys         = strset("agentType", "budgetIter", "dependsOn", "fanIn", "fanInValidate", "hold", "inputs", "kind", "name", "repo", "test", "triggeredWhen", "use", "with")
+	stepKeys         = strset("agentType", "budgetIter", "dependsOn", "fanIn", "fanInValidate", "hold", "inputs", "kind", "name", "onFailure", "repo", "test", "triggeredWhen", "use", "with")
 	paramKeys        = strset("name", "required")
 	// Agent-type input contracts (R21). Dev agents consume an Initiative
 	// (name+repo+branch+goal); the infra agent is action-driven. AgentType CRs
@@ -76,7 +76,19 @@ var (
 	// infra is action-driven (checked below). ba's contract isn't encoded here —
 	// it falls through unvalidated rather than risk asserting a wrong shape.
 	devAgentTypes = strset("leartech-agent-go", "leartech-agent-ng", "leartech-agent-rust", "leartech-agent-py")
+	// autoInjectedTemplates are PlanTemplates the platform auto-composes on
+	// submission (plan-api injection) after a deployable PR step. A Plan must not
+	// hand-author them after its own PR step — that duplicates the injection (R23).
+	autoInjectedTemplates = strset("verify-release-flow")
+	// shaRE matches a git commit sha (7–40 hex). A with.sha that isn't one (e.g.
+	// the literal HEAD or a branch name) never resolves at check time (R24).
+	shaRE = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
 )
+
+// infraAgentType is the privileged infra agent (release-verify / deploy-health /
+// chart-config). Concrete steps using it are allowed ONLY in PlanTemplates (R22):
+// a plain catalog Plan must compose infra via a use: template, never hand-author it.
+const infraAgentType = "leartech-agent-infra"
 
 // lintInputs (R21) checks a concrete step's inputs match what its agentType's
 // runtime consumes — the agent Job fails at run time otherwise (a `goal`-only
@@ -347,10 +359,23 @@ func lintPlan(planName string, spec map[string]any, where string, f *Findings, i
 		lintUnknown(s, stepKeys, "step", sw, f)
 		switch {
 		case has(s, "use"):
+			// A use-step's kind must still be a valid enum — kind: gremlin + use
+			// would otherwise slip past the concrete-only check in default.
+			if k := asStr(s["kind"]); k != "" && !stepKinds[k] {
+				f.err("R6", sw, fmt.Sprintf("kind must be one of %v (got %q)", sortedKinds, k))
+			}
 			lintUseStep(planName, s, sw, f, idx)
 		case truthy(s["fanIn"]):
-			// fan-in is a no-agent step; its shape is checked in graphChecks
-			// (R13). It legitimately has no agentType/kind.
+			// fan-in is a no-agent GATE step; its DAG shape is checked in
+			// graphChecks (R13). Its kind must still be a valid enum, and it must
+			// NOT carry agentType — mixing a gate with a dev-agent step is a
+			// wiring bug the controller would silently drop.
+			if k := asStr(s["kind"]); k != "" && !stepKinds[k] {
+				f.err("R6", sw, fmt.Sprintf("kind must be one of %v (got %q)", sortedKinds, k))
+			}
+			if at := asStr(s["agentType"]); at != "" {
+				f.err("R13", sw, "fan-in step must not declare agentType (it is a no-agent gate — the agent work belongs in the steps it fans in from)")
+			}
 		default:
 			if k := asStr(s["kind"]); !stepKinds[k] {
 				f.err("R6", sw, fmt.Sprintf("kind must be one of %v (got %q)", sortedKinds, k))
@@ -358,6 +383,12 @@ func lintPlan(planName string, spec map[string]any, where string, f *Findings, i
 			if at := asStr(s["agentType"]); at == "" {
 				f.err("R6", sw, "concrete step needs agentType")
 			} else {
+				// R22 infra steps are template-only. lintPlan runs for kind: Plan
+				// only, so any concrete infra step here is a violation — infra is
+				// composed via a use: PlanTemplate, never hand-authored in a Plan.
+				if at == infraAgentType {
+					f.err("R22", sw, "infra steps (agentType leartech-agent-infra) are not allowed in a plain Plan — compose a PlanTemplate via `use:` (e.g. use: verify-release-flow); infra steps belong only in PlanTemplates")
+				}
 				lintInputs(at, s, sw, f) // R21 inputs shape by agentType
 			}
 		}
@@ -365,7 +396,50 @@ func lintPlan(planName string, spec map[string]any, where string, f *Findings, i
 		lintTestDirected(planIsTest, s, sw, f)
 	}
 
+	lintAutoInject(steps, where, f)
 	graphChecks(steps, where, f)
+}
+
+// lintAutoInject (R23) rejects a hand-authored use:<auto-injected-template> step
+// that dependsOn a deployable PR step — the platform injects that verification on
+// submission (wired to the merged PR), so hand-authoring it duplicates the
+// expansion (and usually carries a broken hand-set sha). The deployable-PR test
+// mirrors the plan-api injection trigger: a concrete (non-use, non-fanIn) step
+// whose kind is pr (empty coerces to pr) AND that carries a repo. A STANDALONE
+// verify-release-flow (no dependsOn on such a step — verifying an already-deployed
+// service by explicit sha) is legitimate and left alone. Runs on the SUBMITTED
+// plan; plan-api validates BEFORE it injects, so its own injected step (added
+// after validation) never trips this.
+func lintAutoInject(steps []any, where string, f *Findings) {
+	prSteps := map[string]bool{}
+	for _, raw := range steps {
+		s := mapOf(raw)
+		if has(s, "use") || truthy(s["fanIn"]) {
+			continue
+		}
+		if normalizeKind(asStr(s["kind"])) == "pr" && asStr(s["repo"]) != "" {
+			if n := asStr(s["name"]); n != "" {
+				prSteps[n] = true
+			}
+		}
+	}
+	if len(prSteps) == 0 {
+		return
+	}
+	for i, raw := range steps {
+		s := mapOf(raw)
+		use := asStr(s["use"])
+		if !autoInjectedTemplates[use] {
+			continue
+		}
+		sw := fmt.Sprintf("%s step[%d]=%s", where, i, orQ(asStr(s["name"])))
+		for _, dep := range strSlice(s["dependsOn"]) {
+			if prSteps[dep] {
+				f.err("R23", sw, fmt.Sprintf("`use: %s` dependsOn PR step %q — the platform auto-injects this verification after deployable PR steps (wired to the merged PR). Remove this step; injection composes it.", use, dep))
+				break
+			}
+		}
+	}
 }
 
 func lintUseStep(planName string, s map[string]any, sw string, f *Findings, idx TemplateIndex) {
@@ -381,6 +455,13 @@ func lintUseStep(planName string, s map[string]any, sw string, f *Findings, idx 
 	if len(bad) > 0 {
 		sort.Strings(bad)
 		f.err("R14", sw, fmt.Sprintf("a `use:` step MUST NOT declare: %s (the template supplies these)", strings.Join(bad, ", ")))
+	}
+
+	// R24 a supplied with.sha must be a resolvable commit sha (7–40 hex); the
+	// literal HEAD or a branch name never resolves at check time. Checked here so
+	// it applies whether or not the template is co-submitted.
+	if sha := asStr(mapOf(s["with"])["sha"]); sha != "" && !shaRE.MatchString(sha) {
+		f.err("R24", sw, fmt.Sprintf("with.sha %q is not a commit sha — use a full 40-hex sha, or omit sha (the injected verify uses the merged PR); HEAD/branch names never resolve", sha))
 	}
 
 	tmplName := asStr(s["use"])
