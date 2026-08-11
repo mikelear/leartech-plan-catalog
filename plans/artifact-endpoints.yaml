@@ -223,45 +223,20 @@ spec:
     # Canned infra action: the infra agent is action-driven, not goal-driven (R21).
     # release-health-check is exactly this gate — it waits for the released version to
     # be live rather than assuming a merge means a rollout.
-    - name: release-artifact-api
-      kind: check
-      agentType: leartech-agent-infra
-      dependsOn:
-        - gitops-gsm
-        - gitops-akv
-        - rest-endpoints
-      inputs:
-        action: release-health-check
-        service: leartech-artifact-api
-        namespace: jx-staging
-        budgetMinutes: 30
-
-    - name: release-mcp-servers
-      kind: check
-      agentType: leartech-agent-infra
-      dependsOn:
-        - mcp-tools
-      inputs:
-        action: release-health-check
-        service: leartech-mcp-servers
-        namespace: jx-staging
-        budgetMinutes: 30
-
-    # ── 6. The acceptance test that matters ──
-    # Dev agent, not infra: the infra agent runs only canned actions, and these
-    # assertions are arbitrary functional work. kind:check + a dev agentType is a legal
-    # pairing (no rule couples the two) and it keeps the verdict on the exit code.
     - name: verify-roundtrip
       kind: check
       agentType: leartech-agent-go
       dependsOn:
-        - release-artifact-api
-        - release-mcp-servers
+        - gitops-gsm
+        - gitops-akv
+        - rest-endpoints
+        - mcp-tools
       inputs:
         name: verify-roundtrip
         repo: mikelear/leartech-artifact-api
         branch: feat/verify-roundtrip
         goal: >-
+          Because release verification is AUTO-INJECTED after the PR step (R23) rather than hand-authored, this step depends on the PR step directly and MUST therefore wait for the rollout itself: poll until the released version is live on the target cluster(s) with a deadline, and FAIL (exit non-zero) if it is not. Verifying at merge time races the rollout and asserts against the old version. 
           Deterministically confirm the artifact path works end to end on jx-staging, on
           BOTH clusters. This is a verification step only — do NOT open a PR and do NOT
           modify the repo. FAIL (exit non-zero) if ANY assertion below fails; the verdict
