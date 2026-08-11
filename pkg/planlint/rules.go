@@ -1,4 +1,4 @@
-package lint
+package planlint
 
 // RuleMeta is the human- + machine-readable description of a lint rule. It is the
 // single source for: the generated rule catalog (docs/rules.json + rules.md), the
@@ -11,7 +11,7 @@ type RuleMeta struct {
 	Fix   string `json:"fix"`
 }
 
-// Rules is the catalog of every lint rule, keyed by ID (R1…R19). Keep in lockstep
+// Rules is the catalog of every lint rule, keyed by ID (R1…R24). Keep in lockstep
 // with the checks in lint.go — a rule referenced in a Finding must have an entry.
 var Rules = map[string]RuleMeta{
 	"R1":  {"R1", "Valid document", "A Plan must parse as YAML and have a spec mapping, or the controller can't admit it.", "Fix the YAML syntax; ensure top-level apiVersion/kind/metadata/spec are present and spec is a mapping."},
@@ -35,6 +35,9 @@ var Rules = map[string]RuleMeta{
 	"R19": {"R19", "Test coherence", "test.directed vocabulary is kind-specific; a mismatch is a silent no-op, and a directive without spec.test is ignored.", "Match test.directed to the step kind (pr→merged|closed_unmerged|opened, check→pass|fail, apply→succeed|error) and set spec.test: true."},
 	"R21": {"R21", "Inputs by agent type", "A step's inputs are consumed by the agent runtime, so they must match the agentType's contract or the agent Job fails at run time. Dev agents (go/ng/rust/py) consume an Initiative (name + goal + repo + branch, or a repos: list); the infra agent is action-driven (action + per-action fields), not goal-driven.", "Dev steps: inputs {name, repo, branch, goal} (branch required for the legacy single-repo shape; or use repos:[{repo,branch}]). Infra steps: inputs {action, …} (e.g. release-health-check / chart-config). See AGENTS.md."},
 	"R20": {"R20", "No unknown fields", "Fields not in the Plan/PlanTemplate CRD are strict-decoded out by the apiserver at apply, so a Plan carrying them cannot be instantiated. Common offenders: a step-level `goal` (belongs under `inputs`) and a spec-level `description` (not a CRD field).", "Use only CRD fields. Put a step goal under `inputs:` (inputs.goal); drop spec-level `description` (use a YAML comment for human context)."},
+	"R22": {"R22", "Infra steps live in templates", "Infra steps (agentType leartech-agent-infra) are privileged, cross-cutting operations — release-verify, deploy-health, chart-config. In the PUBLIC catalog a plain Plan must not hand-author them: they belong in curated, OWNERS-gated PlanTemplates and are composed via use:. Hand-authored infra in a submitted Plan is a governance + security hole (a submitter declaring privileged infra work directly) and duplicates the standard verification the deployment path injects. Infra steps are allowed ONLY in kind: PlanTemplate.", "Remove the infra step from the Plan and compose the right PlanTemplate via a use: step instead (e.g. `use: verify-release-flow`). If no template covers your need, propose a new PlanTemplate (which OWNERS review) rather than hand-authoring the infra step."},
+	"R23": {"R23", "verify-release-flow is auto-injected", "The platform auto-composes verify-release-flow after every deployable PR step (kind:pr carrying a repo), wired to the REAL merged PR (pr=${steps.<step>.pr}). A hand-authored `use: verify-release-flow` that dependsOn such a step therefore duplicates that injection — two verify-release-flow expansions — and typically also carries a broken hand-set sha. (A standalone verify-release-flow that does NOT dependsOn a PR step — verifying an already-deployed service by explicit sha — is legitimate and allowed.)", "Remove the `use: verify-release-flow` step that dependsOn your PR step — the platform injects it on submission. Keep a hand-authored verify-release-flow only to verify a service NOT produced by a PR step in this Plan (and then supply an explicit commit sha)."},
+	"R24": {"R24", "Resolvable commit sha", "A supplied `with.sha` must be a real commit sha (7–40 hex) so the release/verify checks can resolve the commit; a ref like HEAD or a branch name never resolves at check time and the check fails. With auto-injection you normally omit sha entirely — the injected verify uses the merged PR.", "Set with.sha to a full commit sha (40 hex), or omit it and rely on the injected PR token. Do not use HEAD or a branch name."},
 }
 
 // Enriched is a Finding plus its catalog metadata — the shape emitted in

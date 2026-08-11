@@ -93,6 +93,26 @@
                 "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
                 "type": "string"
               },
+              "onFailure": {
+                "description": "OnFailure, when set, declares that this step OPTS IN to a downstream\nescalation when it reaches StepPhaseFailed. This is the declarative,\nname-/kind-AGNOSTIC replacement for the old hardcoded step-name trigger\n(release-monitor / release-health): the presence of\nOnFailure.Escalate == \"ba\" is the WHOLE gate — absence = no escalation,\nregardless of the step's name or kind.\n\nThe controller — NOT the failing job — fires the escalation, from the\nstep's DURABLE status on the always-running reconciler. So an OOM /\ntoken-limit / pod-death that kills the failing agent can never swallow\nthe escalation. This is the reliability point of moving the trigger off\nthe job and onto the controller.\n\nThe step does NOT diagnose its own failure — diagnosis is the BA's job.\nOnFailure.Context is STATIC guidance the plan author declares up-front;\nthe controller merges it (plus any best-effort AgentRun status.escalation\nenrichment) into the brief it hands the BA. The brief only POINTS the BA\nat the failure; it never pre-solves it.\n\nA `use:` (template-expansion) step MUST NOT set OnFailure — like the\nother non-use fields (AgentType / Inputs / Repo / BudgetIter / Hold /\nFanIn / FanInValidate / TriggeredWhen), it belongs on the expanded\ntemplate steps themselves, not on the use-step. Only DependsOn is\nhonoured on a use-step.",
+                "properties": {
+                  "context": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "Context is STATIC, plan-author-declared guidance merged verbatim into\nthe BA brief when this step fails. Free-form key/value pairs — a pointer\nat known runbooks, likely-suspect components, prior-incident links, etc.\nThe controller does NOT interpret it; it forwards the map into the\nescalation event's context annotation (JSON) so the BA has the author's\nup-front hints without re-deriving them. Optional — a nil/empty Context\nstill fires the escalation from the durable facts the controller holds.",
+                    "type": "object"
+                  },
+                  "escalate": {
+                    "description": "Escalate names the escalation target. The only accepted value today is\n\"ba\" — escalate to a leartech-agent-ba remediation AgentRun. An empty\nEscalate (the field omitted) means NO escalation: the presence of\nEscalate == \"ba\" is the entire opt-in gate.",
+                    "enum": [
+                      "ba"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
               "repo": {
                 "description": "Repo, when set, is passed to the AgentRun (git clone init-container).",
                 "type": "string"
