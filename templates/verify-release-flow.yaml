@@ -1,0 +1,144 @@
+# verify-release-flow — deterministic, Go-MCP-backed verification that a release
+# actually went all the way through, per cluster.
+#
+# This is the "release_verify" composition. It is NOT a monolithic Go tool — it
+# is a PlanTemplate whose steps are `kind: check`, each a THIN DETERMINISTIC infra
+# action that calls exactly ONE Go MCP tool and passes/fails on that tool's typed
+# verdict. No LLM turn-loop, no STAGE_STATUS transcription: all the logic lives in
+# Go; the agent step is a pure relay. The composition is Plan-native (the DAG),
+# so a timed-out/blipped sub-check is re-runnable on its own.
+#
+# QUESTIONS VERIFIED (canonical release checklist, Q1–Q7) and which STEP covers each.
+# The four steps run in TEMPORAL order (release → promote → boot → deployed); one
+# Go tool answers a whole group of questions, so several Q's fold into one step:
+#
+#   Step 1  release-passed          Q1 release fired + Q2 tekton passed
+#   Step 2  promote-merged    Q4 promote PR opened + Q5 green + Q6 merged
+#   Step 3  bootjob-ran       Q7 a jx-boot Job ran that applied the promote
+#   Step 4  deploy-healthy         Q3 the right version is deployed + healthy
+#
+# Note the labels: Q's are the canonical checklist you asked for (fixed numbering);
+# STEPS are renumbered 1–4 in execution order to avoid confusion. Q3 ("right
+# version, per cluster") is verified LAST because "deployed + healthy" can only be
+# true after promote merges (Step 2) and the boot applies it (Step 3).
+#
+# Tool mapping:
+#   Step 1 → tekton    release_pipeline_status(repo, sha)      fired && passed
+#   Step 2 → jx_release promote_status(service, clusters)      opened + green + merged
+#   Step 3 → k8s        bootjob_for_commit(service, cluster)   a boot ran (see step-3 note)
+#   Step 4 → k8s        deploy_health(service, namespace, cluster)  healthy && version match
+#
+# STEP 4 IS THE "RELEASE IS OUT" GATE (locked semantics). deploy_health reads the
+# live Deployment DIRECTLY — healthy := (>=1 available/ready replica) AND (the running
+# image tag == this cluster's OWN published version, normalized). It checks the RESULT
+# (the Deployment), NOT the process (the boot Job). It says nothing about whether the
+# boot Job succeeded. Consequently:
+#   * boot APPLIES the new version, THEN fails on housekeeping (e.g. regen-phase-3 git
+#     "divergent branches")  → the new version is up + ready → Step 4 PASSES. The
+#     release genuinely went out; the boot's later failure is a SEPARATE operational
+#     concern (Step 3 confirms a boot ran; the observer/Alert jobs own boot-Job health).
+#   * boot fails BEFORE applying the new version  → the new version never lands → the
+#     Deployment is still on the OLD version (or 0 available) → Step 4 FAILS. A boot
+#     that dies early can NOT pass this gate.
+# CRITICAL: "the NEW version is out" is only asserted when Step 4 knows the expected
+# version — deploy_health's version check is vacuously true when no version is given,
+# so a version-BLIND check only proves "something healthy is running", which would
+# wrongly pass the boot-dies-early-old-version-still-up case. So Step 4 derives each
+# cluster's promoted version (from promote_status — the "promote <svc> to version X"
+# PR title) and compares it against the running image; if it cannot establish that
+# version it FAILS CLOSED rather than pass blind. That is what makes it a true "the
+# new release is out" gate. Step 4 depends on Step 2 (NOT Step 3): the boot-Job
+# correlation is unreliable, so it must never gate the authoritative deploy check.
+#
+# CROSS-CLUSTER: per-cluster versioned charts mean gcp and az can be on DIFFERENT
+# versions (e.g. gcp 0.0.14 / az 0.0.13) — each check runs per cluster against
+# that cluster's OWN published version (normalized compare), never a shared one.
+#
+# Trigger: an empty commit to the target repo's main → a Plan use:-ing this
+# template with {repo, sha, service} → the checks run per cluster.
+apiVersion: agent.leartech.io/v1alpha1
+kind: PlanTemplate
+metadata:
+  name: verify-release-flow
+spec:
+  # {repo, pr} is all the controller has at auto-inject time (it tracks the merged
+  # dev PR, not a release sha). So repo is the only required param: the checks
+  # resolve pr→merge_commit_sha themselves and default service to the repo name.
+  # sha/service remain accepted as explicit overrides (manual/testing). One of
+  # {pr, sha} must be given for release-passed — enforced at check time, since a
+  # PlanTemplate can't express "one of" (an absent optional param → empty string).
+  params:
+    - name: repo
+      required: true # owner/name of the released service repo (e.g. mikelear/leartech-plan-api)
+    - name: pr
+      required: false # the merged PR number; release/bootjob resolve its merge_commit_sha
+    - name: sha
+      required: false # explicit release commit (overrides pr); the main-push commit
+    - name: service
+      required: false # deployed service name; defaults to the bare repo name when omitted
+  steps:
+    # Step 1 (Q1+Q2) — did the release pipeline FIRE and PASS for this commit?
+    - name: release-passed
+      kind: check
+      agentType: leartech-agent-infra-go
+      inputs:
+        action: release-pipeline-status # → tekton release_pipeline_status
+        repo: ${repo}
+        pr: ${pr} # resolved to merge_commit_sha when sha is empty
+        sha: ${sha}
+      onFailure:
+        escalate: ba # a failed release pipeline needs a BA to diagnose
+        context:
+          hint: "read the release Tekton PipelineRun's failing step; a missing run means the main-push trigger/webhook did not fire"
+    # Step 2 (Q4+Q5+Q6) — promote PR opened on BOTH GitOps repos, all green, merged?
+    - name: promote-merged
+      kind: check
+      agentType: leartech-agent-infra-go
+      dependsOn:
+        - release-passed
+      inputs:
+        action: promote-status # → jx_release promote_status (paginated, cluster-filtered)
+        repo: ${repo} # service defaults to the bare repo name when service is empty
+        service: ${service}
+      onFailure:
+        escalate: ba
+        context:
+          hint: "inspect the promote PR's qa-gate/verify on the failing cluster's GitOps repo; a persistent red gate is a cross-plan hand-off"
+    # Step 3 (Q7) — did a jx-boot Job reconcile this release's promote commit?
+    #   (boot-ran signal; Step 4 below is the authoritative "landed" check.)
+    - name: bootjob-ran
+      kind: check
+      agentType: leartech-agent-infra-go
+      dependsOn:
+        - promote-merged
+      inputs:
+        action: bootjob-for-commit # → k8s bootjob_for_commit
+        repo: ${repo} # used as the boot repo_url + to resolve pr→merge_commit_sha (best-effort)
+        pr: ${pr}
+        sha: ${sha}
+      onFailure:
+        escalate: ba
+        context:
+          hint: "check the jx-boot Job logs in jx-git-operator; NO boot at all means the promote merge did not reconcile (deploy-healthy is the authoritative landed signal)"
+    # Step 4 (Q3) — is each cluster's OWN promoted NEW version deployed + healthy?
+    #   The AUTHORITATIVE "the release is out" gate (>=1 ready replica AND running
+    #   image == this cluster's promoted version). Reads the Deployment directly, so
+    #   it is TRUE regardless of boot-Job health — and FALSE if the boot died before
+    #   applying the new version. Derives each cluster's expected version from
+    #   promote_status (by service) and FAILS CLOSED if it can't, so it never passes
+    #   version-blind. Depends on Step 2 (NOT Step 3) so the unreliable boot-Job
+    #   correlation can't block this check.
+    - name: deploy-healthy
+      kind: check
+      agentType: leartech-agent-infra-go
+      dependsOn:
+        - promote-merged
+      inputs:
+        action: deploy-health # → k8s deploy_health (version-aware; expected version from promote_status)
+        repo: ${repo} # service defaults to the bare repo name when service is empty
+        service: ${service}
+        namespace: jx-staging
+      onFailure:
+        escalate: ba # the authoritative "release is out" gate failing is the highest-signal escalation
+        context:
+          hint: "compare the running Deployment image tag vs the promoted version per cluster; check pod events + whether the boot applied it"

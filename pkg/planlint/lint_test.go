@@ -1,4 +1,4 @@
-package lint
+package planlint
 
 import (
 	"strings"
@@ -72,6 +72,8 @@ func assertWarn(t *testing.T, f *Findings, code string) {
 	}
 }
 
+// goodPlan is the canonical CORRECT pattern: a dev PR step, then verification
+// COMPOSED via a `use:` template (never a hand-authored infra step — see R22).
 const goodPlan = `
 apiVersion: agent.leartech.io/v1alpha1
 kind: Plan
@@ -88,11 +90,9 @@ spec:
         repo: mikelear/x
         branch: feat/step-a
         goal: do a
-    - name: b
-      kind: check
-      agentType: leartech-agent-infra
-      inputs:
-        action: release-health-check
+    - name: verify
+      use: good-template
+      with:
         service: x
       dependsOn: [a]
 `
@@ -116,7 +116,8 @@ spec:
 `
 
 func TestGoodPlanPasses(t *testing.T) {
-	f := lintYAML(t, goodPlan)
+	// Co-submit the template so the use: step resolves cleanly (no R15 warn).
+	f := lintDocs(t, goodPlan, goodTemplate)
 	if len(f.Errors) != 0 {
 		t.Fatalf("good plan should have no errors, got %v", f.Errors)
 	}
@@ -127,6 +128,33 @@ func TestGoodTemplatePasses(t *testing.T) {
 	if len(f.Errors) != 0 {
 		t.Fatalf("good template should have no errors, got %v", f.Errors)
 	}
+}
+
+// TestR22InfraStepRejectedInPlan: a plain Plan that hand-authors a
+// leartech-agent-infra step is rejected — infra is template-only.
+func TestR22InfraStepRejectedInPlan(t *testing.T) {
+	plan := `
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: infra-in-plan
+spec:
+  paused: true
+  steps:
+    - name: verify
+      kind: check
+      agentType: leartech-agent-infra
+      inputs:
+        action: release-health-check
+        service: x
+`
+	assertErr(t, lintYAML(t, plan), "R22")
+}
+
+// TestR22InfraAllowedInTemplate: a PlanTemplate MAY carry infra steps (that is
+// where they belong) — R22 must not fire for kind: PlanTemplate.
+func TestR22InfraAllowedInTemplate(t *testing.T) {
+	assertNoErr(t, lintYAML(t, goodTemplate), "R22")
 }
 
 func TestR2ApiVersion(t *testing.T) {
