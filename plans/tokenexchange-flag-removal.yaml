@@ -88,41 +88,18 @@ spec:
 
     # Canned infra actions — the infra agent is action-driven, not goal-driven (R21).
     # Both MCP deployments must be live before exchange is re-verified.
-    - name: release-mcp-internal
-      kind: check
-      agentType: leartech-agent-infra
-      dependsOn:
-        - remove-switch
-      inputs:
-        action: release-health-check
-        service: leartech-mcp-servers
-        namespace: jx-staging
-        budgetMinutes: 30
-
-    - name: release-mcp-public
-      kind: check
-      agentType: leartech-agent-infra
-      dependsOn:
-        - remove-switch
-      inputs:
-        action: release-health-check
-        service: leartech-mcp-servers-public
-        namespace: jx-staging
-        budgetMinutes: 30
-
-    # Dev agent, not infra: exercising the RFC 8693 path end to end is arbitrary
-    # functional work, and the infra agent runs only canned actions.
     - name: verify-exchange
       kind: check
       agentType: leartech-agent-go
       dependsOn:
-        - release-mcp-internal
-        - release-mcp-public
+        - remove-switch
+        - remove-switch
       inputs:
         name: verify-exchange
         repo: mikelear/leartech-mcp-servers
         branch: feat/verify-exchange
         goal: >-
+          Because release verification is AUTO-INJECTED after the PR step (R23) rather than hand-authored, this step depends on the PR step directly and MUST therefore wait for the rollout itself: poll until the released version is live on the target cluster(s) with a deadline, and FAIL (exit non-zero) if it is not. Verifying at merge time races the rollout and asserts against the old version. 
           Prove exchange still works with the flag gone — this is the whole risk of the
           change. This is a verification step: do NOT open a PR and do NOT modify the repo.
           FAIL (exit non-zero) if ANY assertion below fails; the verdict is this step's exit
