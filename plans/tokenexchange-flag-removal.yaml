@@ -93,7 +93,6 @@ spec:
       agentType: leartech-agent-go
       dependsOn:
         - remove-switch
-        - remove-switch
       inputs:
         name: verify-exchange
         repo: mikelear/leartech-mcp-servers
