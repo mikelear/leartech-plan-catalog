@@ -1,0 +1,123 @@
+# Build the public, AI-discoverable www.mortgagesourcing.com from an ARTIFACT bundle
+# (design guidance + our reference-implementation mockups) rather than inline prose.
+#
+# WHY THIS PLAN EXISTS
+# The site is the public READ face of the mortgages platform AND the flagship reference
+# implementation of hub/shared-rules/ai-discoverable-websites.md — the 5-layer stack:
+# Crawlable -> Structured -> Mapped -> Actionable/MCP -> Trusted. The design was produced as
+# portable HTML/CSS and lives in the bundle's refs/ as the REFERENCE IMPLEMENTATION; this Plan
+# asks an Angular agent to translate it into the real SSG site (leartech-mortgagesourcing-web).
+#
+# ARTIFACT (guidance, not contract):
+#   gs://artifacts-product-first/artifact/9685cf07-f5d7-4919-a0fa-b5869041a602/1/
+#     manifest.json  · label mortgagesourcing-website-visual · binding: guidance
+#     intent.md      · authoritative MUST / MUST NOT / MAY
+#     tokens.json    · DTCG brand tokens (navy #0B2A5B primary, emerald #0E9F6E the one accent)
+#     docs/          · WEBSITE-DESIGN · AI-DISCOVERABLE-BRIEF · MORTGAGES-PLATFORM
+#     refs/          · 5 HTML mockups + styles.css (reference impl) + 5 PNG renders
+#   refs/ are clean — no internal hosts / GCS paths / cluster tags — so they are publishable and
+#   need NO sanitisation (unlike the shipproven-website-visual bundle).
+#
+# PREREQUISITE — the same GCS-read gap that broke the first artifact-driven Plan.
+# Plan `agent-gcs-artifact-read` MUST have landed + promoted, or a spawned agent Job has no GCS
+# credential and this fails the way shipproven-website-visual did on 2026-08-10: it could not
+# read the bundle, built from goal prose alone, and INVENTED the primary brand colour. Read the
+# header of plans/shipproven-website-visual.yaml before running this. The goal's STOP condition
+# guards against silent success, but the credential must actually be in place first.
+#
+# VERIFICATION — auto-injected, deliberately NOT hand-authored.
+# R23 auto-composes verify-release-flow after every deployable PR step, wired to the real merged
+# PR. Hand-authoring `use: verify-release-flow` here would DUPLICATE that expansion, and R24
+# rules out the `sha: HEAD` such a step would need. So this Plan is a single PR step and the
+# release/deploy verification arrives on submission.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mortgagesourcing-website-visual
+spec:
+  paused: true
+  steps:
+    - name: build-public-site
+      kind: pr
+      agentType: leartech-agent-ng
+      inputs:
+        name: build-public-site
+        repo: mikelear/leartech-mortgagesourcing-web
+        branch: feat/public-site-build
+        goal: >-
+          Build the public, AI-discoverable www.mortgagesourcing.com. Your design direction and
+          page structure come from an ARTIFACT, not from this goal — fetch and read it first, in
+          full, before writing any code.
+
+          STOP CONDITION — READ FIRST. Fetching the artifact is a HARD PRECONDITION, not best
+          effort. Before any other work: write $GOOGLE_APPLICATION_CREDENTIALS_JSON to a file,
+          export GOOGLE_APPLICATION_CREDENTIALS pointing at it, read the bundle's manifest.json
+          and confirm its label is "mortgagesourcing-website-visual". If you cannot read it — no
+          credential in the environment, a 403, an empty listing, anything — STOP IMMEDIATELY and
+          fail the step with the exact error. Do NOT proceed from this goal's prose, do NOT
+          substitute the live site, do NOT infer brand values. Then confirm tokens.json contains
+          navy #0B2A5B; if that value is absent you have the wrong bundle. This mirrors the
+          precaution that shipproven-website-visual now carries after it silently built from
+          prose and produced a wrong primary brand colour.
+
+          ARTIFACT: gs://artifacts-product-first/artifact/9685cf07-f5d7-4919-a0fa-b5869041a602/1/
+          Read manifest.json first (it indexes everything and captions every ref), then intent.md
+          (the authoritative MUST / MUST NOT / MAY), then tokens.json, then the three docs under
+          docs/ (WEBSITE-DESIGN, AI-DISCOVERABLE-BRIEF, MORTGAGES-PLATFORM). refs/ holds five HTML
+          mockups + styles.css — the REFERENCE IMPLEMENTATION to translate into Angular — plus a
+          PNG render of each. binding=guidance, so intent.md's MAY list is real latitude: use it
+          and report what you chose.
+
+          VERIFY CURRENT STATE FIRST. The repo may hold only a holding page / the ai-baseline
+          scaffold. Inspect what actually exists — routes, prerender config, existing SEO files —
+          before building. Do not assume. Report the starting state in the PR.
+
+          WHAT TO BUILD:
+          1. DESIGN SYSTEM — take EVERY brand value from tokens.json, not from this goal. Navy
+             #0B2A5B primary; emerald #0E9F6E the SINGLE accent (CTAs / live / rate highlights);
+             gold #C9A227 reserved; light theme on #F7F8FA with white cards; Newsreader headings,
+             Inter body/UI, JetBrains Mono for code; 10px card radii; soft navy-tinted shadows;
+             content max-width ~1160px; whitespace-heavy. Express as the project's theming (CSS
+             custom properties / Angular theme — your choice). One accent only; introduce NO
+             colour outside tokens.json.
+          2. FIVE PAGES as Angular routes/components, structure + copy order per refs/: home (/),
+             /connect, /products (catalogue + filters), /products/:slug (detail), /demo.
+          3. AI-DISCOVERABILITY LAYER — this is the point of the site. Keep SSG prerender
+             (outputMode: static): no JS-only routes, no content behind interaction; bulk content
+             prerenders from the REST API at build. Put JSON-LD FinancialProduct on product pages,
+             mapping the shared schema per docs/AI-DISCOVERABLE-BRIEF: provider<-lender,
+             interestRate<-initial_rate, loanTerm<-term,
+             feesAndCommissionsSpecification<-attributes.fees,
+             description<-attributes.marketing_copy, attributes.features[] as tags,
+             attributes.ercs[] in content, dateModified<-updated_at. Emit llms.txt, sitemap.xml
+             with <lastmod>, robots.txt with a Sitemap: line, and a visible "Rates as of <date>"
+             trust line.
+          4. /connect advertises the MCP endpoint https://api.mortgagesourcing.com/mcp (Tier-0
+             anonymous) with copy-paste client config and the four tools search_products,
+             compare_products, get_product, get_product_rates — per refs/connect.html.
+          5. DATA — read-only; NEVER write products. Bulk/marketing + product pages prerender
+             server-side from the REST API (base URL from the runtime ConfigMap /api.conf.json,
+             default https://api.mortgagesourcing.com). /demo is client-side; until the TS/Angular
+             SDK and CORS on the public read endpoints land, use the bundled illustrative fixtures
+             shown in refs/demo.html and label them illustrative.
+
+          ACCESSIBILITY: WCAG 2.2 AA. Explicitly verify emerald #0E9F6E contrast on white AND on
+          #F7F8FA — green-on-white is the known risk in this palette. Keep a skip-link, visible
+          focus, keyboard nav and prefers-reduced-motion.
+
+          DO NOT REGRESS CRAWLABILITY. If a raw-HTML (no-JS) SEO presubmit already exists, keep it
+          green and do not weaken it. If none exists, ADD one that fetches RAW HTML with no JS and
+          asserts prerendering, the hero h1 verbatim, the full meta set, robots.txt with a
+          Sitemap: line and a well-formed sitemap.xml — so the AI-discoverable guarantee is
+          enforced by a gate, not merely implemented once.
+
+          REPORT IN THE PR DESCRIPTION: every derivation and MAY choice — how you expressed the
+          tokens, any layout adaptation from the mockups, and exactly which data is live vs
+          illustrative fixtures. Latitude is granted on condition it is recorded.
+
+          ISOLATE TESTING: extend end2end-ui specs to assert the build landed — the brand colours
+          resolve on the rendered page, all five routes prerender, a product page carries JSON-LD
+          FinancialProduct, llms.txt / sitemap.xml / robots.txt return 200, and /connect names the
+          MCP endpoint and the four tools. Runnable against the PR preview; no new infrastructure.
+
+          Done = PR merged (open via open_pr, drive gates green, SEO presubmit included).
