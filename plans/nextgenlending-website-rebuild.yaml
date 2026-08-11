@@ -13,10 +13,11 @@
 # the .lighthouse upgrade) go green.
 #
 # DESIGN SOURCE — inline (no GCS bundle). The brand + content direction is described in
-# the goal. A separate BLOCKCHAIN session will review this PR and confirm/fill the
-# chain-specific values flagged "[confirm: blockchain session]" (RPC endpoint + CORS,
-# chain id, native token, block time, headline stats). Build gracefully around those so
-# the site is correct + deployable before they are pinned.
+# the goal. The blockchain session confirmed the chain-specific values (2026-08-11, live
+# on verrian-prod) and they are folded in below — real endpoints, chain id, block time,
+# token. Keep the graceful fallback anyway (never hard-fail the page on an unreachable
+# endpoint), but no CORS block is expected — the RPC + explorer REST API are both
+# Access-Control-Allow-Origin: *.
 #
 # VERIFICATION — auto-injected, deliberately NOT hand-authored.
 # R23 auto-composes verify-release-flow after every deployable PR step, wired to the real
@@ -39,9 +40,9 @@ spec:
         goal: >-
           Rebuild the public www.nextgenlending.co.uk as a standard, AI-discoverable,
           server-prerendered (SSG) Angular site. The content direction is in this goal;
-          build to it. Some chain-specific values are marked "[confirm: blockchain session]" —
-          build gracefully around them (runtime-config + explorer as source of truth) so the
-          site is correct and deployable before they are pinned; do NOT invent chain facts.
+          build to it. The chain-specific values below are CONFIRMED (blockchain session,
+          2026-08-11, live on verrian-prod) — use them; do NOT invent chain facts. Keep a
+          graceful fallback anyway (never hard-fail the page on an unreachable endpoint).
 
           VERIFY CURRENT STATE FIRST. The repo is currently a Webpack Module-Federation SHELL
           (ngx-build-plus + @angular-architects/module-federation, loading MFEs at runtime).
@@ -90,18 +91,32 @@ spec:
              APIs; Plans auto-build contracts. Link to ShipProven.com (assume it is live).
           Keep a clear header nav + footer across all pages; link out to the Explorer prominently.
 
-          THE SIGNATURE — LIVE BLOCK TICKER (best-effort progressive enhancement, must not break
-          crawlability). Prerender a STATIC, crawlable line ("Block #<n> as of <UTC time>") into the
-          HTML at build; then client-side JS polls the chain to animate the number ticking up live.
-          Take the poll endpoint from the runtime ConfigMap /api.conf.json (same pattern the repo
-          already uses for runtime config) — an EVM JSON-RPC eth_blockNumber call (or the explorer's
-          block API) — with a sensible default and a graceful fallback: if the endpoint is unset,
-          unreachable, or CORS-blocked, keep the static prerendered value and a "View live on the
-          Explorer" link rather than erroring. [confirm: blockchain session] the exact RPC/API URL +
-          CORS + chain id. Do NOT hard-fail the page on a missing endpoint. The explorer
-          (https://explorer.nextgenlending.co.uk/) is the source of truth for chain data — link to it
-          rather than rebuilding it; you MAY include a couple of tasteful static screenshots/snippets
-          of the explorer as illustrative visuals (label them), but keep on-site chain data light.
+          THE SIGNATURE — LIVE BLOCK TICKER (progressive enhancement, must not break crawlability).
+          Prerender a STATIC, crawlable line ("Block #<n> as of <UTC time>") into the HTML at build;
+          then client-side JS polls the chain to animate the number ticking up live. Poll the public
+          EVM JSON-RPC at https://rpc.nextgenlending.co.uk (POST {"jsonrpc":"2.0","method":
+          "eth_blockNumber","params":[],"id":1}, parse the hex height) every ~12s (the chain's block
+          time). CORS is Access-Control-Allow-Origin: * — safe to poll directly from the browser.
+          For a richer ticker (height + hash + txn count) you MAY instead GET
+          https://blockscout-api.nextgenlending.co.uk/api/v2/blocks?type=block (also CORS *). There is
+          NO public WebSocket — HTTP-poll, do NOT use wss. Make the poll URL overridable via the
+          runtime ConfigMap /api.conf.json, defaulting to the RPC above. Keep a graceful fallback: if
+          unreachable, keep the static prerendered value + a "View live on the Explorer" link rather
+          than erroring — never hard-fail the page. The explorer (Blockscout v9,
+          https://explorer.nextgenlending.co.uk/, REST API https://blockscout-api.nextgenlending.co.uk)
+          is the source of truth — link to it prominently rather than rebuilding it; you MAY include a
+          couple of tasteful static screenshots of the explorer as illustrative visuals (label them),
+          but keep on-site chain data light.
+
+          CHAIN FACTS (confirmed, live on verrian-prod — use, do not invent): chain id 3151909
+          (0x301825); block time ~12s; native/gas token is ETH (devnet default — NOT custom-branded,
+          so do not invent a native ticker); a real example ERC-20 "NextGen Lending Token" (NGL) is
+          on-chain at 0xEC199A352DBEF2935Ab353e8430171d76E751Cae. Current headline stats (~1,159
+          blocks, 200+ txns, ~53 token holders, ~12s avg block time) are CLIMBING — either fetch them
+          live from https://blockscout-api.nextgenlending.co.uk/api/v2/stats or present as clearly-
+          labelled "approx / illustrative"; do NOT hard-code a number as if it were static. (The
+          Blockscout stats-charts API is currently CORS-scoped to the explorer origin, so for charts
+          prefer linking to the Explorer rather than embedding.)
 
           BRAND / VISUAL — propose a clean "institutional fintech × blockchain" identity and express it
           as design tokens (CSS custom properties / Angular theme). Starting direction (refine with
@@ -118,9 +133,10 @@ spec:
           SSG prerender (outputMode: static) — no JS-only routes, no content behind interaction; all
           content prerenders. Emit JSON-LD (Organization / FinancialService for the lender; describe
           the products/contracts with appropriate schema.org types on /contracts). Emit llms.txt,
-          sitemap.xml with <lastmod>, robots.txt with a Sitemap: line, and a visible trust line. Given
-          the ShipProven/agent theme, /build MAY advertise a machine endpoint (MCP or the public RPC)
-          for AI agents — include it if it is clean to do so, else note it as coming.
+          sitemap.xml with <lastmod>, robots.txt with a Sitemap: line, and a visible trust line. On
+          /build, advertise the public machine/dev endpoint for AI agents + developers: the EVM
+          JSON-RPC https://rpc.nextgenlending.co.uk (chain id 3151909) — show copy-paste RPC + chain-id
+          config. There is no MCP endpoint yet — present MCP as "coming soon".
 
           LINKS: Explorer = https://explorer.nextgenlending.co.uk/ (live — link prominently, and the
           block ticker links through to it). ShipProven = https://shipproven.com (assume live — plain
