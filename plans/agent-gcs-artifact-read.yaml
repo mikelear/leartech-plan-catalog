@@ -1,0 +1,170 @@
+# Let spawned agents READ artifact bundles from GCS — the gap that made the first
+# artifact-driven Plan silently build from partial guidance.
+#
+# WHAT HAPPENED (2026-08-10, plan `shipproven-website-visual`)
+# The Plan pointed the agent at a design bundle in a private GCS bucket. The agent tried
+# ~30 different routes, wrote /tmp/artifact/listing.json (0 BYTES), then gave up WITHOUT
+# ERRORING and built from the goal text alone. Result: the three hex values that happened
+# to be in the goal were correct; the primary brand ink was INVENTED — #0B1220 used 24
+# times where #0B1F3A was specified. Plausible, wrong, and merged-looking. PR #7 on
+# leartech-ship-proven-website was closed rather than merged for exactly this reason.
+#
+# THE CAUSE IS NARROW — no new credential mechanism is needed
+# The credential already exists and already works. `test-artifacts-gcs-key` is ESO-synced
+# into jx-staging (and jx) and is what the Observer + end2end-ui tasks already use to
+# upload artifacts (`gsutil -o "Credentials:gs_service_key_file=..."`). A debug pod with
+# that secret mounted read the bundle successfully — list, cat, download, sha256 match.
+#
+# The ONLY gap: jobspawn.go projects secrets to the agent Job as env from secretKeyRef via
+# a NAMED PAIR PER PURPOSE — GitHubSecretName/Key (GH_TOKEN), AnthropicSecretName/Key
+# (ANTHROPIC_API_KEY), AuthClientSecretName/Key (LEARTECH_AUTH_CLIENT_SECRET, opt-in).
+# There is no fourth pair for GCS, so the agent pod has no route to the bucket. Its
+# ServiceAccount is `default` and a metadata token resolves to the unbound Workload
+# Identity pool (`product-first.svc.id.goog`) → HTTP 403.
+#
+# EXPLICITLY NOT NEEDED (ruled out by testing, do not build these)
+#   - a new GSA: test-artifacts-writer already has objectAdmin on the bucket
+#   - Workload Identity / serviceAccountName plumbing
+#   - any terraform change
+#
+# THE FIX mirrors two existing precedents exactly:
+#   - AuthClientSecretName — an OPT-IN secret pair for a capability only some agent types
+#     need (no default, so a preview namespace without the Secret does not wedge the Job)
+#   - agentTypes.mcpAuth — a chart-level opt-in block that projects env onto every AgentType
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: agent-gcs-artifact-read
+spec:
+  paused: true
+  steps:
+    - name: controller-gcs-secret
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: controller-gcs-secret
+        repo: mikelear/leartech-orchestrator-controller
+        branch: feat/agent-gcs-secret
+        goal: >-
+          Let a spawned agent Job read GCS by projecting an OPT-IN GCS credential, following
+          the AuthClientSecretName precedent exactly.
+
+          CRD (api/v1alpha1/agenttype_types.go): add two optional fields to AgentTypeSpec —
+          GcsSecretName and GcsSecretKey. Document them the way the existing pairs are
+          documented: they name a Secret and key, never a credential value.
+
+          JOBSPAWN (internal/controller/jobspawn.go): project GOOGLE_APPLICATION_CREDENTIALS_JSON
+          from that Secret via secretEnv, in the same block as GH_TOKEN / ANTHROPIC_API_KEY.
+          Make it OPT-IN with NO default, exactly like LEARTECH_AUTH_CLIENT_SECRET — the
+          existing comment explains why: "so an MCP-less AgentType or a preview namespace
+          without the secret does not wedge the Job on a missing Secret". The same reasoning
+          applies here: most agent types never touch GCS, and preview namespaces may not have
+          the Secret. Default the KEY only (key.json), matching how defaultAuthClientSecretKey
+          works.
+
+          CHART: add an `agentTypes.gcs` block to values.yaml mirroring the shape and comment
+          style of the existing `agentTypes.mcpAuth` block (enabled / secretName / secretKey,
+          disabled by default, per-cluster GitOps overlays turn it on). When enabled, render
+          gcsSecretName + gcsSecretKey onto every AgentType in templates/agenttypes.yaml, the
+          same way mcpAuth renders authClientSecretName/Key. Default secretName to
+          test-artifacts-gcs-key and secretKey to key.json in the values comment, but do NOT
+          hardcode them into the template.
+
+          DO NOT add a volume/volumeMount — AgentTypeSpec has no volumes field and adding one
+          is a much larger change than this needs. Env projection is the established pattern
+          and is sufficient: the agent writes the JSON to a file and points
+          GOOGLE_APPLICATION_CREDENTIALS at it, which is what gcloud and gsutil expect.
+
+          ISOLATE TESTING: unit tests on buildJob asserting (a) no GCS env is projected when
+          GcsSecretName is empty — the wedge-avoidance property, (b) the env IS projected with
+          the right secretKeyRef name/key when set, (c) the key defaults while the name does
+          not. Plus a chart render test asserting the fields are absent when
+          agentTypes.gcs.enabled is false and present when true, mirroring the existing
+          mcpAuth chart tests. Runnable with `go test ./...` — no cluster.
+
+          LOGGING TO VERIFY: log at Job construction whether a GCS credential was projected
+          (secret name only, never the value) so a "why can't the agent read the bucket"
+          question is answerable from Loki.
+          Done = PR merged (open via open_pr, drive gates green).
+
+    - name: enable-gcs-gsm
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: enable-gcs-gsm
+        repo: mikelear/jx-build-cluster-gsm
+        branch: feat/agent-gcs-secret
+        goal: >-
+          Enable the agent GCS credential for the GCP cluster. In
+          helmfiles/jx-staging/configs/leartech-orchestrator-controller.yaml set the new
+          agentTypes.gcs block: enabled true, secretName test-artifacts-gcs-key, secretKey
+          key.json.
+
+          That Secret is already present in jx-staging (ESO-synced) and is the same one the
+          Observer and end2end-ui catalog tasks use to upload artifacts, so no new secret,
+          ExternalSecret or GSA is required. Comment the block explaining that it exists so
+          agents can READ artifact bundles referenced by a Plan, and that the same Secret is
+          the CI artifact writer.
+
+          Also declare, in whatever this repo uses for bucket configuration, the artifact
+          bucket and its IAM: gs://artifacts-product-first (private, US-EAST1, no public
+          access) with roles/storage.objectAdmin for
+          test-artifacts-writer@product-first.iam.gserviceaccount.com. Both were created by
+          hand during the 2026-08-09 smoke test and are currently UNDECLARED — a cluster
+          rebuild would lose them and the failure mode is a 403 long after anyone remembers
+          why. If bucket IAM is not owned by this repo, say so in the PR description and
+          leave it out rather than guessing at a home for it.
+          Done = PR merged (open via open_pr, drive gates green).
+
+    - name: enable-gcs-akv
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: enable-gcs-akv
+        repo: mikelear/jx-build-cluster-akv
+        branch: feat/agent-gcs-secret
+        goal: >-
+          Mirror enable-gcs-gsm for the Azure cluster: set the same agentTypes.gcs block on
+          leartech-orchestrator-controller's config. Confirm the Secret exists in that
+          cluster's jx-staging first — if ESO does not sync test-artifacts-gcs-key there, say
+          so in the PR description rather than enabling a projection that would wedge Jobs on
+          a missing Secret. The artifact bucket stays on GCS regardless of which cluster the
+          agent runs on, so the credential is the same. Keep the two cluster configs at parity
+          field-for-field.
+          Done = PR merged (open via open_pr, drive gates green).
+
+    - name: verify-agent-can-read
+      kind: check
+      agentType: leartech-agent-ng
+      dependsOn:
+        - controller-gcs-secret
+        - enable-gcs-gsm
+      inputs:
+        name: verify-agent-can-read
+        repo: mikelear/leartech-ship-proven-website
+        branch: feat/verify-gcs-read
+        goal: >-
+          Prove a spawned agent can now read an artifact bundle from GCS. This step is itself
+          the test — it runs as a normal dev agent, so if it can read the bundle then any
+          agent can. Verification only: do NOT open a PR and do NOT modify the repo. FAIL
+          (exit non-zero) if ANY assertion fails; the verdict is this step's exit code.
+
+          Setup: GOOGLE_APPLICATION_CREDENTIALS_JSON should be present in your environment.
+          Write it to a file and export GOOGLE_APPLICATION_CREDENTIALS pointing at that file
+          — that is what gcloud and gsutil expect. If the variable is ABSENT, fail
+          immediately and say so: it means the projection did not reach this Job, which is the
+          whole point of the change.
+
+          Assertions against
+          gs://artifacts-product-first/artifact/84a0eddb-5d20-4322-87c5-afebbae2c176/1/ :
+          - manifest.json is readable and its label is exactly "shipproven-website-visual-layer".
+          - The file list in the manifest matches what is actually in the bucket prefix.
+          - Download refs/plan-graph-deep-pipeline.png and confirm its sha256 equals the value
+            recorded for it in the manifest — proving integrity, not just reachability.
+          - tokens.json parses and contains ink #0B1F3A. This is the specific value the
+            2026-08-10 run invented as #0B1220, so it is the sharpest single proof that a real
+            agent can now obtain what it previously guessed.
+          - An UNAUTHENTICATED fetch of the same object returns 403, confirming the bucket is
+            still private and the read is genuinely credentialed.
+
+          Report each assertion pass/fail explicitly in the step output.

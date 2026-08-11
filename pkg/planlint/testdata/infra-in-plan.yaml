@@ -1,0 +1,17 @@
+# BAD (R22) — infra steps are TEMPLATE-ONLY. A plain Plan must not hand-author a
+# privileged leartech-agent-infra step (release-verify / deploy-health / config).
+# Compose a curated PlanTemplate via `use:` instead (e.g. use: verify-release-flow).
+# This is the flagship governance rule: the catalog is public, so infra lives only
+# in OWNERS-gated templates.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: bad-infra-in-plan
+spec:
+  paused: true
+  steps:
+    - name: verify
+      kind: check
+      agentType: leartech-agent-infra # ← R22 rejects infra steps in a plain Plan
+      inputs:
+        action: deploy-health

@@ -1,0 +1,19 @@
+# GOOD — the canonical correct shape, passes plan-lint with ZERO errors.
+# A dev-agent PR step carrying the full Initiative inputs (R21), held by default
+# (R5). Verification of a deployed service would be COMPOSED via `use:` a
+# PlanTemplate (see the catalog templates), never hand-authored here.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: good-plan
+spec:
+  paused: true # R5 — a submitted Plan is a proposal, held until approved
+  steps:
+    - name: implement
+      kind: pr
+      agentType: leartech-agent-go
+      inputs: # R21 — dev-agent steps carry the Initiative shape
+        name: implement
+        repo: mikelear/example
+        branch: feat/example
+        goal: implement the example feature

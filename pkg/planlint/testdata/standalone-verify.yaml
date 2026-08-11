@@ -1,0 +1,19 @@
+# GOOD — a standalone verify-release-flow (NO PR step in the Plan) verifying an
+# already-deployed service by an explicit commit sha. R23 does NOT fire (there's
+# nothing to duplicate) and the sha is a real 40-hex commit, so this passes clean.
+# (R15 warns because the template isn't co-submitted in this fixture — a warning,
+# not an error.) This is the legitimate counterpart to verify-after-pr.yaml.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: standalone-verify
+spec:
+  paused: true
+  steps:
+    - name: verify
+      kind: check
+      use: verify-release-flow
+      with:
+        repo: mikelear/example
+        service: example
+        sha: "0f490c0cd88fb43c53507771f739b8effe5a291d"
