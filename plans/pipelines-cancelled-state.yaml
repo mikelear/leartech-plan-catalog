@@ -90,29 +90,17 @@ spec:
           Done = PR merged (open via open_pr, drive gates green).
 
     # Canned infra action — the infra agent is action-driven, not goal-driven (R21).
-    - name: release-agent
-      kind: check
-      agentType: leartech-agent-infra
-      dependsOn:
-        - handle-cancelled
-      inputs:
-        action: release-health-check
-        service: leartech-automated-agent
-        namespace: jx-staging
-        budgetMinutes: 30
-
-    # Dev agent, not infra: producing a real superseded run and reading the rollup is
-    # arbitrary functional work, and the infra agent runs only canned actions.
     - name: verify-supersede
       kind: check
       agentType: leartech-agent-py
       dependsOn:
-        - release-agent
+        - handle-cancelled
       inputs:
         name: verify-supersede
         repo: mikelear/leartech-automated-agent
         branch: feat/verify-supersede
         goal: >-
+          Because release verification is AUTO-INJECTED after the PR step (R23) rather than hand-authored, this step depends on the PR step directly and MUST therefore wait for the rollout itself: poll until the released version is live on the target cluster(s) with a deadline, and FAIL (exit non-zero) if it is not. Verifying at merge time races the rollout and asserts against the old version. 
           Prove the fix against a REAL superseded run, not only synthetic fixtures — the
           unit tests cannot prove that GitHub actually reports what we think it reports.
           This is a verification step: do NOT open a PR against this repo and do NOT modify
