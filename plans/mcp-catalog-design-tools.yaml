@@ -69,29 +69,17 @@ spec:
           Done = PR merged (open via open_pr, drive gates green).
 
     # Canned infra action — the infra agent is action-driven, not goal-driven (R21).
-    - name: release-agent
-      kind: check
-      agentType: leartech-agent-infra
-      dependsOn:
-        - register-mcp
-      inputs:
-        action: release-health-check
-        service: leartech-automated-agent
-        namespace: jx-staging
-        budgetMinutes: 30
-
-    # Dev agent, not infra: these assertions are arbitrary functional work, and the
-    # infra agent runs only canned actions.
     - name: verify-catalog
       kind: check
       agentType: leartech-agent-go
       dependsOn:
-        - release-agent
+        - register-mcp
       inputs:
         name: verify-catalog
         repo: mikelear/leartech-automated-agent
         branch: feat/verify-catalog
         goal: >-
+          Because release verification is AUTO-INJECTED after the PR step (R23) rather than hand-authored, this step depends on the PR step directly and MUST therefore wait for the rollout itself: poll until the released version is live on the target cluster(s) with a deadline, and FAIL (exit non-zero) if it is not. Verifying at merge time races the rollout and asserts against the old version. 
           Deterministically confirm the DEPLOYED agent resolves the new MCP — verifying the
           committed file alone would not prove the running pod picked it up. This is a
           verification step only: do NOT open a PR and do NOT modify the repo. FAIL (exit
