@@ -87,7 +87,7 @@ metadata:
 spec:
   paused: true
   steps:
-    # ── 2. Storage adapter — the first real Go/GCS work ──
+    # ── 1. Storage adapter — the first real Go/GCS work ──
     - name: gcs-storage
       kind: pr
       agentType: leartech-agent-go
@@ -194,7 +194,7 @@ spec:
           is a live surface being removed, not dead code.
           Done = PR merged (open via open_pr, drive gates green).
 
-    # ── 3. The endpoints + scope enforcement ──
+    # ── 2. The endpoints + scope enforcement ──
     - name: rest-endpoints
       kind: pr
       agentType: leartech-agent-go
@@ -247,7 +247,7 @@ spec:
           Queries key off the body: `| json | artifact_id="<guid>"`.
           Done = PR merged (open via open_pr, drive gates green).
 
-    # ── 4. Wire the already-deployed MCP tools ──
+    # ── 3. Wire the already-deployed MCP tools ──
     - name: mcp-tools
       kind: pr
       agentType: leartech-agent-go
@@ -308,7 +308,19 @@ spec:
         repo: mikelear/leartech-artifact-api
         branch: feat/verify-roundtrip
         goal: >-
-          Because release verification is AUTO-INJECTED after the PR step (R23) rather than hand-authored, this step depends on the PR step directly and MUST therefore wait for the rollout itself: poll until the released version is live on the target cluster(s) with a deadline, and FAIL (exit non-zero) if it is not. Verifying at merge time races the rollout and asserts against the old version. 
+          WAIT FOR BOTH SERVICES, NOT JUST THIS REPO. Release verification is AUTO-INJECTED
+          after each PR step (R23) rather than hand-authored, so this step depends on the PR
+          steps directly and must wait for the rollouts itself. It spans TWO repos:
+          rest-endpoints lands in leartech-artifact-api and mcp-tools lands in
+          leartech-mcp-servers, and this step's own `repo` names only the former. Before ANY
+          assertion below, poll until the released version of BOTH leartech-artifact-api AND
+          leartech-mcp-servers is live on the target cluster(s), with a deadline, and FAIL
+          (exit non-zero) if either is not.
+          Waiting on artifact-api alone is the trap: the round trip is driven THROUGH the
+          design MCP, so a stale leartech-mcp-servers would be exercised against new
+          endpoints and fail for the wrong reason — a rollout race misreported as a broken
+          artifact path. Verifying at merge time races both rollouts equally.
+
           Deterministically confirm the artifact path works end to end on jx-staging, on
           BOTH clusters. This is a verification step only — do NOT open a PR and do NOT
           modify the repo. FAIL (exit non-zero) if ANY assertion below fails; the verdict
