@@ -1,0 +1,178 @@
+# Finish the artifact-api REST surface + wire the design MCP tools to it.
+#
+# THIS IS A RE-RUN. plans/artifact-endpoints.yaml ran on 2026-08-12 and was CANCELLED
+# part-way. Read that history before starting — it is why this Plan exists and why the
+# rest-endpoints goal below is so emphatic about auth.
+#
+#   STEP 1 (gcs-storage) SUCCEEDED and is MERGED — leartech-artifact-api#2, shipped as
+#   0.0.2. internal/storage (GCS layout, immutable revisions, local V4 signing), the chart
+#   gcs block, values.schema.json and the deployment env + conditional secret mount are all
+#   ALREADY ON MAIN. Do NOT redo any of it. It also improved on its brief: startup config
+#   is tri-state (both env vars empty = preview mode, partially set = fail-fast) because a
+#   blanket fail-fast would break preview environments.
+#
+#   STEP 2 (rest-endpoints) was CLOSED UNMERGED — leartech-artifact-api#3. It built the
+#   endpoints but hand-rolled JWT validation and JWKS fetching on a new go-jose dependency
+#   instead of using leartech-go-common/pkg/auth. Root cause was NOT the agent: step 1 had
+#   over-deleted internal/middleware/auth.go under a "remove scaffold if nothing references
+#   them" instruction, and nothing pointed the next step at the estate's auth standard. It
+#   solved the problem competently in isolation; generic best-practice does not know
+#   leartech-go-common exists.
+#
+#   The closed branch feat/rest-endpoints still exists. Its endpoint, storage-wiring and
+#   test work is worth HARVESTING rather than rewriting — read it, keep what is good, and
+#   replace only the auth.
+#
+# WHAT IS ALREADY TRUE (verified on the live GCP staging cluster, 2026-08-12):
+#   - 0.0.2 is deployed; /healthz + /metrics answer 200, and /plans is now 404 (the copied
+#     plan-api surface is correctly gone — it used to be mounted and 401ing)
+#   - /api/v1/artifacts returns 404: the endpoints are what this Plan adds
+#   - gs://artifacts-product-first exists with a design bundle; test-artifacts-gcs-key
+#     carries a service-account key WITH a private_key, so V4 signing works locally — no
+#     Workload Identity, no signBlob, no terraform. Do NOT "modernise" that to keyless WI:
+#     a WI-federated token cannot sign V4 URLs (proved with a debug pod).
+#   - the gitops overlays are merged on BOTH clusters (jx-build-cluster-gsm#1420,
+#     jx-build-cluster-akv#1219), so the Hydra issuer and the gcs.* values are live
+#
+# MERGED != DEPLOYED
+# A kind:pr step completes at MERGE, but release -> GitOps -> rollout takes minutes.
+# Release verification is AUTO-INJECTED after each PR step (R23) — do NOT hand-author a
+# `use: verify-release-flow`, lint rejects it. But note the injected checks are SIBLINGS of
+# their PR step, not gates in the chain (verified on the cancelled run's expanded graph), so
+# verify-roundtrip must do its own rollout wait. It does.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: artifact-rest-and-mcp
+spec:
+  paused: true
+  steps:
+  - name: rest-endpoints
+    kind: pr
+    agentType: leartech-agent-go
+    inputs:
+      name: rest-endpoints
+      repo: mikelear/leartech-artifact-api
+      branch: feat/rest-endpoints-v2
+      goal: "Add the artifact REST endpoints on /api/v1, backed by internal/storage, and enforce scopes\
+        \ AT THE SERVICE.\nENDPOINTS:\n  POST   /api/v1/artifacts                 -> {id, revision, uploadURL,\
+        \ expiresAt}\n  POST   /api/v1/artifacts/{id}/revisions  -> new revision on an existing artifact\n\
+        \  POST   /api/v1/artifacts/{id}/finalize   -> validate + seal, returns manifest\n  GET    /api/v1/artifacts\
+        \                 -> list; filter by kind, label, target\n  GET    /api/v1/artifacts/{id}    \
+        \        -> manifest + signed download URLs\n                                              (accept\
+        \ a label as well as a GUID)\n\nRESTORE THE AUTH MIDDLEWARE \u2014 DO NOT WRITE YOUR OWN. READ\
+        \ THE OLD CODE FIRST.\n          A previous attempt at this exact step was CLOSED UNMERGED (leartech-artifact-api#3)\n\
+        \          because it hand-rolled JWT validation and JWKS fetching on a new go-jose dependency\n\
+        \          instead of using the estate's shared auth library. That is the single most likely\n\
+        \          way for this step to fail again, so before writing any auth code:\n\n            git\
+        \ show b58c9b1d6f9b8d625c46c43b96191501a6cdbb2d:internal/middleware/auth.go\n            git show\
+        \ b58c9b1d6f9b8d625c46c43b96191501a6cdbb2d:internal/middleware/auth_test.go\n\n          That\
+        \ commit is this repo BEFORE the gcs-storage step, which deleted both files while\n          removing\
+        \ plan-api scaffold \u2014 an over-deletion, not an intentional design change.\n          READ\
+        \ auth.go before you act on it. Its 79 lines are almost entirely a documented\n          rationale\
+        \ you must preserve, not paraphrase: it is a thin policy wrapper over\n          github.com/mikelear/leartech-go-common/pkg/auth\
+        \ with THREE deliberate modes \u2014\n          disabled = no-op but logs a loud WARNING so 'auth\
+        \ is off' is never silent;\n          enabled + client init OK = go-common validates the JWT via\
+        \ JWKS and enforces the\n          RFC 8707 audience; enabled + client init FAILS = a middleware\
+        \ that 401s EVERY\n          request. That third mode is the subtle one: NOT a panic (the pod\
+        \ must stay up so\n          /health answers 200 while ESO is still syncing) and NOT a passthrough\
+        \ (an init\n          failure must never degrade the guarantee). It also sets cfg.Required=true\
+        \ because\n          the go-common default returns a noopClient on empty ServerURL, which would\
+        \ be a\n          silent fail-OPEN. Reproducing that reasoning from scratch is how it gets lost.\n\
+        \n          So: restore both files, and adapt ONLY the comments \u2014 they say /plans*, which\
+        \ no\n          longer exists; the protected surface is now /api/v1/artifacts*. Re-add\n     \
+        \     github.com/mikelear/leartech-go-common to go.mod: the gcs-storage step removed the\n   \
+        \       import and tidied the dependency out, so it is NOT currently present.\n\n          FORBIDDEN,\
+        \ explicitly: do NOT add github.com/go-jose/go-jose (or any JOSE/JWT\n          library) as a\
+        \ direct dependency; do NOT create an internal/auth package; do NOT\n          implement JWKS\
+        \ fetching, key caching, or token parsing. If go-common appears to be\n          missing a capability\
+        \ you need, STOP and say so in the PR description rather than\n          working around it locally\
+        \ \u2014 a second JWT implementation in the estate is a worse\n          outcome than an unfinished\
+        \ step.\n\n          STANDARDS: hub/shared-rules/golden-service-standard.md and\n          hub/shared-rules/auth-library-design.md\
+        \ are the authority on this. Generic\n          best-practice does not know these exist, which\
+        \ is exactly how the previous attempt\n          went wrong.\n\n          AUTHZ \u2014 the load-bearing\
+        \ rule: enforce the caller's own audience and scope on EVERY request, regardless of caller. Never\
+        \ assume \"the MCP already checked\". leartechapi:artifact:read gates the GETs; leartechapi:artifact:write\
+        \ gates the POSTs. Derive tenant from the validated token claims and filter on it, so artifacts\
+        \ are isolated per tenant. There is deliberately NO publish scope.\nFINALIZE validates thinly\
+        \ and no more: manifest parses, every declared file exists in the object store, sizes are sane.\
+        \ Kind-specific validation is explicitly out of scope. A write to an ALREADY-FINALIZED revision\
+        \ returns 409.\nKeep api/openapi.yaml and the swaggo annotations in step so /openapi.json and\
+        \ /docs stay accurate, and the generated clients pick the endpoints up on release.\nISOLATE TESTING:\
+        \ handler unit tests with a fake storage seam and a fake token context, covering: 401 unauthenticated,\
+        \ 403 wrong scope, 403 wrong audience, 404 unknown id/label, 409 write to a finalized revision,\
+        \ second-revision creation via POST /{id}/revisions, and the happy paths. No real GCS, no real\
+        \ Hydra.\nLOGGING \u2014 the estate standard (Hub/status/structured-logging-standard.md), wired\
+        \ already by internal/logging: zerolog, snake_case, root logger stamping service/version/cluster.\
+        \ Per request add route, artifact_id, revision, scope_decision, tenant, request_id, outcome. The\
+        \ scope decision is the load-bearing one \u2014 an authz denial that logs nothing is undiagnosable,\
+        \ so log BOTH allow and deny with the scope that was required and the audience seen. NEVER log\
+        \ the token itself or any bearer value. CARDINALITY: artifact_id (GUID), revision and tenant stay\
+        \ JSON body fields and MUST NOT become Loki stream labels \u2014 labels stay service/namespace/cluster/env.\
+        \ Queries key off the body: `| json | artifact_id=\"<guid>\"`. Done = PR merged (open via open_pr,\
+        \ drive gates green)."
+  - name: mcp-tools
+    kind: pr
+    agentType: leartech-agent-go
+    dependsOn:
+    - rest-endpoints
+    inputs:
+      name: mcp-tools
+      repo: mikelear/leartech-mcp-servers
+      branch: feat/mcp-tools
+      goal: "Wire internal/designserver's tools to the new artifact-api endpoints. The client, auth and\
+        \ audience plumbing already exist \u2014 do not reinvent them; the three-tier outbound behaviour\
+        \ (forward the caller's Bearer verbatim, RFC 8693 exchange when the audience differs, s2s only\
+        \ when there is no caller Bearer) must be preserved exactly as internal/planserver implements\
+        \ it, including the principle that the MCP NEVER widens authority beyond the caller's own.\nExisting\
+        \ tools to back: list_artifacts, get_artifact, create_artifact. Add finalize_artifact so a producer\
+        \ can seal a revision, since upload is a separate presigned PUT the MCP never proxies. Expose\
+        \ revision creation too, so a second revision can be added to an existing artifact.\ncreate_artifact\
+        \ must return the presigned uploadURL to the caller \u2014 bytes go direct to GCS over PUT and\
+        \ MUST NOT be proxied through MCP or the service.\nAlso register this server in the agent MCP\
+        \ catalog (leartech-automated-agent gate/agent/mcp_catalog.yaml is a SEPARATE repo \u2014 do not\
+        \ edit it here; note it in the PR description as a follow-up) so Plans can fetch artifacts referenced\
+        \ in a step goal.\nISOLATE TESTING: table tests using the existing fakes_test.go seam, asserting\
+        \ each tool maps to the right endpoint and that the forward/exchange/s2s tier selection is unchanged.\
+        \ Extend tokenexchange_test.go coverage to the artifact path. No real cluster, no real Hydra.\n\
+        LOGGING \u2014 use the existing mcplog seam (mcplog.ToolStart / call.Finish), which is what the\
+        \ current stubs already do; do not add a parallel logging path. Fields per tool call: tool, artifact_id,\
+        \ tier (forward | exchange | s2s), request_id, outcome. The TIER is the one that matters most\
+        \ \u2014 when a caller gets an unexpected 401/403 the first question is always which of the three\
+        \ outbound tiers was chosen, and that is invisible without it. CARDINALITY: artifact_id is a GUID\
+        \ \u2014 JSON body field only, never a Loki stream label. Never log the Bearer, exchanged or otherwise.\
+        \ Done = PR merged (open via open_pr, drive gates green)."
+  - name: verify-roundtrip
+    kind: check
+    agentType: leartech-agent-go
+    dependsOn:
+    - rest-endpoints
+    - mcp-tools
+    inputs:
+      name: verify-roundtrip
+      repo: mikelear/leartech-artifact-api
+      branch: feat/verify-roundtrip
+      goal: "WAIT FOR BOTH SERVICES, NOT JUST THIS REPO. Release verification is AUTO-INJECTED after each\
+        \ PR step (R23) rather than hand-authored, so this step depends on the PR steps directly and must\
+        \ wait for the rollouts itself. It spans TWO repos: rest-endpoints lands in leartech-artifact-api\
+        \ and mcp-tools lands in leartech-mcp-servers, and this step's own `repo` names only the former.\
+        \ Before ANY assertion below, poll until the released version of BOTH leartech-artifact-api AND\
+        \ leartech-mcp-servers is live on the target cluster(s), with a deadline, and FAIL (exit non-zero)\
+        \ if either is not. Waiting on artifact-api alone is the trap: the round trip is driven THROUGH\
+        \ the design MCP, so a stale leartech-mcp-servers would be exercised against new endpoints and\
+        \ fail for the wrong reason \u2014 a rollout race misreported as a broken artifact path. Verifying\
+        \ at merge time races both rollouts equally.\nDeterministically confirm the artifact path works\
+        \ end to end on jx-staging, on BOTH clusters. This is a verification step only \u2014 do NOT open\
+        \ a PR and do NOT modify the repo. FAIL (exit non-zero) if ANY assertion below fails; the verdict\
+        \ is this step's exit code, so reporting a failure while exiting 0 would wrongly pass the Plan.\n\
+        Assertions: - leartech-artifact-api /openapi.json returns 200 probed from INSIDE the\n  namespace\
+        \ (the service has no ingress by design).\n- An unauthenticated request to /api/v1/artifacts returns\
+        \ 401, and a token\n  carrying the wrong audience is rejected.\n- Via the design MCP: create_artifact\
+        \ returns a GUID plus a presigned upload\n  URL; a PUT of a small tokens.json to that URL succeeds;\
+        \ finalize_artifact\n  returns a manifest listing the file with a matching sha256.\n- get_artifact\
+        \ resolves the same artifact BY LABEL and returns a working signed\n  download URL whose bytes\
+        \ match what was uploaded.\n- A second revision is created via POST /api/v1/artifacts/{id}/revisions,\n\
+        \  uploaded and finalized; get_artifact can still retrieve revision 1 unchanged,\n  proving revisions\
+        \ are additive not destructive.\n- A write to an already-finalized revision returns 409, so immutability\
+        \ holds on\n  the revision path and not only on the initial revision.\n- Structured logs for the\
+        \ above appear in Loki with the request ids."
