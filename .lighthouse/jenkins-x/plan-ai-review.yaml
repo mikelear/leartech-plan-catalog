@@ -84,6 +84,16 @@ spec:
             #!/bin/sh
             set +e
             apk add --no-cache bash curl >/dev/null 2>&1
+            # pyyaml is REQUIRED, not optional. Without it the script's template-catalog
+            # loader falls through to "(template catalog unavailable — pyyaml missing)" and
+            # criterion 7 cannot run. That was silently true on EVERY review until
+            # 2026-08-12; the only symptom was the reviewer reporting the missing catalog
+            # as though it were a defect in the Plan under review.
+            # Alpine's py3-yaml apk targets the system python, not this image's
+            # /usr/local python, so it must come from pip. A musllinux wheel exists for
+            # cp312, so no build toolchain is needed (~2s).
+            pip install --quiet --no-input pyyaml >/dev/null 2>&1 \
+              || echo "plan-ai-review: WARNING — pip install pyyaml failed; template catalog will be degraded"
             . ./.jx/variables.sh 2>/dev/null || true
             export REPO_NAME="${REPO_NAME:-$APP_NAME}"
             bash scripts/plan-ai-review.sh || true
