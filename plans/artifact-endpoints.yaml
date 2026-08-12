@@ -12,26 +12,45 @@
 # it is never published, never served to a browser. So: no public bucket path, no
 # visibility flag, no publish scope. Signed URLs throughout.
 #
-# REVIEW FINDING BAKED IN AS STEP 1
-# leartech-artifact-api has NO gitops overlay, so it runs on chart defaults with
-# AUTH_ENABLED=true but LEARTECH_AUTH_SERVER_URL="" — no issuer, no JWKS. Harmless
-# today (only health + metrics exist) but it breaks the moment authenticated endpoints
-# land. Same failure mode as leartech-orchestrator-web-ui. Fixed first, deliberately.
+# PRECONDITION — APPLIED BY HAND, NOT BY THIS PLAN
+# This Plan writes CODE ONLY. The platform config and cloud identity it depends on are
+# applied in-session before the Plan is promoted, and are deliberately NOT steps here:
+# they include a `terraform import` of gs://artifacts-product-first, a bucket that was
+# created by hand and ALREADY HOLDS a design bundle. If an agent wrote that terraform
+# and the plan came out as replace-instead-of-import, the bundle would be destroyed —
+# silently, and no gate would catch it. That risks real data for no gain, so a human
+# reads the `terraform plan` instead.
+#
+# What must already be true when this Plan starts:
+#   - a DEDICATED artifact-api GSA exists (NOT test-artifacts-writer, whose terraform
+#     purpose is world-readable Playwright artifacts)
+#   - it holds roles/storage.objectAdmin on the artifact bucket only
+#   - it holds roles/iam.serviceAccountTokenCreator ON ITSELF, so it can signBlob
+#   - the leartech-artifact-api KSA is Workload-Identity-bound to it on GCP; on AKV
+#     (where cross-cloud WI is impossible) a JSON key is ESO-synced and mounted at
+#     GOOGLE_APPLICATION_CREDENTIALS
+#   - the gitops overlay sets the Hydra issuer + audience. Without the issuer,
+#     AUTH_ENABLED=true but LEARTECH_AUTH_SERVER_URL="" means no JWKS and auth cannot
+#     validate — harmless while only health + metrics exist, broken the moment
+#     authenticated endpoints land. Same failure mode as leartech-orchestrator-web-ui.
+#
+# If the config is missing when this Plan runs, gcs-storage's startup fail-fast trips
+# and the auto-injected release verification goes red. That is the intended failure —
+# loud, not subtle. Do NOT "fix" it by having a step write the config.
 #
 # CONFIG CONTRACT (pinned, not negotiated at runtime)
-# gitops-gsm, gitops-akv and gcs-storage run concurrently in DIFFERENT repos, so they
-# cannot agree on names while running. The contract is therefore fixed here:
-#   ARTIFACT_GCS_BUCKET   — the staging bucket
+# The steps cannot agree on names while running, and the config is applied by hand
+# outside this Plan, so the contract is fixed here:
+#   ARTIFACT_GCS_BUCKET   — the artifact bucket
 #   ARTIFACT_GCS_PROJECT  — the GCP project
-# All three steps name these exact env vars. Do not invent alternatives.
+#   ARTIFACT_SIGNER_SA    — the signing identity's email, for signBlob
+# Read these exact names. Do not invent alternatives and do not derive the signer
+# email by parsing a key file.
 #
 # MERGED != DEPLOYED
 # A kind:pr step completes at MERGE, but release -> GitOps -> rollout takes minutes.
-# `release-check` gates the round-trip on the new code and config being LIVE on both
-# clusters, so verify-roundtrip cannot race the rollout.
-#
-# Maintainer note: if you would rather apply the two gitops steps by hand, drop
-# `gitops-gsm` / `gitops-akv` and add their config before promoting this Plan.
+# verify-roundtrip therefore polls until the released version is live rather than
+# asserting at merge time, so it cannot race the rollout.
 apiVersion: agent.leartech.io/v1alpha1
 kind: Plan
 metadata:
@@ -39,89 +58,6 @@ metadata:
 spec:
   paused: true
   steps:
-    # ── 1. Prerequisite: the missing gitops overlay (auth issuer + bucket) ──
-    - name: gitops-gsm
-      kind: pr
-      agentType: leartech-agent-go
-      inputs:
-        name: gitops-gsm
-        repo: mikelear/jx-build-cluster-gsm
-        branch: feat/gitops-gsm
-        goal: >-
-          Add helmfiles/jx-staging/configs/leartech-artifact-api.yaml. leartech-artifact-api
-          currently deploys on chart defaults, so AUTH_ENABLED=true but
-          LEARTECH_AUTH_SERVER_URL is empty — auth cannot validate because there is no
-          issuer for JWKS. Set auth.serverUrl to the GCP staging Hydra
-          (https://hydra-jx-staging.jx.leartech.com) and auth.audience to
-          leartech-artifact-api (bare-name convention, matching leartech-plan-api).
-          Leave cors.allowedOrigins as an EMPTY list — safe-closed; the service has no
-          browser callers, only the MCP over ClusterIP. Do NOT add an ingress.
-
-          Also set the GCS config so the pods get these EXACT env vars (the fixed
-          contract the gcs-storage step reads — do NOT invent other names):
-          ARTIFACT_GCS_BUCKET (the staging bucket) and ARTIFACT_GCS_PROJECT (the GCP
-          project). Set whatever chart values render to those two env vars.
-
-          THE IDENTITY DOES NOT EXIST YET — this step creates it. Verified on the live
-          GCP staging cluster: serviceaccount/leartech-artifact-api has NO
-          iam.gke.io/gcp-service-account annotation and the pod mounts no credential
-          volume, so the service has no route to GCS at all today. Verify two more things
-          before assuming otherwise: gs://artifacts-product-first is NOT declared in
-          terraform (hand-created 2026-08-09), and the bundle in it is currently reachable
-          only via the test-artifacts-writer GSA, which terraform declares purely for
-          PUBLIC-read Playwright artifacts. Do NOT extend that credential any further.
-
-          So in mikelear/Product-First_GCP add artifacts.tf, in the style of the existing
-          test-artifacts.tf, declaring:
-            - the bucket artifacts-${var.gcp_project} — uniform bucket-level access,
-              public access PREVENTED, and NO allUsers binding (unlike test-artifacts.tf,
-              which is deliberately world-readable; design artifacts must not be)
-            - a DEDICATED GSA artifact-api — not test-artifacts-writer
-            - roles/storage.objectAdmin for that GSA on that bucket only
-            - a Workload Identity binding (google_service_account_iam_member,
-              roles/iam.workloadIdentityUser) for
-              serviceAccount:${var.gcp_project}.svc.id.goog[jx-staging/leartech-artifact-api]
-            - roles/iam.serviceAccountTokenCreator for that GSA ON ITSELF, so it can
-              signBlob to mint V4 signed URLs (see the gcs-storage step)
-          Import the existing hand-made bucket rather than creating a second one, so the
-          already-uploaded bundle is not orphaned.
-
-          Then in this repo annotate the KSA with iam.gke.io/gcp-service-account pointing
-          at that GSA, and set ARTIFACT_SIGNER_SA to the same email alongside
-          ARTIFACT_GCS_BUCKET and ARTIFACT_GCS_PROJECT.
-
-          Mirror the structure and comment style of
-          helmfiles/jx-staging/configs/leartech-plan-api.yaml.
-          Done = PR merged (open via open_pr, drive gates green).
-
-    - name: gitops-akv
-      kind: pr
-      agentType: leartech-agent-go
-      inputs:
-        name: gitops-akv
-        repo: mikelear/jx-build-cluster-akv
-        branch: feat/gitops-akv
-        goal: >-
-          Mirror the gitops-gsm change for the Azure cluster. Identical shape, but the
-          per-cluster Hydra issuer is https://hydra-jx-staging.az.leartech.com. Set the
-          SAME env vars field-for-field: ARTIFACT_GCS_BUCKET, ARTIFACT_GCS_PROJECT and
-          ARTIFACT_SIGNER_SA (the artifact bucket stays on GCS regardless of which
-          cluster the pod runs on). Confirm parity with the gsm file field-for-field —
-          the two clusters must not drift.
-
-          BUT the IDENTITY cannot be identical, so do not blind-copy it: GCP Workload
-          Identity does not work from an Azure cluster, and test-artifacts.tf documents
-          exactly this ("Key for Azure cluster (can't use Workload Identity cross-cloud)").
-          On AKV the pod therefore needs a JSON key for the artifact-api GSA: have the
-          gitops-gsm terraform also emit a google_service_account_key for it into GSM,
-          then ESO-sync it into jx-staging on AKV and mount it at
-          GOOGLE_APPLICATION_CREDENTIALS. Use the existing test-artifacts-gcs-key
-          ExternalSecret as the shape but a SEPARATE secret for the artifact-api GSA —
-          do not reuse test-artifacts-gcs-key. The KSA annotation from the gsm step must
-          NOT be carried over; it is meaningless on Azure. Note Helm list values REPLACE rather than
-          merge, so any list override must repeat the chart defaults verbatim.
-          Done = PR merged (open via open_pr, drive gates green).
-
     # ── 2. Storage adapter — the first real Go/GCS work ──
     - name: gcs-storage
       kind: pr
@@ -144,7 +80,8 @@ spec:
               steps). Do NOT parse a key file to discover it.
             - Call storage.SignedURL with GoogleAccessID set to that email and SignBytes
               delegating to the IAM Credentials signBlob API, which is what the
-              roles/iam.serviceAccountTokenCreator self-binding in gitops-gsm enables.
+              roles/iam.serviceAccountTokenCreator self-binding on the GSA enables (already
+              applied — see PRECONDITION in the header).
             - When a JSON key IS present at GOOGLE_APPLICATION_CREDENTIALS — the Azure
               path, where cross-cloud WI is impossible — the SDK can sign locally with the
               private key and no signBlob call is needed.
@@ -153,10 +90,12 @@ spec:
           startup when NEITHER route is available, rather than discovering it on the first
           presigned URL.
 
-          CONFIG CONTRACT (fixed — the gitops-gsm/gitops-akv steps set these exact env
-          vars; read them by these exact names): ARTIFACT_GCS_BUCKET and
-          ARTIFACT_GCS_PROJECT. Fail fast at startup with a clear message if either is
-          empty, rather than failing later on the first upload.
+          CONFIG CONTRACT (fixed — the gitops overlay ALREADY sets these exact env vars,
+          applied by hand before this Plan was promoted; read them by these exact names
+          and do NOT add a step to write them): ARTIFACT_GCS_BUCKET,
+          ARTIFACT_GCS_PROJECT and ARTIFACT_SIGNER_SA. Fail fast at startup with a clear
+          message if any is empty, rather than failing later on the first upload — that
+          fail-fast IS the guard that the precondition was applied.
 
           LAYOUT (revisions are IMMUTABLE):
             artifact/<guid>/<revision>/manifest.json
@@ -276,16 +215,14 @@ spec:
           request id, outcome) queryable in Loki.
           Done = PR merged (open via open_pr, drive gates green).
 
-    # ── 5. Rollout gate — merged is NOT deployed ──
-    # Canned infra action: the infra agent is action-driven, not goal-driven (R21).
-    # release-health-check is exactly this gate — it waits for the released version to
-    # be live rather than assuming a merge means a rollout.
+    # ── 4. Rollout gate — merged is NOT deployed ──
+    # Waits for the released version to be live rather than assuming a merge means a
+    # rollout. It does NOT depend on the platform config, because that is applied by
+    # hand BEFORE this Plan is promoted (see PRECONDITION in the header).
     - name: verify-roundtrip
       kind: check
       agentType: leartech-agent-go
       dependsOn:
-        - gitops-gsm
-        - gitops-akv
         - rest-endpoints
         - mcp-tools
       inputs:
