@@ -13,26 +13,38 @@
 # visibility flag, no publish scope. Signed URLs throughout.
 #
 # PRECONDITION — APPLIED BY HAND, NOT BY THIS PLAN
-# This Plan writes CODE ONLY. The platform config and cloud identity it depends on are
-# applied in-session before the Plan is promoted, and are deliberately NOT steps here:
-# they include a `terraform import` of gs://artifacts-product-first, a bucket that was
-# created by hand and ALREADY HOLDS a design bundle. If an agent wrote that terraform
-# and the plan came out as replace-instead-of-import, the bundle would be destroyed —
-# silently, and no gate would catch it. That risks real data for no gain, so a human
-# reads the `terraform plan` instead.
+# This Plan writes CODE ONLY. There is NO cloud provisioning to do: every piece of
+# storage and identity it needs ALREADY EXISTS and is already in use.
 #
-# What must already be true when this Plan starts:
-#   - a DEDICATED artifact-api GSA exists (NOT test-artifacts-writer, whose terraform
-#     purpose is world-readable Playwright artifacts)
-#   - it holds roles/storage.objectAdmin on the artifact bucket only
-#   - it holds roles/iam.serviceAccountTokenCreator ON ITSELF, so it can signBlob
-#   - the leartech-artifact-api KSA is Workload-Identity-bound to it on GCP; on AKV
-#     (where cross-cloud WI is impossible) a JSON key is ESO-synced and mounted at
-#     GOOGLE_APPLICATION_CREDENTIALS
-#   - the gitops overlay sets the Hydra issuer + audience. Without the issuer,
+# Verified on the live GCP staging cluster before this Plan was written:
+#   - gs://artifacts-product-first exists and holds a design bundle (33 objects)
+#   - test-artifacts-writer@product-first holds roles/storage.objectAdmin on it
+#   - secret test-artifacts-gcs-key in jx-staging carries that GSA's key.json, and the
+#     credential DOES contain a private_key — so V4 signing works LOCALLY, with no
+#     signBlob call, no Workload Identity binding and no serviceAccountTokenCreator
+#   - agents already read design artifacts through exactly this credential:
+#     gate/agent/gcp_credentials.py bridges GOOGLE_APPLICATION_CREDENTIALS_JSON to a
+#     0600 file at startup and the recent website Plans have used that route
+#
+# So the only hand-applied work is the gitops overlay — two small config PRs, no cloud
+# mutation, nothing destructive:
+#   - auth.serverUrl (per-cluster Hydra issuer) + auth.audience. The chart ALREADY
+#     renders these, so they take effect immediately. Without the issuer,
 #     AUTH_ENABLED=true but LEARTECH_AUTH_SERVER_URL="" means no JWKS and auth cannot
 #     validate — harmless while only health + metrics exist, broken the moment
 #     authenticated endpoints land. Same failure mode as leartech-orchestrator-web-ui.
+#   - the gcs.* values below. The chart does NOT support these yet, so they are INERT
+#     until gcs-storage lands the chart support. That is expected, not a failure.
+#
+# DELIBERATELY NOT DONE, and NOT this Plan's job either: a dedicated artifact-api GSA.
+# Reusing test-artifacts-writer is a known, accepted debt — its terraform-declared
+# purpose is the world-readable Playwright bucket, so an auditor reading terraform sees
+# only that grant. Swapping later is a one-line secret-name change plus terraform, and
+# it is deliberately deferred because the terraform state for this project is LOCAL to
+# one laptop with no remote backend and manages 4 GKE node pools and 20 project IAM
+# bindings — putting that state through an apply cycle to close a documentation gap on
+# a bucket that already exists is the wrong risk. Do NOT add a step that provisions
+# cloud identity, and do NOT "improve" this by writing terraform.
 #
 # If the config is missing when this Plan runs, gcs-storage's startup fail-fast trips
 # and the auto-injected release verification goes red. That is the intended failure —
@@ -51,14 +63,18 @@
 #   Helm value              ->  env var                  purpose
 #   gcs.bucket              ->  ARTIFACT_GCS_BUCKET      the artifact bucket
 #   gcs.project             ->  ARTIFACT_GCS_PROJECT     the GCP project
-#   gcs.signerSA            ->  ARTIFACT_SIGNER_SA       signing identity email (signBlob)
-#   gcs.secretName          ->  (secret mount)           AKV only; GCP stays keyless
+#   gcs.secretName          ->  (secret mount)           test-artifacts-gcs-key
 #   gcs.secretKey           ->  (secret mount key)       defaults to key.json
 #
 # When gcs.secretName is set the chart mounts that secret and sets
-# GOOGLE_APPLICATION_CREDENTIALS to the mounted path. On GCP it stays EMPTY —
-# Workload Identity, no key. Do not invent alternative names, and do not derive the
-# signer email by parsing a key file.
+# GOOGLE_APPLICATION_CREDENTIALS to the mounted path. It is set on BOTH clusters —
+# the credential is a real service-account key, which is what makes local V4 signing
+# work without any IAM signBlob round trip.
+#
+# There is deliberately NO signer-email env var. The SDK derives the signing identity
+# from the credential itself, so a separate ARTIFACT_SIGNER_SA would be a second
+# source of truth that can silently disagree with the mounted key. An earlier draft of
+# this Plan required one; it was removed.
 #
 # MERGED != DEPLOYED
 # A kind:pr step completes at MERGE, but release -> GitOps -> rollout takes minutes.
@@ -84,31 +100,32 @@ spec:
           Google Cloud Storage using the official Go SDK (cloud.google.com/go/storage),
           authenticating via Application Default Credentials.
 
-          SIGNING (a verified constraint — do NOT assume plain Workload Identity is
-          enough). A WI-federated token can read and write objects but CANNOT mint V4
-          signed URLs: signing needs either a private key or the IAM signBlob API. This
-          was proved with a debug pod on the live cluster — WI reads succeeded and
-          `sign-url` failed. So implement signing as:
-            - Read the signing identity's email from ARTIFACT_SIGNER_SA (set by the gitops
-              steps). Do NOT parse a key file to discover it.
-            - Call storage.SignedURL with GoogleAccessID set to that email and SignBytes
-              delegating to the IAM Credentials signBlob API, which is what the
-              roles/iam.serviceAccountTokenCreator self-binding on the GSA enables (already
-              applied — see PRECONDITION in the header).
-            - When a JSON key IS present at GOOGLE_APPLICATION_CREDENTIALS — the Azure
-              path, where cross-cloud WI is impossible — the SDK can sign locally with the
-              private key and no signBlob call is needed.
-          Support BOTH routes and choose automatically: sign locally when the resolved
-          credential carries a private key, else fall back to signBlob. Fail fast at
-          startup when NEITHER route is available, rather than discovering it on the first
-          presigned URL.
+          SIGNING — key-based, on BOTH clusters. GOOGLE_APPLICATION_CREDENTIALS points at
+          the mounted test-artifacts-gcs-key, which is a real service-account key carrying
+          a private_key (verified on the live secret). storage.SignedURL therefore signs
+          LOCALLY off that key: no GoogleAccessID to plumb, no SignBytes callback, no IAM
+          signBlob round trip, and no Workload Identity involved. Let the SDK derive the
+          signing identity from the credential — do NOT take a signer email from config,
+          because a second source of truth can silently disagree with the mounted key.
+
+          WHY THIS IS SPELLED OUT: a WI-federated token can read and write objects but
+          CANNOT mint V4 signed URLs — signing needs a private key or signBlob. That was
+          proved with a debug pod on the live cluster (WI reads succeeded, `sign-url`
+          failed). So do NOT "modernise" this to keyless Workload Identity as a cleanup:
+          it would break signing, and it is the exact trap this note exists to prevent.
+          If a future initiative does go keyless, signing must move to the IAM signBlob
+          API and the GSA needs roles/iam.serviceAccountTokenCreator on itself — out of
+          scope here.
+
+          Fail fast at startup if no usable credential is resolvable, rather than
+          discovering it on the first presigned URL.
 
           CONFIG CONTRACT (fixed — the gitops overlay ALREADY sets these exact env vars,
           applied by hand before this Plan was promoted; read them by these exact names
-          and do NOT add a step to write them): ARTIFACT_GCS_BUCKET,
-          ARTIFACT_GCS_PROJECT and ARTIFACT_SIGNER_SA. Fail fast at startup with a clear
-          message if any is empty, rather than failing later on the first upload — that
-          fail-fast IS the guard that the precondition was applied.
+          and do NOT add a step to write them): ARTIFACT_GCS_BUCKET and
+          ARTIFACT_GCS_PROJECT. Fail fast at startup with a clear message if either is
+          empty, rather than failing later on the first upload — that fail-fast IS the
+          guard that the precondition was applied.
 
           LAYOUT (revisions are IMMUTABLE):
             artifact/<guid>/<revision>/manifest.json
@@ -146,13 +163,17 @@ spec:
           fail-fast. Specifically:
             - values.yaml: add the gcs block from the header's pinned paths, defaults empty
             - values.schema.json: add the matching properties, or Helm rejects the overlay
-            - templates/deployment.yaml: render ARTIFACT_GCS_BUCKET, ARTIFACT_GCS_PROJECT
-              and ARTIFACT_SIGNER_SA from those values; and when gcs.secretName is set,
-              mount that secret and set GOOGLE_APPLICATION_CREDENTIALS to the mounted path
-              (the Azure route — GCP stays keyless on Workload Identity, so the mount must
-              be CONDITIONAL, not always-on)
-            - templates/externalsecret.yaml: the GCS key ExternalSecret is a SEPARATE
-              secret from the existing auth one; do not overload leartech-artifact-api-auth
+            - templates/deployment.yaml: render ARTIFACT_GCS_BUCKET and
+              ARTIFACT_GCS_PROJECT from those values; and when gcs.secretName is set,
+              mount that secret read-only and set GOOGLE_APPLICATION_CREDENTIALS to the
+              mounted path. Keep the mount CONDITIONAL on gcs.secretName rather than
+              always-on, so a preview/dev deployment with no GCS config still starts
+            - do NOT add an ExternalSecret for the GCS key. test-artifacts-gcs-key is
+              ALREADY ESO-synced into jx-staging on the GCP cluster (present, 38d) and is
+              owned elsewhere — declaring a second ExternalSecret for the same secret
+              would create two writers of one object. Consume it, do not manage it.
+              Confirm it exists on the AKV cluster too before assuming parity; it was NOT
+              verifiable from the authoring session's kubeconfig
 
           LOGGING — follow the estate standard, do not invent a scheme. internal/logging
           already wires Hub/status/structured-logging-standard.md (zerolog, snake_case
