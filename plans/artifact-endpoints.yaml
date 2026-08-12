@@ -39,13 +39,26 @@
 # loud, not subtle. Do NOT "fix" it by having a step write the config.
 #
 # CONFIG CONTRACT (pinned, not negotiated at runtime)
-# The steps cannot agree on names while running, and the config is applied by hand
-# outside this Plan, so the contract is fixed here:
-#   ARTIFACT_GCS_BUCKET   — the artifact bucket
-#   ARTIFACT_GCS_PROJECT  — the GCP project
-#   ARTIFACT_SIGNER_SA    — the signing identity's email, for signBlob
-# Read these exact names. Do not invent alternatives and do not derive the signer
-# email by parsing a key file.
+# The steps cannot agree on names while running, and the gitops overlay is written by
+# hand BEFORE this Plan runs, so BOTH sides of the contract are fixed here — the Helm
+# value paths as well as the env vars. The overlay can only set values the chart
+# exposes, and the chart exposes none of these today (verified: no gcs block in
+# charts/leartech-artifact-api/values.yaml, and deployment.yaml enumerates env
+# explicitly with no extraEnv range). So the overlay is INERT until gcs-storage lands
+# the chart support, and a name mismatch between the two means the service boots with
+# empty config and crash-loops on its own fail-fast.
+#
+#   Helm value              ->  env var                  purpose
+#   gcs.bucket              ->  ARTIFACT_GCS_BUCKET      the artifact bucket
+#   gcs.project             ->  ARTIFACT_GCS_PROJECT     the GCP project
+#   gcs.signerSA            ->  ARTIFACT_SIGNER_SA       signing identity email (signBlob)
+#   gcs.secretName          ->  (secret mount)           AKV only; GCP stays keyless
+#   gcs.secretKey           ->  (secret mount key)       defaults to key.json
+#
+# When gcs.secretName is set the chart mounts that secret and sets
+# GOOGLE_APPLICATION_CREDENTIALS to the mounted path. On GCP it stays EMPTY —
+# Workload Identity, no key. Do not invent alternative names, and do not derive the
+# signer email by parsing a key file.
 #
 # MERGED != DEPLOYED
 # A kind:pr step completes at MERGE, but release -> GitOps -> rollout takes minutes.
@@ -122,12 +135,42 @@ spec:
           finalized revision is refused), multi-revision creation, manifest round-trip,
           and signed-URL generation. Runnable with `go test ./...` and NO real GCS bucket.
 
-          LOGGING TO VERIFY: structured logs per operation (op, artifact id, revision,
-          label, request id, outcome) queryable in Loki.
+          CHART WORK IS PART OF THIS STEP — without it the config contract is unreachable.
+          Verified: charts/leartech-artifact-api has NO GCS values at all, and
+          templates/deployment.yaml enumerates every env var explicitly (there is no
+          generic extraEnv range), so an env var that the template does not name CANNOT
+          appear no matter what the gitops overlay sets. The gitops overlay is applied by
+          hand BEFORE this Plan runs (see PRECONDITION) and is INERT until this step lands
+          the chart support, so match the pinned Helm value paths in the header EXACTLY —
+          a mismatch leaves the service booting with empty config and crash-looping on the
+          fail-fast. Specifically:
+            - values.yaml: add the gcs block from the header's pinned paths, defaults empty
+            - values.schema.json: add the matching properties, or Helm rejects the overlay
+            - templates/deployment.yaml: render ARTIFACT_GCS_BUCKET, ARTIFACT_GCS_PROJECT
+              and ARTIFACT_SIGNER_SA from those values; and when gcs.secretName is set,
+              mount that secret and set GOOGLE_APPLICATION_CREDENTIALS to the mounted path
+              (the Azure route — GCP stays keyless on Workload Identity, so the mount must
+              be CONDITIONAL, not always-on)
+            - templates/externalsecret.yaml: the GCS key ExternalSecret is a SEPARATE
+              secret from the existing auth one; do not overload leartech-artifact-api-auth
+
+          LOGGING — follow the estate standard, do not invent a scheme. internal/logging
+          already wires Hub/status/structured-logging-standard.md (zerolog, snake_case
+          vocabulary, root logger stamping service/version/cluster). Add per-operation
+          context via the zerolog fluent API: op, artifact_id, revision, label, request_id,
+          tenant, outcome. Keep the chart at config.logFormat json — Promtail cannot parse
+          ConsoleWriter.
+          CARDINALITY IS THE TRAP: artifact_id is a GUID and revision is unbounded. These
+          MUST stay JSON body fields and MUST NOT be promoted to Loki stream labels; stream
+          labels stay service/namespace/cluster/env only. Promoting a GUID to a label is an
+          unbounded-cardinality incident, not a style nit. Queries must work as
+          `{app="leartech-artifact-api"} | json | artifact_id="<guid>"`.
 
           Also remove the scaffold-inherited plan-api internals that artifacts do not
           need (internal/plans, internal/orcv1alpha1, internal/gates, internal/k8s) if
           nothing references them, so the repo stops implying CRD behaviour it has none of.
+          Note /plans is currently MOUNTED and answering 401 on the live service, so this
+          is a live surface being removed, not dead code.
           Done = PR merged (open via open_pr, drive gates green).
 
     # ── 3. The endpoints + scope enforcement ──
@@ -171,8 +214,16 @@ spec:
           creation via POST /{id}/revisions, and the happy paths. No real GCS, no real
           Hydra.
 
-          LOGGING TO VERIFY: structured logs (route, artifact id, revision, scope
-          decision, tenant, request id, outcome) queryable in Loki.
+          LOGGING — the estate standard (Hub/status/structured-logging-standard.md), wired
+          already by internal/logging: zerolog, snake_case, root logger stamping
+          service/version/cluster. Per request add route, artifact_id, revision,
+          scope_decision, tenant, request_id, outcome. The scope decision is the
+          load-bearing one — an authz denial that logs nothing is undiagnosable, so log
+          BOTH allow and deny with the scope that was required and the audience seen.
+          NEVER log the token itself or any bearer value.
+          CARDINALITY: artifact_id (GUID), revision and tenant stay JSON body fields and
+          MUST NOT become Loki stream labels — labels stay service/namespace/cluster/env.
+          Queries key off the body: `| json | artifact_id="<guid>"`.
           Done = PR merged (open via open_pr, drive gates green).
 
     # ── 4. Wire the already-deployed MCP tools ──
@@ -211,8 +262,14 @@ spec:
           selection is unchanged. Extend tokenexchange_test.go coverage to the artifact
           path. No real cluster, no real Hydra.
 
-          LOGGING TO VERIFY: structured logs per tool call (tool, artifact id, tier used,
-          request id, outcome) queryable in Loki.
+          LOGGING — use the existing mcplog seam (mcplog.ToolStart / call.Finish), which is
+          what the current stubs already do; do not add a parallel logging path. Fields per
+          tool call: tool, artifact_id, tier (forward | exchange | s2s), request_id,
+          outcome. The TIER is the one that matters most — when a caller gets an
+          unexpected 401/403 the first question is always which of the three outbound
+          tiers was chosen, and that is invisible without it.
+          CARDINALITY: artifact_id is a GUID — JSON body field only, never a Loki stream
+          label. Never log the Bearer, exchanged or otherwise.
           Done = PR merged (open via open_pr, drive gates green).
 
     # ── 4. Rollout gate — merged is NOT deployed ──
