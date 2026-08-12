@@ -1,0 +1,62 @@
+# Add deterministic repo_exists / branch_exists check tools to the repo-factory MCP.
+#
+# WHY THIS PLAN EXISTS
+# We are reviving `use:`-composable bootstrap as a proper PlanTemplate
+# (`bootstrap-repo`) that any website/service plan can call. Because it SCAFFOLDS
+# (overwrites), it needs a guard: a first `kind: check` step that FAILS fast if the
+# target repo already exists, so `use: bootstrap-repo` can never silently
+# re-scaffold over a live repo. That guard needs a deterministic existence check —
+# which the repo-factory MCP does NOT expose today (it has create_repo /
+# register_source_config / scaffold / smoke_pr, and a GetRepo internally, but no
+# check-step tool). This Plan adds it. It is the prerequisite for the bootstrap
+# template + the golden Angular Website template work.
+#
+# VERIFICATION — auto-injected (R23/R24): single deployable PR step; the platform
+# composes verify-release-flow on submission.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mcp-repo-exists-check
+spec:
+  paused: true
+  steps:
+    - name: add-repo-exists-check
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: add-repo-exists-check
+        repo: mikelear/leartech-mcp-servers
+        branch: feat/repo-factory-exists-checks
+        goal: >-
+          Add two deterministic existence-check tools to the repo-factory MCP server
+          (internal/repofactory) so a Plan can guard a bootstrap step on whether a repo/branch
+          already exists. Read internal/repofactory/{tools.go,server.go} first and MIRROR the
+          existing tool shape (input struct + handler + mcp.AddTool registration in addTools);
+          reuse the existing Client.GetRepo (GET /repos/{owner}/{repo}) — do not duplicate HTTP
+          plumbing.
+
+          1. repo_exists — input {repo: "owner/name"}; output {exists: bool, default_branch?: string}.
+             A 404 from GetRepo means exists=false and is NOT an error (return {exists:false}, not a
+             tool error); any OTHER error (auth/network) IS a tool error. This is the crux: the guard
+             must distinguish "absent" (a clean false) from "couldn't check" (an error).
+
+          2. branch_exists — input {repo: "owner/name", branch: string}; output {exists: bool}.
+             Implement via GET /repos/{owner}/{repo}/branches/{branch} (404 → exists=false, other →
+             error), adding a Client method alongside GetRepo. Same absent-vs-error discipline.
+
+          LOGGING — HARD REQUIREMENT (matches our standard so these show up in Loki like every other
+          tool): each tool MUST log via mcplog.ToolStart("repo_factory", "<tool>") and call
+          call.Finish(...) on every exit path (success + validation_error + error), exactly as
+          create_repo does — pure structured JSON, snake_case, queryable as
+          `{namespace=~"jx.*"} | json | tool="repo_exists"`. No bespoke logging, no fmt.Println.
+
+          TESTS: add Go unit tests mirroring the existing repo-factory tests (stub the Client
+          interface): repo_exists returns {exists:true} for a present repo, {exists:false} on 404
+          (NOT an error), and errors on a non-404 failure; same three cases for branch_exists. Keep
+          the coverage delta non-negative.
+
+          Do NOT change create_repo/scaffold/register/smoke_pr behaviour. Keep the tools read-only
+          (no writes). Update any tool inventory/docs in the repo if present.
+
+          Done = PR merged (open via open_pr, drive ALL gates green — lint, test (+coverage delta),
+          ai-review, security-scan). These new tools then unblock the bootstrap-repo PlanTemplate guard.
