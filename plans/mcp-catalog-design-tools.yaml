@@ -41,22 +41,44 @@ spec:
           map, add any required env to the chart's externalSecrets, and reference it in the
           right role's `mcps` list. No agent code changes.
 
-          SERVER ENTRY: type http_sse, served by the existing leartech-mcp-servers
-          deployment, so use the same ${LEARTECH_PLATFORM_MCPS_URL:-http://localhost:8899}
-          shape as the sibling leartech-jx3-flow / leartech-pr-context entries. Do NOT
-          hardcode a *.jx.leartech.com cluster URL in source — the chart injects the env var
-          per cluster; the fallback is dev-only localhost. Description should say what the
-          tools do (list/get/create/finalize artifacts) and that artifacts are guidance
-          consumed by Plans.
+          SERVER ENTRY: name it leartech-design — NOT anything containing "artifact". The
+          catalog ALREADY has leartech-test-artifacts ("Playwright videos, traces,
+          screenshots from GCS test-artifacts bucket"), which initiative_agent already
+          holds. Two artifact-named MCPs on the same role invites the agent to reach for
+          the wrong one; these are unrelated surfaces (CI debug output vs design guidance).
+          Say so explicitly in the description, and mirror the URL path the server actually
+          mounts: /mcp/design/sse.
 
-          ROLES: add it to initiative_agent and ba_agent at minimum — those are the roles
-          that consume guidance to do work. Justify in the PR description which roles you
-          added and why any were left out; do NOT add it to review_agent unless you can say
-          why a read-only reviewer needs it.
+          Type http_sse, served by the existing leartech-mcp-servers deployment, so use the
+          same ${LEARTECH_PLATFORM_MCPS_URL:-http://localhost:8899} shape as the sibling
+          leartech-jx3-flow / leartech-pr-context entries. Do NOT hardcode a
+          *.jx.leartech.com cluster URL in source — the chart injects the env var per
+          cluster; the fallback is dev-only localhost.
 
-          DO NOT change the scopes or auth story. The MCP server enforces the caller's own
-          leartechapi:artifact:read / :write via the existing three-tier forwarder; this
-          change is catalog wiring only.
+          ROLES: add it to initiative_agent and ba_agent — those are the roles that consume
+          guidance to do work. Justify in the PR description which roles you added and why
+          any were left out; do NOT add it to review_agent unless you can say why a
+          read-only reviewer needs it.
+
+          AGENTS ARE CONSUMERS, NOT PRODUCERS — and note WHERE that is enforced, because it
+          is not here. The catalog grants a WHOLE server: verified that mcp_catalog.yaml has
+          no per-tool allow-list (the `tools:` keys in that file are role-level Claude tools
+          like Read/Write/Bash, not MCP tool filters). So registering leartech-design
+          advertises create_artifact to agents too, and the ONLY thing stopping an agent
+          writing is the scope on its token. Verified on the live cluster: ALL SEVEN
+          agentTypes share ONE auth client, controller-internal-services — so there is no
+          per-role split available either.
+
+          Therefore: do NOT grant leartechapi:artifact:write to controller-internal-services.
+          Agents get :read only, so create_artifact/finalize_artifact return 403 at the MCP's
+          own authorizeWrite gate before artifact-api is touched. This matters beyond least
+          privilege — artifacts are GUIDANCE, and an agent that can author guidance can
+          rewrite its own brief mid-run. Producers are external sessions on the public
+          deployment. If a BA feedback loop later needs to write, it needs its OWN auth
+          client, not a widened shared one; note that as a follow-up rather than doing it here.
+
+          Beyond that, do NOT change the auth story. The MCP already enforces the caller's own
+          leartechapi:artifact:read / :write through the existing three-tier forwarder.
 
           ISOLATE TESTING: extend tests/test_mcp_catalog.py so the new entry is covered by
           the existing loader/validation tests — the server resolves, its type is valid, the
