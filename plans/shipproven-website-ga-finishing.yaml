@@ -100,16 +100,22 @@ spec:
           company registration number, registered office. Add a cookie-consent banner IF (and
           only if) any non-essential cookies/analytics are set.
 
-          7. NO DEAD BUTTONS — wire every CTA. "Book a walkthrough" -> a calendar link;
+          7. NO DEAD BUTTONS — wire every CTA. "Book a walkthrough" / "Book a technical
+          walkthrough" -> https://cal.com/team/verrian/shipproven-walkthrough (the LIVE Cal.com
+          TEAM event — note the /team/ path; the site currently points at the personal-path URL
+          https://cal.com/verrian/shipproven-walkthrough which 404s, so update every instance).
           "Talk to sales"/Contact -> a contact form or the verified sales@verrian.co.uk address;
-          "Join the waitlist" -> a waitlist form with spam protection. Route form submissions to
-          the ShipProven-built CRM (dogfood) or a monitored inbox. No CTA may be a dead link.
+          "Join the waitlist" -> a waitlist form with spam protection (confirm waitlist@verrian.co.uk
+          receives, or use a form). Route form submissions to the ShipProven-built CRM (dogfood) or
+          a monitored inbox. No CTA may be a dead link.
 
           ISOLATE TESTING: extend the end2end-ui specs to assert, against the PR preview: both
           Showcase "View live" links resolve over HTTPS and carry the proof-of-capability
           caption; ZERO "leartech" and ZERO "Maestro" in the rendered output; all six agents
           render Live with no Prototype pill; og-default.png returns 200; Privacy/Cookie/Terms
-          pages exist and are linked; every CTA resolves to a real destination. No new infra.
+          pages exist and are linked; every CTA resolves to a real destination — in particular the
+          walkthrough CTA links to https://cal.com/team/verrian/shipproven-walkthrough (200), NOT
+          the old cal.com/verrian/... path. No new infra.
 
           REPORT in the PR description exactly what you changed per section, what you removed
           (LearTech hits, Maestro labels), and where form submissions are routed.
