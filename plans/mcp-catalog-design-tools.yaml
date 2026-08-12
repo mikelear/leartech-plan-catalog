@@ -80,14 +80,41 @@ spec:
           Beyond that, do NOT change the auth story. The MCP already enforces the caller's own
           leartechapi:artifact:read / :write through the existing three-tier forwarder.
 
+          THE MCP IS PREFERRED, THE CLI IS THE FALLBACK — and the description is where that
+          preference has to live, because the description is what the agent reads when it
+          decides which tool to reach for. Agents ALREADY read design artifacts straight from
+          GCS with `gcloud storage`: gate/agent/gcp_credentials.py bridges
+          GOOGLE_APPLICATION_CREDENTIALS_JSON (projected per AgentType.gcsSecretName) to a
+          0600 file and exports GOOGLE_APPLICATION_CREDENTIALS once at agent startup, and the
+          recent website Plans have been using exactly that route. That capability MUST keep
+          working — do NOT remove the bridge, do NOT change the projected env, and do NOT
+          touch AgentType or the controller. This step only changes which route an agent
+          REACHES FOR FIRST.
+          So the description must say: use these tools for design artifacts; fall back to
+          reading the bucket directly with `gcloud storage` ONLY when the MCP is unavailable,
+          and say so in the step output when you do.
+
+          MAKE THE FALLBACK OBSERVABLE — otherwise adoption is a guess. gate/agent/tool_logging.py
+          already logs every tool call with its command (_summarise_input pulls `command` for
+          Bash) and is already redaction-aware, so do NOT add a new logging path or a Python
+          GCS wrapper — there is no Python GCS access path to wrap, only the credential
+          bridge. Extend the EXISTING record instead: when a Bash command targets the
+          artifact bucket prefix, tag it as a direct-GCS artifact access (artifact_fallback
+          true, plus the bucket/prefix) so MCP-vs-CLI usage is a Loki query rather than an
+          assumption. Keep it a JSON body field, never a stream label. This is the evidence
+          that decides whether test-artifacts-gcs-key can later be retired from the seven
+          agentTypes — without it, removing that secret is a leap of faith.
+
           ISOLATE TESTING: extend tests/test_mcp_catalog.py so the new entry is covered by
           the existing loader/validation tests — the server resolves, its type is valid, the
           env-var placeholder shape matches its siblings, and every role that references it
-          exists. Runnable with no cluster and no LLM.
+          exists. Add a tool_logging test asserting a gcloud-storage-against-the-artifact-prefix
+          command is tagged as a fallback while an unrelated Bash command is not, and that
+          redaction still applies. Runnable with no cluster and no LLM.
 
-          LOGGING TO VERIFY: no new logging required (config-only change), but confirm the
-          existing catalog-load log line lists the new server at startup so a session can be
-          traced in Loki.
+          LOGGING TO VERIFY: confirm the existing catalog-load log line lists the new server
+          at startup, and that a direct-GCS artifact read emits the fallback tag — both
+          queryable in Loki so a session can be traced.
           Done = PR merged (open via open_pr, drive gates green).
 
     # Canned infra action — the infra agent is action-driven, not goal-driven (R21).
