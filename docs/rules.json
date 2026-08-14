@@ -143,6 +143,12 @@
       "title": "Resolvable commit sha",
       "why": "A supplied `with.sha` must be a real commit sha (7–40 hex) so the release/verify checks can resolve the commit; a ref like HEAD or a branch name never resolves at check time and the check fails. With auto-injection you normally omit sha entirely — the injected verify uses the merged PR.",
       "fix": "Set with.sha to a full commit sha (40 hex), or omit it and rely on the injected PR token. Do not use HEAD or a branch name."
+    },
+    {
+      "id": "R25",
+      "title": "Verdict steps must be deterministic",
+      "why": "A kind: check step handed to a DEV agentType (go/ng/rust/py) cannot produce a deterministic verdict. A dev agent is a single LLM query() session: it exits 0 unless it crashes or hits max-turns, so a goal saying \"FAIL (exit non-zero) if any assertion fails\" is untrue — the runtime discards the verdict (see hub/status/agent-verdict-exit-code-fix-2026-08-05.md, still SPEC). Observed live: a verify step reported six of six assertions un-executed and verdict FAIL in prose while the session exited 0. Deterministic verification belongs on an infra agent with a canned action, which R22 requires be composed via use: a PlanTemplate.",
+      "fix": "Replace the hand-authored check with a `use:` step composing a PlanTemplate whose infra step uses a canned action (release-pipeline-status, promote-status, bootjob-for-commit, deploy-health). If no template covers the assertion, propose a new PlanTemplate (OWNERS-reviewed) rather than asserting it in a dev-agent goal."
     }
   ],
   "schema_version": "v1"

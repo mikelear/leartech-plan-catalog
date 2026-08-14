@@ -85,10 +85,57 @@ var (
 	shaRE = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
 )
 
-// infraAgentType is the privileged infra agent (release-verify / deploy-health /
-// chart-config). Concrete steps using it are allowed ONLY in PlanTemplates (R22):
-// a plain catalog Plan must compose infra via a use: template, never hand-author it.
-const infraAgentType = "leartech-agent-infra"
+// infraAgentPrefix matches the privileged infra agents (release-verify /
+// deploy-health / chart-config). Concrete steps using one are allowed ONLY in
+// PlanTemplates (R22): a plain catalog Plan must compose infra via a use:
+// template, never hand-author it.
+//
+// PREFIX, not equality. This was `== "leartech-agent-infra"`, which did NOT match
+// leartech-agent-infra-go — the agentType every working verify-release-flow check
+// actually runs on (release-pipeline-status, promote-status, bootjob-for-commit,
+// deploy-health). So the rule policing privileged infra could be bypassed by
+// hand-authoring the MORE capable variant. Any leartech-agent-infra* is infra.
+const infraAgentPrefix = "leartech-agent-infra"
+
+// isInfraAgent reports whether an agentType is one of the privileged infra agents.
+func isInfraAgent(agentType string) bool {
+	return strings.HasPrefix(agentType, infraAgentPrefix)
+}
+
+// lintVerdictStep (R25) flags a kind: check step handed to a DEV agentType.
+//
+// WHY THIS RULE EXISTS. A dev agent is a single LLM query() session: it exits 0
+// unless it crashes or hits max-turns, so it CANNOT convert a verdict into a
+// non-zero exit code. A goal that says "FAIL (exit non-zero) if any assertion
+// fails; the verdict is this step's exit code" is therefore untrue — the runtime
+// throws the verdict away (see hub/status/agent-verdict-exit-code-fix-2026-08-05.md,
+// still SPEC). Observed live 2026-08-12: artifact-rest-and-mcp/verify-roundtrip
+// reported "six of six assertion classes un-executed → verdict FAIL" in prose and
+// the session still exited 0; it only went Failed because an unrelated
+// expected_pr_missing guard happened to fire.
+//
+// Deterministic verification belongs on an infra agent with a CANNED ACTION,
+// composed via use: a PlanTemplate — which R22 requires for infra steps. The two
+// rules together point at the one correct shape; previously R22 pushed authors OFF
+// infra without R25 pointing them back at a template, so the compliant-looking
+// escape hatch was a dev-agent goal step that silently cannot fail.
+func lintVerdictStep(agentType, kind string, s map[string]any, sw string, f *Findings) {
+	if kind != "check" || !devAgentTypes[agentType] {
+		return
+	}
+	// WARNING, not an error — deliberately, for now. Promoting this to an error today
+	// would fail three already-merged plans (agent-gcs-artifact-read/verify-agent-can-read,
+	// artifact-endpoints and artifact-rest-and-mcp/verify-roundtrip) and block every
+	// subsequent PR, while the PlanTemplate this rule tells authors to use DOES NOT YET
+	// EXIST — the canned actions today are release/promote/bootjob/deploy-health, none of
+	// which can do an authenticated in-cluster round trip. Telling authors "don't do this"
+	// with no alternative is worse than the warning. Promote to f.err once a
+	// roundtrip-verify PlanTemplate exists and those three plans are migrated.
+	f.warn("R25", sw, "kind: check on a dev agentType ("+agentType+") cannot produce a deterministic verdict — "+
+		"a dev agent is one LLM session that exits 0 unless it crashes, so its pass/fail is prose the runtime discards. "+
+		"Compose a PlanTemplate via `use:` whose infra step uses a canned action (release-pipeline-status, promote-status, "+
+		"bootjob-for-commit, deploy-health), or propose a new PlanTemplate if none covers the assertion")
+}
 
 // lintInputs (R21) checks a concrete step's inputs match what its agentType's
 // runtime consumes — the agent Job fails at run time otherwise (a `goal`-only
@@ -114,7 +161,7 @@ func lintInputs(agentType string, s map[string]any, sw string, f *Findings) {
 				f.err("R21", sw, "dev-agent step inputs need `branch` — the Initiative's legacy single-repo shape requires both repo and branch (or use a `repos:` list)")
 			}
 		}
-	case agentType == "leartech-agent-infra":
+	case isInfraAgent(agentType):
 		if asStr(inp["action"]) == "" {
 			f.err("R21", sw, "infra-agent step inputs need `action` (e.g. chart-config, release-health-check) — the infra agent is action-driven, not goal-driven")
 		}
@@ -386,9 +433,11 @@ func lintPlan(planName string, spec map[string]any, where string, f *Findings, i
 				// R22 infra steps are template-only. lintPlan runs for kind: Plan
 				// only, so any concrete infra step here is a violation — infra is
 				// composed via a use: PlanTemplate, never hand-authored in a Plan.
-				if at == infraAgentType {
-					f.err("R22", sw, "infra steps (agentType leartech-agent-infra) are not allowed in a plain Plan — compose a PlanTemplate via `use:` (e.g. use: verify-release-flow); infra steps belong only in PlanTemplates")
+				if isInfraAgent(at) {
+					f.err("R22", sw, "infra steps (agentType "+at+") are not allowed in a plain Plan — compose a PlanTemplate via `use:` (e.g. use: verify-release-flow); infra steps belong only in PlanTemplates")
 				}
+				// R25 verdict steps must be deterministic — see lintVerdictStep.
+				lintVerdictStep(at, asStr(s["kind"]), s, sw, f)
 				lintInputs(at, s, sw, f) // R21 inputs shape by agentType
 			}
 		}
