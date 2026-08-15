@@ -182,6 +182,96 @@ spec:
 
           Done = PR merged (open via open_pr, drive gates green).
 
+    - name: teach-agents-the-hazard
+      kind: pr
+      agentType: leartech-agent-py
+      dependsOn:
+        - sanitise-subprocess-identity
+      inputs:
+        name: teach-agents-the-hazard
+        repo: mikelear/leartech-automated-agent
+        branch: feat/lesson-repo-touches-k8s-api
+        goal: >-
+          Teach EVERY dev agent to recognise, before it runs a repo's test suite, that
+          the repo's tests might talk to the Kubernetes API — and to treat that as high
+          risk, log loudly, and know exactly how to diagnose it if something goes wrong.
+
+          SEQUENCED DELIBERATELY. This step dependsOn sanitise-subprocess-identity
+          because both target THIS repo. Two concurrent PRs on one repo merge cleanly and
+          then silently stomp each other. Do not start until that step's PR has merged,
+          and rebase on it.
+
+          WHY A LESSON AND NOT MORE CODE. The lessons catalog IS the prompt-delivery
+          channel: gate/agent/lessons/prompt_renderer.py renders every lesson whose
+          `applies_to` matches into the agent's system prompt under "Calibrations from
+          past runs", with the note that they "take precedence when in conflict with
+          general guidance below". Read prompt_renderer.py and two or three existing
+          catalog entries for the frontmatter contract and house voice BEFORE writing —
+          match them, do not invent a format.
+
+          ── 1. AUTHOR THE LESSON. A new entry in gate/agent/lessons/catalog/, applying to
+          the dev/initiative agent, that says in substance:
+
+          - Before running a repo's test suite, ASSESS whether its tests touch the
+            Kubernetes API or any other ambient production credential. Cheap checks: does
+            the repo import a k8s client (kubernetes / kubernetes_asyncio / client-go);
+            do its tests use a FAKE client or a real one; does anything call
+            load_incluster_config().
+          - If they do, this is HIGH RISK and the reason is non-obvious: your pod carries
+            a LIVE AgentRun identity (AGENT_RUN_NAME / AGENT_RUN_NAMESPACE /
+            LEARTECH_AGENTRUN_STATUS) and real credentials (GH_TOKEN, gateway keys). A
+            test that constructs a real client can therefore act on live cluster state —
+            including YOUR OWN AgentRun. It will look hermetic on a laptop, because
+            load_incluster_config() fails there and the code silently skips.
+          - The hazard is NOT limited to Kubernetes. GH_TOKEN is projected into every
+            agent pod, so a test that shells `gh` acts on real repositories.
+          - Go repos are SAFER BY CONVENTION, not by construction — the controller-runtime
+            fake client is the house pattern, but a Go test calling a real client
+            in-cluster behaves identically. Do not assume language implies safety.
+          - LOG LOUDLY when you knowingly run such a suite: say which repo, that its
+            tests may touch cluster APIs, and what you did about it. A future forensic
+            reader needs that line to exist.
+          - Known instance: leartech-automated-agent, because it IMPLEMENTS AgentRuns.
+            Its identity is now stripped from subprocess environments (see the sibling
+            step), so a test can no longer reach the live run — if run status still looks
+            wrong there, that is a REGRESSION in that guard, not the original bug.
+
+          ── 2. RECORD THE DIAGNOSTIC LADDER IN THE LESSON. This is the part with the
+          longest shelf life, so make it concrete and ordered, not general advice:
+          - `kubectl logs` is NOT a log store — it is pod-scoped and dies with the pod.
+            Go to LOKI first. (This misled the 2026-08-15 investigation twice into
+            concluding "there is no logging" when Loki had the data both times.)
+          - APPLICATION LOGGING CANNOT CATCH A FOREIGN WRITER. If a resource changed and
+            your code did not do it, no amount of your own instrumentation will show it.
+          - `managedFields` on the object is STEP ONE for "who wrote this" — it is free,
+            always present, and names the manager that owns each field. A manager that is
+            not your controller is the answer.
+          - The GKE AUDIT LOG then converts that manager/user-agent into a ServiceAccount
+            and a timestamp. Note that GKE's default audit policy is Metadata-level, so
+            request BODIES are not captured — you get who and when, not what.
+          - `status.decisions` on a Plan tells you which controller branch fired.
+
+          ── 3. AMEND pre-push-validation.md. That lesson is what instructs agents to run
+          the repo's gates including pytest, and is therefore where this hazard is
+          encountered. Add a short, prominent cross-reference to the new lesson at the
+          point it tells the agent to run tests — so the warning arrives at the moment of
+          risk rather than being filed elsewhere. Do NOT weaken the pre-push mandate:
+          running the gates before pushing is correct and stays.
+
+          KEEP IT SHORT ENOUGH TO SURVIVE. Every lesson competes for prompt budget
+          against the goal itself. Be specific and dense; cut anything an agent cannot
+          act on. If the diagnostic ladder is the only part that survives editing, that
+          is the right choice.
+
+          ISOLATE TESTING: assert the new lesson loads and is rendered for the dev agent
+          by prompt_renderer (there are existing lesson-loading tests — extend them
+          rather than inventing a pattern), that its frontmatter validates, and that
+          pre-push-validation.md still loads after the edit. `uv run ruff format --check
+          app gate tests`, `uv run ruff check app gate tests`, `uv run mypy app gate` and
+          `uv run pytest` must pass.
+
+          Done = PR merged (open via open_pr, drive gates green).
+
     - name: protect-agentrun-phase
       kind: pr
       agentType: leartech-agent-go
