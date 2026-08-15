@@ -1,0 +1,191 @@
+# Retire leartech-orchestrator — the Python FastAPI "Dev Manager Agent" whose
+# execution role the Go control plane took over.
+#
+# WHY IT IS SUPERSEDED (verified 2026-08-15)
+# Last commit 2026-07-02. The Plan CRD + reconciler now own execution; the controller
+# roadmap records that "Go Plan CRs are disjoint from orch's Postgres plans (no
+# double-execution)". Its chat surface is an OPS surface — its system prompt describes
+# it as "the operator's conversational interface for inspecting and steering running
+# plans" and spends much of its length on staleness directives. It inspects; it does
+# not author. Nothing in the automated-agent RUNTIME calls it: every "orch" reference
+# there names leartech-orchestrator-controller (the Go component), not this service.
+#
+# ⚠️ DO NOT CONFUSE THE TWO. leartech-orchestrator-controller is LOAD-BEARING and must
+# not be touched — it is the Go reconciler that owns every AgentType CR, including
+# leartech-agent-ba, and it is deployed to jx-plane-conformance as well as jx-staging.
+# The names differ by one suffix. Any change here must be by explicit file path, never
+# by a pattern match on "orchestrator".
+#
+# IT IS STILL LIVE. Both clusters answered on 2026-08-15: /docs and /openapi.json
+# return 200 unauthenticated; /health/live, /health/ready and POST /chat return 401
+# (auth IS enforced). This is a real decommission, not GitOps tidying.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# HUMAN PREREQUISITES — these are NOT agent steps and MUST happen BEFORE unpause
+# ─────────────────────────────────────────────────────────────────────────────
+#   1. DUMP THE DATABASE. leartech_orchestrator holds the ONLY copy of
+#      chat_conversations + its turns and orchestration_lessons — accumulated
+#      operator conversations and confirmed lessons. Everything else in that DB
+#      (orchestration_plans, plan_steps, plan_decisions, initiative_drafts,
+#      plan_catalog) is superseded by the Plan CRD, but the conversations and
+#      lessons are unrecoverable and are exactly the corpus a future authoring
+#      tool would want. Dump first. This is the one irreversible step.
+#   2. DELETE THE EventRegistration CR BY HAND FIRST. Orch registers
+#      consumes: run.completed at /consume_event with a 5-attempt retry policy.
+#      A helm uninstall removes it eventually, but ordering within an uninstall is
+#      not guaranteed, so Maestro can deliver into a terminating pod and burn five
+#      retries plus a level-1 alert per event. Deregister, confirm deliveries have
+#      stopped, then let the Plan proceed.
+#   3. DEREGISTER THE HYDRA OAUTH2 CLIENT and decide whether the orch bot PAT is
+#      shared before revoking it.
+#   4. ARCHIVE THE REPO once the cluster resources are gone.
+#
+# WHAT IS WORTH KEEPING BEFORE IT GOES
+# gate/orch/plan_verify.py (verify_plan_firability — catalog membership per step,
+# repo existence, branch availability including conflicts with open PRs, same-repo
+# parallelism) and gate/orch/plan_summarise.py are real Plan preflight, exposed today
+# as `leartech-agent verify-plan` / `summarise` from the orchestrator repo's own CLI.
+# They are NOT ported by this Plan. If they are wanted, port them BEFORE archiving —
+# once the repo is archived they are only in git history.
+#
+# The chat REPL in leartech-automated-agent (app/agent_cli/commands/chat.py) is also
+# worth reading before deletion: prompt_toolkit history, rich markdown panels,
+# resumable conversation_id, :save/:new/:cost slash commands, transport errors that
+# do not kill the session. It is the closest working prior art for a terminal-shaped
+# agent tool, and it survives in git history after this Plan removes it.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: decom-orchestrator-service
+spec:
+  paused: true
+  steps:
+    - name: drop-orch-cli-client
+      kind: pr
+      agentType: leartech-agent-py
+      inputs:
+        name: drop-orch-cli-client
+        repo: mikelear/leartech-automated-agent
+        branch: chore/drop-orch-cli-client
+        goal: >-
+          Remove this repo's client-side coupling to the leartech-orchestrator service,
+          which is being decommissioned. Do this BEFORE the service is removed, so the CLI
+          never ships a command pointing at a dead host.
+
+          SCOPE IS EXACTLY ONE COMMAND. Confirm this before you start:
+          `grep -l orch_url app/agent_cli/commands/*.py` returns only chat.py and
+          config_cmd.py. Every other CLI command (fire, runs, lessons, mcps, ops, roles,
+          topology, health) targets the agent API and MUST keep working unchanged. If your
+          grep disagrees with this goal, trust the grep and say so in the PR description.
+
+          REMOVE: the `chat` command (app/agent_cli/commands/chat.py) and its registration;
+          the `orch_url` field from ClusterConfig in app/agent_cli/config.py, including the
+          hardcoded gcp-staging / az-staging defaults and the LEARTECH_ORCH_URL env branch;
+          the orch_url handling in config_cmd.py; and the corresponding tests
+          (test_agent_cli_chat.py, and the orch_url cases in test_agent_cli_config.py).
+
+          MIND THE SCHEMA. ClusterConfig currently REQUIRES both orch_url and agent_url and
+          raises if either is missing — this is a required-field removal, not a string
+          delete. Any user config file on disk that still carries orch_url must not start
+          failing validation; make the loader tolerate and ignore an unknown/legacy
+          orch_url key rather than rejecting it, and cover that with a test.
+
+          DO NOT DELETE THE REPL SHAPE SILENTLY. chat.py is the closest working prior art
+          for a terminal-shaped agent tool in this estate — prompt_toolkit history, rich
+          markdown panels, resumable conversation_id, :save/:new/:cost slash commands, and
+          the deliberate choice to print a one-line transport error rather than exit the
+          session. In the PR description, record the commit sha at which it can be read, so
+          a future session can `git show <sha>:app/agent_cli/commands/chat.py` rather than
+          hunting for it.
+
+          ISOLATE TESTING: `uv run ruff format --check app gate tests`,
+          `uv run ruff check app gate tests`, `uv run mypy app gate`, and
+          `uv run pytest` must all pass. Assert specifically that the remaining CLI
+          commands still resolve their URLs, and that a config file containing a legacy
+          orch_url key loads without error.
+
+          Done = PR merged (open via open_pr, drive gates green).
+
+    - name: remove-orch-gsm
+      kind: pr
+      agentType: leartech-agent-go
+      dependsOn:
+        - drop-orch-cli-client
+      inputs:
+        name: remove-orch-gsm
+        repo: mikelear/jx-build-cluster-gsm
+        branch: chore/remove-orchestrator
+        goal: >-
+          Remove the leartech-orchestrator release from the GCP cluster. Read the whole
+          goal before editing — the single biggest risk here is deleting the wrong thing.
+
+          ⚠️ leartech-orchestrator-CONTROLLER MUST SURVIVE. It is a DIFFERENT release from a
+          DIFFERENT repo and it is load-bearing: it owns every AgentType CR (including
+          leartech-agent-ba), and it is also deployed to the jx-plane-conformance
+          namespace. The two names differ by one suffix. Edit by explicit file path only.
+          NEVER use a pattern match like `grep -l orchestrator | xargs rm`, and never touch
+          any path containing "orchestrator-controller".
+
+          REMOVE, in helmfiles/jx-staging/: the `- chart: dev/leartech-orchestrator` entry
+          in helmfile.yaml (name: leartech-orchestrator, currently version 0.0.110) and its
+          configs/leartech-orchestrator.yaml. Leave the leartech-orchestrator-controller
+          entry and its config exactly as they are.
+
+          ALSO REMOVE the rendered resources under
+          config-root/namespaces/jx-staging/leartech-orchestrator/ — deployment, service,
+          ingress, the CNPG Database CR, the db ExternalSecret, the migrations ConfigMap,
+          the plan-runner Role and RoleBinding, and the EventRegistration. Note that
+          config-root/ is Helm-rendered output committed by JX; if this repo's convention
+          is that config-root is regenerated rather than hand-edited, follow that
+          convention and say which you did in the PR description.
+
+          CHECK leartech-platform-postgres. charts/leartech-platform-postgres references
+          the orchestrator database role and its ExternalSecret. Removing the service does
+          not automatically mean dropping the database — the human prerequisites for this
+          Plan require the DB to be dumped first, and dropping it may be a separate,
+          deliberate step. Report what you find and what you left in place; do NOT drop a
+          database as part of this PR.
+
+          BEFORE YOU PUSH, confirm and state in the PR description: (a) the
+          leartech-orchestrator-controller helmfile entry is untouched, (b) nothing under
+          any *-controller path was modified, (c) the ingress host
+          leartech-orchestrator-jx-staging.jx.leartech.com is gone, and (d) whether any
+          remaining file in this repo still references the leartech-orchestrator service
+          (as opposed to the controller).
+
+          Done = PR merged (open via open_pr, drive gates green).
+
+    - name: remove-orch-akv
+      kind: pr
+      agentType: leartech-agent-go
+      dependsOn:
+        - drop-orch-cli-client
+      inputs:
+        name: remove-orch-akv
+        repo: mikelear/jx-build-cluster-akv
+        branch: chore/remove-orchestrator
+        goal: >-
+          Mirror remove-orch-gsm for the Azure cluster. Every warning in that step applies
+          here unchanged.
+
+          ⚠️ leartech-orchestrator-CONTROLLER MUST SURVIVE on this cluster too — it is in
+          BOTH helmfiles/jx-staging/helmfile.yaml and helmfiles/jx-plane-conformance/
+          helmfile.yaml here. Edit by explicit file path; never pattern-match on
+          "orchestrator"; never touch a *-controller path.
+
+          REMOVE the `- chart: dev/leartech-orchestrator` entry from
+          helmfiles/jx-staging/helmfile.yaml and its config file, plus the rendered
+          resources under config-root/namespaces/jx-staging/leartech-orchestrator/.
+
+          Keep the two clusters at parity file-for-file with the GCP change — if this
+          cluster's layout differs (different config filename, extra or missing rendered
+          resources, a different ingress host such as
+          leartech-orchestrator-jx-staging.az.leartech.com), describe the difference in the
+          PR description rather than silently making the two clusters diverge.
+
+          Same database caution: report what references the orchestrator DB, drop nothing.
+
+          BEFORE YOU PUSH, confirm in the PR description that both the jx-staging AND
+          jx-plane-conformance controller entries are untouched.
+
+          Done = PR merged (open via open_pr, drive gates green).
