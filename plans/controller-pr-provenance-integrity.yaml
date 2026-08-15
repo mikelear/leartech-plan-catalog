@@ -1,0 +1,204 @@
+# A Plan abandoned a HEALTHY agent because the controller was polling a PR number
+# that never existed. Make a step's PR number impossible to corrupt, and make every
+# write of it traceable.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# THE INCIDENT — 2026-08-15, plan decom-orchestrator-cli-coupling, jx-staging/gcp
+# ─────────────────────────────────────────────────────────────────────────────
+#   12:41:23  AgentRun created, status.targetPR empty
+#   12:48:03  controller fetches PR 513 -> HTTP 404 -> pr_outcome_fetch_failed  (x4)
+#   12:51:10  agent's open_pr returns the REAL PR: 217
+#   result    Plan step Failed. Agent still Running, PR 217 open with gates green.
+#
+# The agent was never wrong. AgentRun.status.targetPR = "217", headBranch correct,
+# agentRunName correctly linked. Only the PLAN STEP's copy said 513 — and it said so
+# three minutes BEFORE any PR existed. `pr=217` appears ZERO times in three days of
+# controller logs: the correct value was never once observed by the Plan reconciler.
+#
+# WHY THE PREVIOUS PLAN SURVIVED (the control case, same day, same cluster)
+# decom-split-agent-image-build logged its first PR-outcome event at 12:18:55 with
+# pr=216 — twelve seconds AFTER its PR merged, correct from first sight, no fetch
+# failure ever. observeOutcome is only REACHED when st.PR is non-empty, so that
+# silence proves its st.PR stayed empty until the agent legitimately populated it.
+# The difference is not that one Plan raced and the other did not. The difference is
+# that one had a wrong value sitting in the field during the pre-PR window and the
+# other did not.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# WHY IT IS STRUCTURALLY POSSIBLE
+# ─────────────────────────────────────────────────────────────────────────────
+# The PR number is stored TWICE:
+#   * AgentRun.status.targetPR  — written by the open_pr MCP from the STRUCTURED
+#     GitHub API response (no scraping). This path is sound and behaved correctly.
+#   * PlanStepStatus.pr         — a COPY the Plan reconciler maintains.
+#
+# observeStepStatus makes that copy with asymmetric rules:
+#     if prior, ok := priorStatus[step.Name]; ok { st.PR = prior.PR }   // UNCONDITIONAL
+#     if run,   ok := runs[step.Name];        ok {
+#         if run.Status.TargetPR != "" { st.PR = run.Status.TargetPR }  // CONDITIONAL
+#     }
+# Carry-forward always happens; correction happens only when targetPR is non-empty.
+# So a wrong value survives every reconcile until a non-empty targetPR displaces it —
+# and if the step reaches terminal first, deriveStepPhase's terminal-stickiness
+# returns early without re-deriving, making it permanent.
+#
+# THIS BUG CLASS IS ALREADY NAMED. leartech-mcp-servers' platformstateserver:
+#   "The canonical example is the run-#42 mis-capture: an AgentRun's status.targetPR
+#    ended up pointing at the wrong PR number, and the drift wasn't queryable
+#    post-hoc — you could only spot it by walking every run by hand."
+# A DETECTOR exists (pr_branch_pair reconcile candidates) — but it cross-checks
+# AgentRun.status.targetPR against the head ref. THIS incident would pass it clean,
+# because the AgentRun was correct and only the Plan's copy drifted. The known guard
+# does not cover this variant.
+#
+# WHAT IS NOT THE CAUSE — do not "fix" these
+#   * NOT log scraping. pr_capture.py's prose-scraping ancestor was removed; open_pr
+#     now takes the number from structured API JSON. Keep it that way.
+#   * NOT the agent. It never emitted 513 — zero occurrences in its pod log.
+#   * NOT a second AgentRun. Exactly one existed, correctly linked.
+#   * NOT split-brain. One live lease holder; the second lease is stale litter from a
+#     replicaset deleted 43 days ago (worth cleaning, unrelated).
+#
+# THE ORIGIN OF 513 IS UNPROVEN AND THIS PLAN MUST NOT ASSUME IT.
+# One unproven lead only: 513 is a real PR in BOTH gitops repos, and
+# jx-build-cluster-gsm#513 is "chore: promote leartech-automated-agent to version
+# 0.10.22" — a promote PR for this very service. Suggestive of a promote-PR number
+# reaching a step's PR field. Treat as a hypothesis to test, not a conclusion.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: controller-pr-provenance-integrity
+spec:
+  paused: true
+  steps:
+    - name: pr-provenance-integrity
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: pr-provenance-integrity
+        repo: mikelear/leartech-orchestrator-controller
+        branch: feat/pr-provenance-integrity
+        goal: >-
+          Make a Plan step's PR number impossible to corrupt silently, and make every
+          write of it traceable. A Plan abandoned a healthy agent run today because it
+          was polling PR 513 — a number that does not exist in the target repo — while
+          the AgentRun correctly carried 217.
+
+          READ THE INCIDENT IN THE PLAN'S HEADER COMMENT FIRST. It carries the verified
+          timeline, the control case that survived, and an explicit list of things that
+          are NOT the cause. Do not re-derive it and do not "fix" the open_pr capture
+          path — that path is sound and takes its number from the structured GitHub API
+          response, not from scraped text. Keep it that way.
+
+          ── 1. FIND WHERE 513 CAME FROM. This is a real investigation, not a formality,
+          and it is the part most likely to change the shape of the fix. The origin is
+          UNPROVEN. Establish, from the code, every path that can place a value in
+          PlanStepStatus.PR — including paths that run before the child AgentRun
+          publishes anything: step-token resolution (${steps.<name>.pr}), the
+          injection-composed verify-release-flow parameters, promote-PR handling, any
+          dead-runner or retry path that rebuilds step status, and anything that
+          rehydrates status from a prior generation. Report what you find EVEN IF you
+          cannot reproduce the exact value; a written map of the writers is the
+          deliverable. One unproven lead to test and then confirm or discard explicitly:
+          513 is a real promote PR for this service in the gitops repos, which would
+          mean a promote-PR number reaching a step's PR field.
+
+          ── 2. MAKE THE FIELD UNCORRUPTIBLE. Prefer DERIVING over copying: the step's
+          PR should be read from the child AgentRun at use time rather than stored and
+          carried forward — st.AgentRunName is already on the step status, so the join
+          exists. If a materialised copy must stay for the portal DTO, then make it
+          WRITE-ONCE-IMMUTABLE: once non-empty, st.PR may never change to a DIFFERENT
+          non-empty value; an attempted change is a loud error, not a silent overwrite.
+          Either shape removes the asymmetry where carry-forward is unconditional and
+          correction is conditional. Say in the PR description which you chose and why.
+
+          ── 3. A 404 IS A CONTRADICTION, NOT A TRANSIENT. Today a fetch failure logs
+          "treating as still-open, will requeue+retry" and retries forever. For a step
+          that claims to have opened a PR, HTTP 404 means the recorded number is WRONG —
+          that is a data-integrity failure and must surface immediately and terminally,
+          with the number and repo in the message. Keep genuinely transient errors
+          (5xx, timeouts, rate limits) on the existing retry path. Distinguishing 404
+          from 5xx is the whole point; do not collapse them.
+
+          ── 4. LOG EVERY WRITE, WITH PROVENANCE. There is currently NO log line
+          anywhere at the moment a PR number is SET — not when open_pr patches
+          targetPR, not when the reconciler assigns st.PR. All existing PR logging is at
+          CONSUMPTION time, which is why this took a live forensic dig. Emit one
+          structured line on every write carrying: plan, step, run, the value, the
+          SOURCE it came from (agentrun-status / carried-forward / token-resolution /
+          …), and the prior value when overwriting. Follow the field-set conventions in
+          loop_logging.go — read it first, it is explicit about not mixing camelCase and
+          snake_case spellings of the same correlation id in one record. The bar: from
+          Loki alone, answer "who set this step's PR, to what, from where, and when".
+
+          ── 5. SURFACE IT ON THE RESOURCE. The failed step's message was EMPTY — the
+          Plan said Failed and offered no reason anywhere on the CR. Write the
+          diagnostic to the step's message (and AgentRunStatus.Message where the run is
+          implicated) so an operator sees the cause without log-diving.
+
+          DO NOT TOUCH: the open_pr capture path, the DeadlineExceeded respawn, or the
+          uncached-APIReader Job-absence confirmation.
+
+          ISOLATE TESTING: table-driven unit tests with the controller-runtime fake
+          client. Cover: a wrong non-empty prior PR is NOT carried forward past a
+          correct AgentRun targetPR; a second, different non-empty write is rejected
+          loudly (or is impossible by construction under the derive design); a 404
+          fails terminally with the number and repo in the message while a 500 retries;
+          the provenance line is emitted on every write with the correct source; and the
+          control case still works — an empty prior plus a later targetPR yields the
+          correct PR with no error. Reproduce the incident's ordering explicitly:
+          st.PR populated BEFORE the child AgentRun publishes targetPR. Non-negative
+          coverage delta, no cluster.
+
+          Done = PR merged (open via open_pr, drive gates green).
+
+    - name: detect-plan-agentrun-pr-drift
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: detect-plan-agentrun-pr-drift
+        repo: mikelear/leartech-mcp-servers
+        branch: feat/detect-plan-agentrun-pr-drift
+        goal: >-
+          Extend the existing reconcile-candidates detector so the drift variant that
+          just bit us is queryable, instead of only the variant it already knows about.
+
+          WHAT EXISTS. platformstateserver's reconcile-candidates tool surfaces three
+          anomaly classes, one of which is `pr_branch_pair` — in-flight runs with both
+          status.targetPR and status.headBranch set, which the caller cross-checks via
+          pr_context.get_pr_metadata to detect what the code calls "the run-#42
+          mis-capture signature": an AgentRun whose status.targetPR points at the wrong
+          PR. Read that file's comments before changing anything; they explain the
+          design intent, including that the tool is deliberately CANDIDATE-shaped rather
+          than verdict-shaped — false positives are acceptable, missed drift is not.
+
+          THE GAP. That detector compares the AgentRun against GitHub. On 2026-08-15 the
+          AgentRun was CORRECT (targetPR 217) and the PLAN STEP's copy was wrong (513),
+          so the incident would have passed the existing check clean. Nothing today can
+          answer "does any Plan step's PR disagree with its own child AgentRun's
+          targetPR" — a comparison needing no GitHub call at all, since both values live
+          in the cluster.
+
+          ADD a fourth candidate class for exactly that: for every Plan step carrying
+          both an agentRunName and a non-empty PR, compare against that AgentRun's
+          status.targetPR and surface a candidate when they differ and the AgentRun's
+          value is non-empty. Include both values, the plan, the step and the run name
+          so the caller can act without a second round trip. A step whose AgentRun has
+          not published a PR yet is NOT drift — that is the normal pre-PR window and
+          must not be flagged.
+
+          FOLLOW THE HOUSE SHAPE. This is an adapter that returns live CRD state: read
+          fresh from the k8s API, no cache, read-only, no mutations, and keep the whole
+          sweep within the existing single-List-per-CRD cost model rather than adding a
+          per-step API call. Use the standard mcplog.ToolStart/Finish logging every
+          other tool uses — no bespoke logging. Extend the existing tool's output rather
+          than adding a new tool unless the shape genuinely does not fit, and say which
+          you did and why.
+
+          ISOLATE TESTING: Go unit tests with a fake client covering matching values
+          (no candidate), differing values (candidate, both values reported), an empty
+          AgentRun targetPR (no candidate — pre-PR window), a step with no agentRunName
+          (no candidate), and the exact 2026-08-15 shape (step PR 513, AgentRun targetPR
+          217). Non-negative coverage delta, no cluster.
+
+          Done = PR merged (open via open_pr, drive gates green).
