@@ -66,15 +66,24 @@ spec:
           since been added, STOP and report that in the PR description rather than
           building on a stale premise.
 
-          RBAC. Add core/pods get;list;watch as a kubebuilder marker, regenerate, and make
-          the matching chart change. The chart already grants exactly this shape to a
-          different subject in agent-infra-go-rbac.yaml — follow that precedent for
-          wording and placement rather than inventing a new block. Read-only: the
-          controller must never gain pod delete or exec.
+          HOOK THE EXISTING REQUEUE — DO NOT ADD A POD INFORMER. The reconciler already
+          polls while the Job runs: the `default:` "agent Job still running" branch returns
+          RequeueAfter 5s. That branch fires every 5 seconds on exactly the population you
+          care about — a Running AgentRun with a live Job — so it is where the pod read
+          belongs. Do NOT add Owns(&corev1.Pod{}), a Pod informer, or a pod-to-AgentRun
+          mapper: none is needed, and each adds cache and mapping surface for no gain.
+          SetupWithManager should still be For(AgentRun).Owns(Job) when you are done.
 
-          DETECTION. On reconcile of an AgentRun whose phase is Running and which has a
-          JobName, read that Job's pods and extract each container's waiting reason and
-          message. Classify into two buckets and treat them differently:
+          RBAC. Add core/pods to the kubebuilder markers, regenerate, and make the matching
+          chart change. A polling read needs only get;list — include watch solely if you
+          prefer verbatim parity with the existing agent-infra-go-rbac.yaml precedent, and
+          say which you chose and why. Follow that file for wording and placement rather
+          than inventing a new block. Read-only always: the controller must never gain pod
+          delete or exec.
+
+          DETECTION. In that still-running branch, read the Job's pods and extract each
+          container's waiting reason and message. Classify into two buckets and treat them
+          differently:
 
           - NOT-YET-STARTED, which is normal and must NOT be flagged: ContainerCreating,
             PodInitializing, and a brief ImagePullBackOff while a large image pulls.
@@ -87,17 +96,30 @@ spec:
           the AgentRun sees the same words for the same condition. Read those tools before
           choosing names.
 
-          SURFACE IT IMMEDIATELY, FAIL IT SLOWLY. Two distinct behaviours, and the
-          distinction is the point:
-          - As soon as a STUCK reason is observed, write it to AgentRunStatus.Message with
-            the reason AND the pod's own message (the "secret X not found" detail is the
-            entire diagnostic value — a bare reason code is nearly useless). Do not change
-            the phase yet. An operator or a dashboard can now see why nothing is happening.
-          - Only after the condition persists beyond a bounded, configurable grace period
-            should the run go Failed with that message. Registry blips and slow pulls are
-            real; failing on first sight would turn a transient into an outage. Choose a
-            default that is clearly longer than a cold pull of the agent image and justify
-            it in the PR description.
+          SURFACE IT IMMEDIATELY, FAIL IT SLOWLY, AND FAIL ONLY WHAT CANNOT SELF-HEAL.
+          Three rules, and the distinctions are the point:
+          - As soon as ANY stuck reason is observed, write it to AgentRunStatus.Message
+            with the reason AND the pod's own message (the "secret X not found" detail is
+            the entire diagnostic value — a bare reason code is nearly useless). Do not
+            change the phase. An operator or dashboard can now see why nothing is
+            happening. This half is pure gain and applies to every stuck reason.
+          - Only CreateContainerConfigError and InvalidImageName may go on to FAIL the run,
+            and only after the condition persists beyond the grace period. These cannot fix
+            themselves: a missing Secret does not appear on its own.
+          - ErrImagePull / ImagePullBackOff are SURFACED BUT NEVER FAIL the run, however
+            long they persist. They self-heal, and a registry incident can outlast any
+            grace period we would be willing to set — failing then would convert someone
+            else's outage into our lost work. Loud and visible is the right answer, not
+            terminal. If you disagree after reading the code, say so in the PR description
+            rather than quietly widening the failing set.
+
+          CONFIG SEAM. Make the grace period an injected field —
+          `StuckPodGracePeriod time.Duration` on AgentRunReconciler — defaulted where the
+          reconciler is wired in cmd/server, NOT read from an env var inside the reconcile
+          path. Every other knob on that struct (Events, Store, Injection, Maestro,
+          APIReader, ClusterID, DefaultAgentType) is injected this way, so tests set it
+          directly with no env manipulation. Pick a default clearly longer than a cold pull
+          of the agent image and justify the number in the PR description.
 
           DO NOT TOUCH THE HAPPY PATH. A pod that is Running, or a Job that reaches a
           terminal condition normally, must behave exactly as it does today. This is
@@ -105,6 +127,14 @@ spec:
           alter the DeadlineExceeded respawn logic or the uncached-APIReader Job-absence
           confirmation — both exist for reasons a passing test suite will not explain to
           you.
+
+          STUCK IS NOT A RESPAWN — SAY SO IN THE PR. A stuck-pod failure goes terminally
+          Failed; it must NOT be routed through the DeadlineExceeded under-budget respawn.
+          That is deliberate: the only reasons that can fail here are config errors that
+          will recur identically on a fresh pod, so respawning would burn the iteration
+          budget re-hitting the same wall and hide the cause behind retry noise. Write one
+          line in the PR description explaining this, so a later reader does not
+          "helpfully" fold stuck-pods into the retry budget.
 
           ISOLATE TESTING: table-driven unit tests with the controller-runtime fake
           client, in the style of the existing agentrun_controller_test.go. Cover: a
