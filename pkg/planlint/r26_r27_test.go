@@ -10,7 +10,28 @@ package planlint_test
 //
 // (Uses the lintYAML / hasRule helpers defined in r25_test.go — same package.)
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/mikelear/leartech-plan-catalog/pkg/planlint"
+)
+
+// lintRuleSeverity reports whether a rule fired as an error and/or a warning.
+func lintRuleSeverity(t *testing.T, y, rule string) (isErr, isWarn bool) {
+	t.Helper()
+	res, _ := planlint.LintBytes("plans/t.yaml", []byte(y))
+	for _, e := range res.Errors {
+		if e.Rule == rule {
+			isErr = true
+		}
+	}
+	for _, w := range res.Warns {
+		if w.Rule == rule {
+			isWarn = true
+		}
+	}
+	return
+}
 
 // The exact shape that shipped in 469942e and evaded R22: a dev agent pointed at a
 // cluster GitOps repo, with a config-root instruction in its goal.
@@ -33,18 +54,21 @@ spec:
           the rendered resources under config-root/namespaces/jx-staging/leartech-orchestrator/.
 `
 
-func TestR26FlagsDevAgentOnGitOpsRepo(t *testing.T) {
-	fs := lintYAML(t, gitOpsDecomStep)
-	if !hasRule(fs, "R26") {
-		t.Errorf("R26 did not fire on a dev agent (leartech-agent-go) targeting "+
-			"jx-build-cluster-gsm — the GitOps step that evaded R22.\n  got: %v", fs)
+func TestR26IsHardErrorOnDevAgentGitOpsRepo(t *testing.T) {
+	isErr, _ := lintRuleSeverity(t, gitOpsDecomStep, "R26")
+	if !isErr {
+		t.Errorf("R26 did not fire as a HARD ERROR on a dev agent (leartech-agent-go) " +
+			"targeting jx-build-cluster-gsm — the GitOps step that evaded R22.")
 	}
 }
 
-func TestR27FlagsConfigRootGoal(t *testing.T) {
-	fs := lintYAML(t, gitOpsDecomStep)
-	if !hasRule(fs, "R27") {
-		t.Errorf("R27 did not fire on a goal naming config-root.\n  got: %v", fs)
+func TestR27IsWarningOnConfigRootGoal(t *testing.T) {
+	isErr, isWarn := lintRuleSeverity(t, gitOpsDecomStep, "R27")
+	if !isWarn {
+		t.Errorf("R27 did not fire on a goal naming config-root.")
+	}
+	if isErr {
+		t.Errorf("R27 fired as an error — it is a prose heuristic and must stay a warning.")
 	}
 }
 

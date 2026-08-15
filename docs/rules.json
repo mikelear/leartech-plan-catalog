@@ -153,8 +153,8 @@
     {
       "id": "R26",
       "title": "GitOps repo targets are template-only",
-      "why": "A step whose target repo is a cluster GitOps repo (jx-build-cluster-*) edits live helmfiles and JX-rendered config-root across the fleet — privileged infra work no matter which agentType runs it. R22 catches this only when the step declares an infra agentType, so a dev agent (e.g. leartech-agent-go) pointed at jx-build-cluster-gsm bypasses it. That is exactly the governance hole R22 exists to close, reached from the repo side rather than the agent side. (Advisory warning for now — like R25 — because an already-merged plan trips it and the GitOps-change PlanTemplate this rule points to does not exist yet; promote to a hard error once that template exists and the legacy plan is migrated.)",
-      "fix": "Remove the GitOps step from the Plan. Compose the change via an OWNERS-gated infra PlanTemplate (use:), or have an operator apply it manually. A plain catalog Plan should not hand-author edits to jx-build-cluster-* repos."
+      "why": "A step whose target repo is a cluster GitOps repo (jx-build-cluster-*) edits live helmfiles and JX-rendered config-root across the fleet — privileged infra work no matter which agentType runs it. R22 catches this only when the step declares an infra agentType, so a dev agent (e.g. leartech-agent-go) pointed at jx-build-cluster-gsm bypasses it. That is exactly the governance hole R22 exists to close, reached from the repo side rather than the agent side. A one-off GitOps decommission/enablement is operator work (needs-human:gitops-overlay); a recurring one belongs in an OWNERS-gated PlanTemplate.",
+      "fix": "Remove the GitOps step from the Plan. Compose the change via an OWNERS-gated infra PlanTemplate (use:), or have an operator apply it manually. A plain catalog Plan must not hand-author edits to jx-build-cluster-* repos."
     },
     {
       "id": "R27",

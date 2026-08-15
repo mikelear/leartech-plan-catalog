@@ -202,22 +202,20 @@ func stepTargetRepo(s map[string]any) string {
 // step infra, so R26 gates on the repo. Plan-only (called from lintPlan); a
 // PlanTemplate is the sanctioned, OWNERS-gated home for GitOps changes.
 //
-// WARNING, not an error — deliberately, and for the SAME reason as R25. Promoting
-// this to f.err today would fail an already-merged plan (agent-gcs-artifact-read,
-// whose enable-gcs-gsm/-akv steps do exactly this) and thus break the catalog's own
-// `make lint`, while the infra PlanTemplate this rule tells authors to compose — a
-// "change a release in cluster GitOps" template — DOES NOT YET EXIST. Telling
-// authors "don't do this" with no alternative is the anti-pattern R25 already
-// documents. Promote to f.err once (a) a GitOps-change PlanTemplate exists and (b)
-// agent-gcs-artifact-read is migrated to it. Until then the warning surfaces the
-// governance hole loudly in every review + the sticky comment (which is what caught
-// it on #36 by eye).
+// HARD ERROR. This closes the governance hole from the repo side, the same way R22
+// closes it from the agentType side. It briefly shipped as a warning (an
+// already-merged plan tripped it), but that plan — agent-gcs-artifact-read — has
+// since been de-infra'd (its cluster-overlay enablement moved to a documented
+// operator procedure, exactly as #36 did), so nothing committed trips it and the
+// rule can block for real. A one-off GitOps decommission/enablement is operator
+// work (authoring_capabilities.yaml: needs-human:gitops-overlay); a recurring one
+// belongs in an OWNERS-gated PlanTemplate composed via use:.
 func lintGitOpsRepoTarget(s map[string]any, sw string, f *Findings) {
 	repo := stepTargetRepo(s)
 	if repo == "" || !gitOpsRepoRE.MatchString(repo) {
 		return
 	}
-	f.warn("R26", sw, "step targets cluster GitOps repo "+repo+" — editing its helmfiles / JX-rendered config-root is privileged infra work regardless of agentType (R22 keys on agentType, so a dev agent here bypasses it). Compose the change via an OWNERS-gated infra PlanTemplate (use:) or have an operator apply it manually; a plain Plan should not hand-author edits to jx-build-cluster-* repos")
+	f.err("R26", sw, "step targets cluster GitOps repo "+repo+" — editing its helmfiles / JX-rendered config-root is privileged infra work regardless of agentType (R22 keys on agentType, so a dev agent here bypasses it). Compose the change via an OWNERS-gated infra PlanTemplate (use:) or have an operator apply it manually; a plain Plan must not hand-author edits to jx-build-cluster-* repos")
 }
 
 // lintGoalHazards (R27) scans a concrete step's inputs.goal for hazards the

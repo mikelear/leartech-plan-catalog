@@ -31,6 +31,32 @@
 #   - AuthClientSecretName — an OPT-IN secret pair for a capability only some agent types
 #     need (no default, so a preview namespace without the Secret does not wedge the Job)
 #   - agentTypes.mcpAuth — a chart-level opt-in block that projects env onto every AgentType
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# CLUSTER-OVERLAY ENABLEMENT IS AN OPERATOR PROCEDURE — NOT IN THIS PLAN
+# ─────────────────────────────────────────────────────────────────────────────
+# This Plan originally had two dev-agent PR steps (enable-gcs-gsm / enable-gcs-akv)
+# that turned the new agentTypes.gcs block on in jx-build-cluster-{gsm,akv}. That is
+# a cluster-overlay change — infra, classed needs-human:gitops-overlay — and doing it
+# as a leartech-agent-go PR is exactly the dev-agent-on-gitops shortcut plan-lint R26
+# now hard-blocks (R22 keys on agentType and misses it). A one-off enablement is
+# cleaner as an operator action than a privileged template, so it lives here as the
+# record, not as executable steps:
+#
+#   For each cluster's gitops repo (jx-build-cluster-gsm, jx-build-cluster-akv), in
+#   helmfiles/jx-staging/configs/leartech-orchestrator-controller.yaml set the
+#   agentTypes.gcs block: enabled true, secretName test-artifacts-gcs-key, secretKey
+#   key.json. Source-only — never config-root; boot re-renders. The Secret is already
+#   ESO-synced into jx-staging on both clusters (the CI artifact writer), so no new
+#   Secret/ExternalSecret/GSA is needed. On AZ, confirm ESO syncs the Secret before
+#   enabling, or the projection wedges Jobs on a missing Secret. Also declare the
+#   artifact bucket + IAM (gs://artifacts-product-first, private, US-EAST1;
+#   roles/storage.objectAdmin for test-artifacts-writer@product-first.iam.gserviceaccount.com)
+#   in whatever owns bucket config — both were created by hand and are undeclared.
+#   (Applied by hand 2026-08-10; recorded here so a cluster rebuild can reproduce it.)
+#
+# What remains below is the safe, in-repo half: the controller CRD/chart change and
+# the read-verification check.
 apiVersion: agent.leartech.io/v1alpha1
 kind: Plan
 metadata:
@@ -87,58 +113,11 @@ spec:
           question is answerable from Loki.
           Done = PR merged (open via open_pr, drive gates green).
 
-    - name: enable-gcs-gsm
-      kind: pr
-      agentType: leartech-agent-go
-      inputs:
-        name: enable-gcs-gsm
-        repo: mikelear/jx-build-cluster-gsm
-        branch: feat/agent-gcs-secret
-        goal: >-
-          Enable the agent GCS credential for the GCP cluster. In
-          helmfiles/jx-staging/configs/leartech-orchestrator-controller.yaml set the new
-          agentTypes.gcs block: enabled true, secretName test-artifacts-gcs-key, secretKey
-          key.json.
-
-          That Secret is already present in jx-staging (ESO-synced) and is the same one the
-          Observer and end2end-ui catalog tasks use to upload artifacts, so no new secret,
-          ExternalSecret or GSA is required. Comment the block explaining that it exists so
-          agents can READ artifact bundles referenced by a Plan, and that the same Secret is
-          the CI artifact writer.
-
-          Also declare, in whatever this repo uses for bucket configuration, the artifact
-          bucket and its IAM: gs://artifacts-product-first (private, US-EAST1, no public
-          access) with roles/storage.objectAdmin for
-          test-artifacts-writer@product-first.iam.gserviceaccount.com. Both were created by
-          hand during the 2026-08-09 smoke test and are currently UNDECLARED — a cluster
-          rebuild would lose them and the failure mode is a 403 long after anyone remembers
-          why. If bucket IAM is not owned by this repo, say so in the PR description and
-          leave it out rather than guessing at a home for it.
-          Done = PR merged (open via open_pr, drive gates green).
-
-    - name: enable-gcs-akv
-      kind: pr
-      agentType: leartech-agent-go
-      inputs:
-        name: enable-gcs-akv
-        repo: mikelear/jx-build-cluster-akv
-        branch: feat/agent-gcs-secret
-        goal: >-
-          Mirror enable-gcs-gsm for the Azure cluster: set the same agentTypes.gcs block on
-          leartech-orchestrator-controller's config. Confirm the Secret exists in that
-          cluster's jx-staging first — if ESO does not sync test-artifacts-gcs-key there, say
-          so in the PR description rather than enabling a projection that would wedge Jobs on
-          a missing Secret. The artifact bucket stays on GCS regardless of which cluster the
-          agent runs on, so the credential is the same. Keep the two cluster configs at parity
-          field-for-field.
-          Done = PR merged (open via open_pr, drive gates green).
-
     - name: verify-agent-can-read
       kind: check
       agentType: leartech-agent-ng
       dependsOn:
         - controller-gcs-secret
-        - enable-gcs-gsm
       inputs:
         name: verify-agent-can-read
         repo: mikelear/leartech-ship-proven-website
