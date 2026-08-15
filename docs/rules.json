@@ -149,6 +149,18 @@
       "title": "Verdict steps must be deterministic",
       "why": "A kind: check step handed to a DEV agentType (go/ng/rust/py) cannot produce a deterministic verdict. A dev agent is a single LLM query() session: it exits 0 unless it crashes or hits max-turns, so a goal saying \"FAIL (exit non-zero) if any assertion fails\" is untrue — the runtime discards the verdict (see hub/status/agent-verdict-exit-code-fix-2026-08-05.md, still SPEC). Observed live: a verify step reported six of six assertions un-executed and verdict FAIL in prose while the session exited 0. Deterministic verification belongs on an infra agent with a canned action, which R22 requires be composed via use: a PlanTemplate.",
       "fix": "Replace the hand-authored check with a `use:` step composing a PlanTemplate whose infra step uses a canned action (release-pipeline-status, promote-status, bootjob-for-commit, deploy-health). If no template covers the assertion, propose a new PlanTemplate (OWNERS-reviewed) rather than asserting it in a dev-agent goal."
+    },
+    {
+      "id": "R26",
+      "title": "GitOps repo targets are template-only",
+      "why": "A step whose target repo is a cluster GitOps repo (jx-build-cluster-*) edits live helmfiles and JX-rendered config-root across the fleet — privileged infra work no matter which agentType runs it. R22 catches this only when the step declares an infra agentType, so a dev agent (e.g. leartech-agent-go) pointed at jx-build-cluster-gsm bypasses it. That is exactly the governance hole R22 exists to close, reached from the repo side rather than the agent side. A one-off GitOps decommission/enablement is operator work (needs-human:gitops-overlay); a recurring one belongs in an OWNERS-gated PlanTemplate.",
+      "fix": "Remove the GitOps step from the Plan. Compose the change via an OWNERS-gated infra PlanTemplate (use:), or have an operator apply it manually. A plain catalog Plan must not hand-author edits to jx-build-cluster-* repos."
+    },
+    {
+      "id": "R27",
+      "title": "Goal-prose hazards",
+      "why": "The structural rules cannot see inside a step's free-text inputs.goal, so a hazardous instruction — today, editing the JX-rendered config-root tree — slips through. config-root/ is boot-rendered output; hand-editing it is always wrong because boot overwrites it, and a dev agent reads the goal literally. (Advisory warning — goal prose is heuristic, so this surfaces the hazard for human + ai-review rather than hard-gating.)",
+      "fix": "Do not instruct edits to config-root in a step goal. Edit the source (helmfile.yaml / .jx/gitops inputs) and let boot re-render config-root. If the goal merely warns against editing config-root, this is safe to ignore."
     }
   ],
   "schema_version": "v1"

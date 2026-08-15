@@ -83,6 +83,17 @@ var (
 	// shaRE matches a git commit sha (7–40 hex). A with.sha that isn't one (e.g.
 	// the literal HEAD or a branch name) never resolves at check time (R24).
 	shaRE = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
+	// gitOpsRepoRE matches the cluster GitOps repos (jx-build-cluster-<name>: gsm,
+	// akv, gcp, az, …), owner-agnostic. A step targeting one edits live helmfiles
+	// and JX-rendered config-root across the fleet — privileged infra work no
+	// matter which agentType runs it (R26).
+	gitOpsRepoRE = regexp.MustCompile(`(^|/)jx-build-cluster-[a-z0-9-]+$`)
+	// configRootRE matches a goal instructing edits to the JX-rendered config-root
+	// tree. config-root/ is boot-rendered output; hand-editing it is always wrong
+	// because boot overwrites it — the source is the helmfile / .jx/gitops inputs.
+	// A dev agent reads the goal literally, so a goal naming it is a hazard the
+	// structural rules can't see (R27).
+	configRootRE = regexp.MustCompile(`config-root`)
 )
 
 // infraAgentPrefix matches the privileged infra agents (release-verify /
@@ -166,6 +177,61 @@ func lintInputs(agentType string, s map[string]any, sw string, f *Findings) {
 			f.err("R21", sw, "infra-agent step inputs need `action` (e.g. chart-config, release-health-check) — the infra agent is action-driven, not goal-driven")
 		}
 	}
+}
+
+// stepTargetRepo returns the repo a concrete step acts on — step-level `repo`
+// (some kinds set it there) or inputs.repo (the dev-agent Initiative shape).
+func stepTargetRepo(s map[string]any) string {
+	if r := asStr(s["repo"]); r != "" {
+		return r
+	}
+	return asStr(mapOf(s["inputs"])["repo"])
+}
+
+// lintGitOpsRepoTarget (R26) flags a concrete step whose target repo is a cluster
+// GitOps repo (jx-build-cluster-*), regardless of agentType.
+//
+// WHY THIS RULE EXISTS. R22 keeps privileged infra out of plain Plans, but it keys
+// on the agentType (leartech-agent-infra*). Editing a cluster GitOps repo — its
+// helmfiles and JX-rendered config-root, which mutate live infra across the fleet —
+// is exactly that privileged work, yet a DEV agent (leartech-agent-go) pointed at
+// jx-build-cluster-gsm carries a compliant dev shape and sails straight past R22.
+// Observed on the ORIGINAL decom-orchestrator-service Plan (plan-catalog#36, commit
+// 469942e): two leartech-agent-go steps removing the Orch release from
+// jx-build-cluster-{gsm,akv}. The target repo — not the agentType — is what makes a
+// step infra, so R26 gates on the repo. Plan-only (called from lintPlan); a
+// PlanTemplate is the sanctioned, OWNERS-gated home for GitOps changes.
+//
+// HARD ERROR. This closes the governance hole from the repo side, the same way R22
+// closes it from the agentType side. It briefly shipped as a warning (an
+// already-merged plan tripped it), but that plan — agent-gcs-artifact-read — has
+// since been de-infra'd (its cluster-overlay enablement moved to a documented
+// operator procedure, exactly as #36 did), so nothing committed trips it and the
+// rule can block for real. A one-off GitOps decommission/enablement is operator
+// work (authoring_capabilities.yaml: needs-human:gitops-overlay); a recurring one
+// belongs in an OWNERS-gated PlanTemplate composed via use:.
+func lintGitOpsRepoTarget(s map[string]any, sw string, f *Findings) {
+	repo := stepTargetRepo(s)
+	if repo == "" || !gitOpsRepoRE.MatchString(repo) {
+		return
+	}
+	f.err("R26", sw, "step targets cluster GitOps repo "+repo+" — editing its helmfiles / JX-rendered config-root is privileged infra work regardless of agentType (R22 keys on agentType, so a dev agent here bypasses it). Compose the change via an OWNERS-gated infra PlanTemplate (use:) or have an operator apply it manually; a plain Plan must not hand-author edits to jx-build-cluster-* repos")
+}
+
+// lintGoalHazards (R27) scans a concrete step's inputs.goal for hazards the
+// structural rules are blind to — today, instructions touching config-root.
+//
+// WARNING, not error: goal prose is heuristic (a goal saying "never edit
+// config-root" would false-positive a hard rule), so this surfaces the hazard for
+// human + ai-review rather than hard-gating. High-signal in practice — any goal
+// naming config-root is worth a look, because config-root/ is boot-rendered output
+// and hand-editing it is always wrong (boot overwrites it; edit the source).
+func lintGoalHazards(s map[string]any, sw string, f *Findings) {
+	goal := asStr(mapOf(s["inputs"])["goal"])
+	if goal == "" || !configRootRE.MatchString(goal) {
+		return
+	}
+	f.warn("R27", sw, "step goal references config-root — the JX-rendered config-root tree is boot output and must never be hand-edited (boot overwrites it). Edit the source instead (helmfile.yaml / .jx/gitops inputs) and let boot re-render; if the goal only warns against editing config-root, ignore this")
 }
 
 func strset(keys ...string) map[string]bool {
@@ -440,6 +506,11 @@ func lintPlan(planName string, spec map[string]any, where string, f *Findings, i
 				lintVerdictStep(at, asStr(s["kind"]), s, sw, f)
 				lintInputs(at, s, sw, f) // R21 inputs shape by agentType
 			}
+			// R26/R27 gate on the TARGET (repo, goal prose), not the agentType —
+			// run them regardless of whether agentType was set, so a dev agent
+			// pointed at a GitOps repo can't slip past the agentType-keyed R22.
+			lintGitOpsRepoTarget(s, sw, f) // R26 gitops-repo target is infra
+			lintGoalHazards(s, sw, f)      // R27 goal-prose hazards (config-root)
 		}
 		// R19 test/kind coherence
 		lintTestDirected(planIsTest, s, sw, f)
