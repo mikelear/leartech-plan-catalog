@@ -1,0 +1,128 @@
+# Remove leartech-automated-agent's client-side coupling to the leartech-orchestrator
+# service, ahead of that service being decommissioned.
+#
+# SCOPE WAS DELIBERATELY NARROWED after review on PR #36 (reviewer model-claude,
+# verdict REQUEST_CHANGES, three must-fix). This Plan previously also removed the
+# service from both clusters. It no longer does — see "CLUSTER REMOVAL IS AN OPERATOR
+# PROCEDURE" below. What remains is the safe, reversible, in-repo half.
+#
+# WHY THE ORCHESTRATOR IS BEING RETIRED
+# Last commit 2026-07-02. The Plan CRD + Go reconciler own execution; the controller
+# roadmap records that "Go Plan CRs are disjoint from orch's Postgres plans (no
+# double-execution)". Its chat surface is an OPS surface — its own system prompt calls
+# it "the operator's conversational interface for inspecting and steering running
+# plans". It inspects; it does not author. Nothing in the automated-agent RUNTIME calls
+# it: every "orch" reference there names leartech-orchestrator-CONTROLLER, the Go
+# component, not this service.
+#
+# IT IS STILL LIVE. Both clusters answered on 2026-08-15: /docs and /openapi.json
+# return 200 unauthenticated; /health/live, /health/ready and POST /chat return 401
+# (auth IS enforced).
+#
+# ⚠️ DO NOT CONFUSE THE TWO SERVICES. leartech-orchestrator-CONTROLLER is LOAD-BEARING
+# and must not be touched — it is the Go reconciler that owns every AgentType CR,
+# including leartech-agent-ba, and it is deployed to jx-plane-conformance as well as
+# jx-staging. The names differ by one suffix.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# CLUSTER REMOVAL IS AN OPERATOR PROCEDURE — NOT IN THIS PLAN, BY DESIGN
+# ─────────────────────────────────────────────────────────────────────────────
+# The earlier revision had dev-agent PR steps removing the release from
+# jx-build-cluster-{gsm,akv}. Both were wrong, for two independent reasons the review
+# was right to block on:
+#
+#   1. They instructed the agent to delete rendered resources under `config-root/`.
+#      That violates a HARD RULE — hub/shared-rules/multi-cluster-jx3-pattern.md:
+#      "NEVER edit config-root/ in jx-build-cluster-* repos … auto-generated and
+#      cleaned on every PR by lighthouse via jx gitops helmfile resolve +
+#      helmfile template + jx gitops helmfile move. Hand-edits get clobbered on the
+#      next reconcile. Push source-only PRs."
+#   2. Cluster-overlay removal is infra, and authoring_capabilities.yaml classes it
+#      `needs-human:gitops-overlay`. Doing it as a leartech-agent-go PR contradicts
+#      that. For a ONE-OFF decommission an operator action is cleaner than either
+#      an agent PR or a new privileged template.
+#
+# The operator procedure, in order:
+#   a. DUMP THE DATABASE FIRST — irreversible, and the gating reason this is not
+#      automated. leartech_orchestrator holds the ONLY copy of chat_conversations +
+#      its turns and orchestration_lessons: accumulated operator conversations and
+#      confirmed lessons, and exactly the corpus a future authoring tool would want.
+#      Everything else there (orchestration_plans, plan_steps, plan_decisions,
+#      initiative_drafts, plan_catalog) is superseded by the Plan CRD.
+#   b. DELETE THE Maestro EventRegistration BY HAND, and confirm deliveries stopped.
+#      Orch registers consumes: run.completed at /consume_event with a 5-attempt
+#      retry policy. A helm uninstall removes it eventually, but ordering within an
+#      uninstall is not guaranteed, so Maestro can deliver into a terminating pod and
+#      burn five retries plus a level-1 alert per event.
+#   c. Remove the release SOURCE-ONLY — the `- chart: dev/leartech-orchestrator`
+#      entry in helmfiles/jx-staging/helmfile.yaml plus its
+#      configs/leartech-orchestrator.yaml, on BOTH gitops repos. Never config-root;
+#      boot re-renders and prunes it. Helm release deletion needs the operator's
+#      usual handling — do not assume one boot is enough.
+#   d. Leave the DATABASE ALONE in that change. Dropping it is a separate, deliberate
+#      decision after (a) is confirmed good.
+#   e. Deregister the Hydra OAuth2 client; decide whether the orch bot PAT is shared
+#      before revoking it.
+#   f. Archive the repo LAST — see the prerequisite below.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# PREREQUISITE BEFORE THE REPO IS ARCHIVED — port the firability preflight
+# ─────────────────────────────────────────────────────────────────────────────
+# gate/orch/plan_verify.py's verify_plan_firability is real, well-tested, dynamic
+# preflight that exists NOWHERE else: catalog membership per step, repo existence,
+# branch availability including conflicts with open PRs, and same-repo parallelism.
+# plan-lint is STATIC and cannot replace it. Plan `port-plan-firability-preflight`
+# covers this and should land before the repo is archived, or the capability is lost
+# to git history.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: decom-orchestrator-cli-coupling
+spec:
+  paused: true
+  steps:
+    - name: drop-orch-cli-client
+      kind: pr
+      agentType: leartech-agent-py
+      inputs:
+        name: drop-orch-cli-client
+        repo: mikelear/leartech-automated-agent
+        branch: chore/drop-orch-cli-client
+        goal: >-
+          Remove this repo's client-side coupling to the leartech-orchestrator service,
+          which is being decommissioned. Do this BEFORE the service is removed, so the CLI
+          never ships a command pointing at a dead host.
+
+          SCOPE IS EXACTLY ONE COMMAND. Confirm before you start:
+          `grep -l orch_url app/agent_cli/commands/*.py` should return only chat.py and
+          config_cmd.py. Every other CLI command (fire, runs, lessons, mcps, ops, roles,
+          topology, health) targets the agent API and MUST keep working unchanged. If your
+          grep disagrees with this goal, trust the grep and say so in the PR description.
+
+          REMOVE: the `chat` command (app/agent_cli/commands/chat.py) and its registration;
+          the `orch_url` field from ClusterConfig in app/agent_cli/config.py, including the
+          hardcoded gcp-staging / az-staging defaults and the LEARTECH_ORCH_URL env branch;
+          the orch_url handling in config_cmd.py; and the corresponding tests
+          (test_agent_cli_chat.py, and the orch_url cases in test_agent_cli_config.py).
+
+          MIND THE SCHEMA. ClusterConfig currently REQUIRES both orch_url and agent_url and
+          raises if either is missing — this is a required-field removal, not a string
+          delete. An existing user config file on disk that still carries orch_url must not
+          start failing validation: make the loader tolerate and ignore a legacy orch_url
+          key rather than rejecting it, and cover that with a test.
+
+          DO NOT DELETE THE REPL SHAPE SILENTLY. chat.py is the closest working prior art
+          for a terminal-shaped agent tool in this estate — prompt_toolkit history, rich
+          markdown panels, resumable conversation_id, :save/:new/:cost slash commands, and
+          the deliberate choice to print a one-line transport error rather than exit the
+          session. In the PR description, record the commit sha at which it can be read, so
+          a future session can `git show <sha>:app/agent_cli/commands/chat.py` rather than
+          hunting through history for it.
+
+          ISOLATE TESTING: `uv run ruff format --check app gate tests`,
+          `uv run ruff check app gate tests`, `uv run mypy app gate`, and `uv run pytest`
+          must all pass. Assert specifically that the remaining CLI commands still resolve
+          their URLs, and that a config file containing a legacy orch_url key loads without
+          error.
+
+          Done = PR merged (open via open_pr, drive gates green).

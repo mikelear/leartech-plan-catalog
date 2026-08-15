@@ -1,0 +1,110 @@
+# Port the firability preflight out of leartech-orchestrator into plan-api, BEFORE
+# that repo is archived and the capability survives only in git history.
+#
+# WHY THIS EXISTS
+# Raised as a must-fix on PR #36 (reviewer model-claude): "verify_plan_firability has
+# no home after Orch is archived". Verified — gate/orch/plan_verify.py implements real,
+# well-tested, DYNAMIC preflight that exists nowhere else in the estate:
+#
+#   * catalog membership — is each step's agent type actually in the catalog?
+#   * repo existence — does owner/name resolve, and what is its default branch?
+#   * branch availability — is the step's branch free, or does it collide with an
+#     already-open PR?
+#   * same-repo parallelism — do two steps target one repo in a way that would have
+#     them writing the same branch concurrently?
+#
+# plan-lint CANNOT replace this. plan-lint is STATIC: it reads the YAML and the rule
+# catalog. Every check above is a question about the world — GitHub state and the live
+# agent catalog — which is exactly the class of defect NOTE-plan-review-overhaul.md
+# calls "a false premise about the estate": invisible in the spec, however good the
+# rules.
+#
+# WHY plan-api IS THE RIGHT HOME
+# plan-api is already the single writer and the single validation authority for Plans
+# — it force-creates paused, applies the auto-composition injection policy, and since
+# #20 delegates static validation to the shared planlint package. Dynamic preflight is
+# the natural second half of that: static rules say "this Plan is well-formed", the
+# preflight says "and the world it assumes actually exists".
+#
+# BUILD ON #32, DO NOT REINVENT
+# Plan `mcp-repo-exists-check` (PR #32, OPEN) adds deterministic repo_exists /
+# branch_exists tools to the repo-factory MCP — reusing Client.GetRepo, with 404
+# treated as a clean {exists:false} and any other error surfaced as a tool error so
+# "absent" is distinguishable from "couldn't check". Those are precisely the primitives
+# this preflight needs, and that distinction matters: a preflight that cannot tell
+# "repo is missing" from "GitHub was down" will either block good Plans or wave through
+# broken ones.
+#
+# SEQUENCING: #32 SHOULD LAND FIRST. If it has not, this Plan must NOT hand-roll a
+# GitHub client inside plan-api — say so and stop, rather than duplicating a capability
+# that is already in flight.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: port-plan-firability-preflight
+spec:
+  paused: true
+  steps:
+    - name: firability-preflight-api
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: firability-preflight-api
+        repo: mikelear/leartech-plan-api
+        branch: feat/firability-preflight
+        goal: >-
+          Port the DYNAMIC firability preflight from the soon-to-be-archived
+          leartech-orchestrator into plan-api, so the capability survives its
+          decommission.
+
+          READ THE SOURCE FIRST — DO NOT WORK FROM THIS DESCRIPTION. The reference
+          implementation is gate/orch/plan_verify.py (verify_plan_firability) in
+          mikelear/leartech-orchestrator, with gate/orch/plan_summarise.py as a secondary
+          caller showing how the result is consumed. Read them in full before designing.
+          Prose about a well-commented implementation is lossy; the code carries its own
+          rationale. Port the SEMANTICS — the checks and their edge cases — not the Python
+          structure.
+
+          THE FOUR CHECKS to preserve: (1) catalog membership per step; (2) repo existence
+          plus default branch; (3) branch availability, including whether the branch
+          collides with an already-open PR; (4) same-repo parallelism, i.e. steps that
+          would concurrently write one repo. The Python returns a structured result with a
+          per-check breakdown AND a top-level ok plus blocking_issues list — keep that
+          shape, because callers distinguish "advisory detail" from "this will not fire".
+
+          USE #32's MCP TOOLS, DO NOT HAND-ROLL A GITHUB CLIENT. repo_exists /
+          branch_exists on the repo-factory MCP are the intended primitives. Preserve
+          their central distinction: 404 means a clean "does not exist"; any other error
+          means "could not check" and MUST NOT be reported as "does not exist". A
+          preflight that conflates the two either blocks good Plans during a GitHub
+          incident or waves through Plans targeting repos that are not there. If those
+          tools are not yet available on the cluster you build against, STOP and say so in
+          the PR description rather than adding a direct GitHub dependency to plan-api.
+
+          SURFACE IT AS A READ-ONLY ENDPOINT, SEPARATE FROM CREATE. Add a preflight
+          endpoint that takes a Plan body and returns the report WITHOUT creating
+          anything. Do NOT make create depend on it in this PR: the checks reach out to
+          GitHub, so wiring them into the create path turns Plan creation into something
+          that fails when GitHub is slow or down. Whether create should ever consult it —
+          and whether a failure there should block or warn — is a follow-up decision, and
+          worth stating as an open question in the PR description rather than settling
+          here.
+
+          FOLLOW THIS REPO'S EXISTING SHAPE. plan-api already has internal/plans,
+          internal/handlers, internal/dto and delegates static validation to the shared
+          planlint package. Put the preflight alongside that, keep the DTO conventions,
+          and register the route the way the existing ones are registered. This is
+          additive: no existing endpoint's behaviour may change.
+
+          ISOLATE TESTING: table-driven Go unit tests with the MCP client faked — assert
+          each of the four checks independently; assert repo-absent (404) and
+          could-not-check (non-404) produce DIFFERENT outcomes; assert a branch colliding
+          with an open PR is reported; assert two steps on one repo are flagged; and
+          assert a fully-clean Plan returns ok with an empty blocking_issues. Non-negative
+          coverage delta. No cluster and no live GitHub required.
+
+          LOGGING TO VERIFY: one structured line per preflight with the plan name and the
+          per-check outcome, so "why was this Plan judged unfirable" is answerable from
+          Loki without re-running it.
+
+          Done = PR merged (open via open_pr, drive gates green).
