@@ -13,8 +13,20 @@
 #             cost_usd:7.87}. Job: succeeded=1, Complete=True.
 #   13:01:43  PR 217 MERGES.
 #   FINAL     AgentRun still phase=Failed, completionTime EMPTY, message EMPTY.
-#             Plan Failed, step pr=513. Controller logged NOTHING after the job
-#             completed — it never revisited its own verdict.
+#             Plan Failed, step pr=513.
+#
+# VERIFIED IN LOKI (not kubectl — the pod outlived the query, but Loki is the store
+# that matters): the controller's LAST line about this plan is 12:48:13. The Failed
+# verdict at ~12:53 was NEVER LOGGED AT ALL — no line, no reason, nothing — and the
+# job succeeding at 13:01:28 produced no line either. A run went from spawn to a
+# terminal verdict having emitted only its spawn line and four fetch errors.
+#
+# Note this is partly STRUCTURAL, not just a missing call: the steady-state reconcile
+# path (the "agent Job still running" 5s requeue) is log.V(1), and the deployment sets
+# no verbosity args, so V(1) is suppressed in production. Normal operation therefore
+# leaves no Loki trail at all. Do not "fix" that by turning on V(1) globally — that
+# floods Loki every 5s per run. Fix it by logging the things that MATTER at Info:
+# state transitions, and every write of a PR number.
 #
 # So the work fully SUCCEEDED and the bookkeeping says it failed. The agent was
 # never wrong: AgentRun.status.targetPR = "217", headBranch correct, agentRunName
