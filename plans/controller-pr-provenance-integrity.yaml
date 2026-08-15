@@ -8,12 +8,20 @@
 #   12:41:23  AgentRun created, status.targetPR empty
 #   12:48:03  controller fetches PR 513 -> HTTP 404 -> pr_outcome_fetch_failed  (x4)
 #   12:51:10  agent's open_pr returns the REAL PR: 217
-#   result    Plan step Failed. Agent still Running, PR 217 open with gates green.
+#   ~12:53    controller marks the AgentRun Failed
+#   13:01:28  agent exits 0. Loki run_end: {exit_code:0, targetPR:217, turns:100,
+#             cost_usd:7.87}. Job: succeeded=1, Complete=True.
+#   13:01:43  PR 217 MERGES.
+#   FINAL     AgentRun still phase=Failed, completionTime EMPTY, message EMPTY.
+#             Plan Failed, step pr=513. Controller logged NOTHING after the job
+#             completed — it never revisited its own verdict.
 #
-# The agent was never wrong. AgentRun.status.targetPR = "217", headBranch correct,
-# agentRunName correctly linked. Only the PLAN STEP's copy said 513 — and it said so
-# three minutes BEFORE any PR existed. `pr=217` appears ZERO times in three days of
-# controller logs: the correct value was never once observed by the Plan reconciler.
+# So the work fully SUCCEEDED and the bookkeeping says it failed. The agent was
+# never wrong: AgentRun.status.targetPR = "217", headBranch correct, agentRunName
+# correctly linked, exit 0, and it recorded its own outcome cleanly to Loki. Only the
+# PLAN STEP's copy said 513 — three minutes BEFORE any PR existed. `pr=217` appears
+# ZERO times in three days of controller logs: the correct value was never once
+# observed by the Plan reconciler.
 #
 # WHY THE PREVIOUS PLAN SURVIVED (the control case, same day, same cluster)
 # decom-split-agent-image-build logged its first PR-outcome event at 12:18:55 with
@@ -120,21 +128,54 @@ spec:
           (5xx, timeouts, rate limits) on the existing retry path. Distinguishing 404
           from 5xx is the whole point; do not collapse them.
 
-          ── 4. LOG EVERY WRITE, WITH PROVENANCE. There is currently NO log line
-          anywhere at the moment a PR number is SET — not when open_pr patches
-          targetPR, not when the reconciler assigns st.PR. All existing PR logging is at
-          CONSUMPTION time, which is why this took a live forensic dig. Emit one
-          structured line on every write carrying: plan, step, run, the value, the
-          SOURCE it came from (agentrun-status / carried-forward / token-resolution /
-          …), and the prior value when overwriting. Follow the field-set conventions in
-          loop_logging.go — read it first, it is explicit about not mixing camelCase and
-          snake_case spellings of the same correlation id in one record. The bar: from
-          Loki alone, answer "who set this step's PR, to what, from where, and when".
+          ── 4. LOG EVERY WRITE, WITH PROVENANCE — TO LOKI, BECAUSE PODS GO. There is
+          currently NO log line anywhere at the moment a PR number is SET — not when
+          open_pr patches targetPR, not when the reconciler assigns st.PR. All existing
+          PR logging is at CONSUMPTION time, which is why the incident needed a live
+          forensic dig. Emit one structured line on every write carrying: plan, step,
+          run, the value, the SOURCE it came from (agentrun-status / carried-forward /
+          token-resolution / …), and the prior value when overwriting.
 
-          ── 5. SURFACE IT ON THE RESOURCE. The failed step's message was EMPTY — the
-          Plan said Failed and offered no reason anywhere on the CR. Write the
-          diagnostic to the step's message (and AgentRunStatus.Message where the run is
-          implicated) so an operator sees the cause without log-diving.
+          The AGENT side is already exemplary here and is the model to copy, not to
+          change: its run_end line carries exit_code, targetPR, turns and cost_usd, it
+          is structured JSON, and it survives the pod — the whole incident timeline was
+          reconstructed from Loki AFTER the agent pod was reaped and `kubectl logs`
+          returned "unable to retrieve container logs". Loki is the only log store worth
+          designing against; anything only visible in a live pod does not exist. Follow
+          the field-set conventions in loop_logging.go — read it first, it is explicit
+          about not mixing camelCase and snake_case spellings of the same correlation id
+          in one record. The bar: from Loki alone, with the pod long gone, answer "who
+          set this step's PR, to what, from where, and when".
+
+          ── 5. A TERMINAL VERDICT MUST NOT SURVIVE ITS OWN JOB SUCCEEDING. This is a
+          SECOND, INDEPENDENT defect the incident exposed, and it is arguably worse than
+          the wrong number: the controller marked the AgentRun Failed at ~12:53, the Job
+          then ran on to succeed (succeeded=1, Complete=True, pod exitCode=0 at
+          13:01:28), and the controller NEVER revisited its verdict. It logged nothing
+          at all after the job completed. completionTime was never set. The run is
+          permanently Failed while every underlying fact says Succeeded.
+
+          Note the asymmetry already in the code: agentrun_controller.go has a
+          "completing-run guard" for the OPPOSITE case — Job failed but a PR was already
+          opened, treat as Succeeded. There is no guard for this direction. Add one: a
+          Job reaching a successful terminal condition MUST reconcile the AgentRun to a
+          consistent phase, and if that contradicts an earlier terminal verdict the
+          correction must be loud — log the transition with both values and why. Set
+          completionTime whenever a run reaches terminal, in either direction; its
+          absence here is itself a signal something skipped the terminal path.
+
+          Decide deliberately whether a Failed→Succeeded correction is permitted or
+          whether the earlier Failed was simply wrong to write in the first place, and
+          say which in the PR description. Do NOT make terminal states silently mutable
+          as a side effect of fixing this — a contradiction should be reconciled
+          explicitly and visibly, not by weakening terminal-stickiness everywhere.
+
+          ── 6. SURFACE IT ON THE RESOURCE. The failed step's message was EMPTY and so
+          was AgentRunStatus.Message — the Plan said Failed and offered no reason
+          anywhere on the CR. Write the diagnostic to the step's message (and
+          AgentRunStatus.Message where the run is implicated) so an operator sees the
+          cause without log-diving. Loki holds the detail; the CR must at least say
+          which question to ask.
 
           DO NOT TOUCH: the open_pr capture path, the DeadlineExceeded respawn, or the
           uncached-APIReader Job-absence confirmation.
@@ -147,8 +188,11 @@ spec:
           the provenance line is emitted on every write with the correct source; and the
           control case still works — an empty prior plus a later targetPR yields the
           correct PR with no error. Reproduce the incident's ordering explicitly:
-          st.PR populated BEFORE the child AgentRun publishes targetPR. Non-negative
-          coverage delta, no cluster.
+          st.PR populated BEFORE the child AgentRun publishes targetPR. For concern 5,
+          assert that a Job reaching successful terminal AFTER the run was marked Failed
+          reconciles to a consistent phase with completionTime set and a loud transition
+          log — and that a genuinely failed Job still ends Failed. Non-negative coverage
+          delta, no cluster.
 
           Done = PR merged (open via open_pr, drive gates green).
 
