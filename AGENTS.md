@@ -8,7 +8,7 @@ passes the gate — and how to read the gate's feedback and self-correct.
 
 1. Write a Plan to `plans/<name>.yaml` (or a PlanTemplate to `templates/<name>.yaml`).
 2. Open a PR. Three checks run:
-   - **`plan-lint`** — the deterministic HARD gate (rules R1–R25 + kubeconform; must pass).
+   - **`plan-lint`** — the deterministic HARD gate (rules R1–R27 + kubeconform; must pass).
    - **`plan-cluster-verify`** — server-side dry-run against the live CRD (must pass).
    - **`plan-ai-review`** — an advisory model review (never blocks).
 3. Read the feedback (see "Reading feedback" below), fix, push again.
@@ -113,6 +113,17 @@ run time (there is no `goal` field at step level; it goes **inside** `inputs`). 
 
   If no template covers your need, PROPOSE a new
   PlanTemplate (OWNERS review it) rather than hand-authoring the infra step.
+
+  **A step is "infra" two ways — both are gated.** R22 catches it by **agentType**
+  (`leartech-agent-infra*`). **R26** catches it by **target repo**: any step — even a
+  `leartech-agent-go` dev step — whose `repo`/`inputs.repo` is a cluster GitOps repo
+  (`jx-build-cluster-*`) is infra too, because editing cluster helmfiles /
+  `config-root` is privileged cross-cutting work no matter who does it. Source-only
+  helmfile edits and `config-root` edits are treated the same: both mutate cluster
+  desired-state, so both are `needs-human:gitops-overlay`. A one-off GitOps change is
+  an operator action; a recurring one belongs in an OWNERS-gated PlanTemplate. And
+  **never instruct `config-root` edits in a goal** — it is boot-rendered output and
+  hand-edits are clobbered on the next reconcile (**R27** warns when a goal names it).
 - **BA agent** — `leartech-agent-ba` runs its own entrypoint (`gate.agent.ba_agent`),
   so it is neither the Initiative nor the infra-action shape. R21 does **not** yet
   enforce its inputs (it passes unvalidated); match an existing BA step if you write one.

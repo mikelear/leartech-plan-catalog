@@ -9,7 +9,7 @@ philosophy we apply to code**:
 
 1. **`plan-lint` — the hard gate (deterministic, Go).** Two layers, both
    non-zero-exit-blocks-merge:
-   - **Semantic + safety + DAG rules** (`pkg/planlint`, R1–R22) — ported from the
+   - **Semantic + safety + DAG rules** (`pkg/planlint`, R1–R27) — ported from the
      controller's own reconcile-time validation, so a Plan the catalog accepts is
      one the controller will actually run (hold-by-default, cycle detection,
      fan-in shape, template expansion, dependsOn resolution, …).
@@ -120,7 +120,7 @@ templates/       reusable PlanTemplates (composed via `use:` + `with:`)
 cmd/plan-lint/   the deterministic hard gate (Go entrypoint; -json for agents)
 cmd/crd2schema/  generates schemas/ JSON Schema from the vendored CRDs
 cmd/rulesdoc/    generates docs/rules.{json,md} from the rule catalog
-pkg/planlint/   the rules engine (R1–R22) + rule metadata + unit tests
+pkg/planlint/   the rules engine (R1–R27) + rule metadata + unit tests
 schemas/         CRD-derived JSON Schema (kubeconform) + vendored CRDs under crd/
 docs/            rules.json + rules.md (generated) · flywheel.md
 scripts/         plan-ai-review.sh + plan-lint-comment.sh + plan-cluster-verify.sh (live-CRD dry-run)
@@ -144,7 +144,7 @@ machine-readable `json` block (`verdict` + `findings[{severity, fix, refs}]`). U
 across all reviewers, so each review is one clean row for the Plan-quality flywheel.
 
 The presubmits surface as separate GitHub check contexts:
-- **`plan-lint`** (`pullrequest.yaml`) — the deterministic Go gate (R1–R22) + kubeconform. **Required.**
+- **`plan-lint`** (`pullrequest.yaml`) — the deterministic Go gate (R1–R27) + kubeconform. **Required.**
 - **`plan-cluster-verify`** — server-side dry-run of every Plan/PlanTemplate against the
   **live CRD** (structural schema + admission; persists nothing). The authoritative,
   drift-free check that a submission will actually apply — complements the offline Go
