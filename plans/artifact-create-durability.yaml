@@ -1,0 +1,143 @@
+# Make create_artifact durable so a revision can actually be finalized.
+#
+# THE BUG, found by running the round trip by hand on 2026-08-14 with a real
+# Hydra token (mcp-testing-hydra) against the deployed stack:
+#
+#   1. create_artifact  -> 201, GUID + V4 presigned uploadURL           OK
+#   2. PUT bytes direct to GCS via that URL -> HTTP 200                 OK
+#   3. finalize_artifact -> 404 {"error":"not found"}                   BROKEN
+#
+# Cause, from artifact-api's own code:
+#
+#   Create:   id := h.store.AllocateArtifactID()   // allocates, persists NOTHING
+#   Finalize: // Existence + tenant check via the latest manifest. If NO manifest …
+#
+# There is no database — by design, "the manifest IS the record". So create
+# returns a GUID that exists only in the caller's hand: nothing server-side
+# records the artifact. finalize then looks for the latest manifest to establish
+# existence AND tenant ownership, finds none, and 404s.
+#
+# Verified in GCS: after a successful create + PUT the prefix contains ONLY the
+# uploaded file — no manifest, no marker.
+#
+#   gs://artifacts-product-first/artifact/<guid>/1/tokens.json
+#
+# So the loop is unclosable as built: the only thing that would make the artifact
+# discoverable is the manifest finalize refuses to write until it finds a manifest.
+#
+# WHY THE CONTRACT TESTS DID NOT CATCH IT. leartech-mcp-servers#71 and #73 pinned
+# the MCP's paths and request bodies against artifact-api's published OpenAPI, and
+# both sides now agree on SHAPE. This is a LIFECYCLE defect — the sequence of
+# writes across three calls — which no schema comparison can see. Worth
+# remembering when extending that pattern to other MCP -> service pairs.
+#
+# THE DESIGN IS DECIDED — implement it, do not re-litigate it:
+#
+#   Option A (chosen): create writes an UNSEALED manifest for the revision.
+#     Keeps ONE record type, keeps "the manifest is the record", and gives
+#     finalize something to AUTHORISE against so the existing tenant check keeps
+#     working unchanged.
+#
+#   Option B (rejected): a separate pending-marker object. Same effect, two record
+#     types to reason about and garbage-collect, no benefit.
+#
+#   Option C (REJECTED — do not implement): finalize writes the manifest from
+#     scratch with no existence check. Simplest, but it DELETES the tenant check:
+#     any caller holding leartechapi:artifact:write could finalize an arbitrary
+#     GUID they never created. Security regression disguised as a simplification.
+#
+# MERGED != DEPLOYED
+# Release verification is AUTO-INJECTED after the PR step (R23) — do NOT
+# hand-author a `use: verify-release-flow`; lint rejects it.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: artifact-create-durability
+spec:
+  paused: true
+  steps:
+    - name: create-durability
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: create-durability
+        repo: mikelear/leartech-artifact-api
+        branch: feat/create-durability
+        goal: |-
+          Make POST /api/v1/artifacts durable so POST /api/v1/artifacts/{id}/finalize
+          can find the artifact it created. Today create allocates a GUID and mints
+          presigned URLs but persists nothing, so finalize's existence check finds no
+          manifest and returns 404 — proven end to end by hand (see the Plan header).
+
+          IMPLEMENT OPTION A, decided. Do not implement B or C; C is a security
+          regression and the header says why.
+
+          CREATE must, after allocating the id and BEFORE returning 201, write an
+          UNSEALED manifest for the revision at the existing immutable path
+          (artifact/<guid>/<revision>/manifest.json). It carries what is known at
+          create time — id, label, kind, target, ttl, revision, the DECLARED files
+          (path plus any caller-supplied bytes/sha256 expectations), publishedBy
+          {client, subject} from the validated token claims, and a state marking it
+          NOT yet sealed. It must NOT carry observed sizes or hashes; nothing has been
+          uploaded yet and recording unverified values as fact is the bug this Plan
+          exists to avoid repeating.
+
+          Pick the state representation from what internal/storage already models
+          rather than inventing a parallel notion — read storage.Manifest first. If
+          there is no existing field, add ONE explicit field; do not overload an
+          existing one.
+
+          FINALIZE keeps its existence + tenant check exactly as it is — that check is
+          the reason Option A was chosen over C. It must now:
+            - load the unsealed manifest for the named revision (404 if absent — an
+              unknown or never-created artifact must still 404, and there must be a
+              test proving that);
+            - verify every declared file EXISTS in GCS, and that observed size and
+              sha256 match any caller expectation, rejecting a mismatch;
+            - seal: write the manifest with observed values and the sealed state;
+            - remain idempotent-safe — re-finalizing an ALREADY-SEALED revision keeps
+              returning 409, which is existing behaviour and must not regress.
+
+          IMMUTABILITY IS NOT WEAKENED. Sealing rewrites the manifest of a revision
+          that is not yet sealed. A sealed revision stays untouched forever; a new cut
+          is always a NEW revision. Make this explicit in the code comments, because
+          "create writes a manifest that finalize later rewrites" reads like a
+          violation of the immutability rule until you see that unsealed != sealed.
+
+          ABANDONED CREATES — decide and document, do not leave implicit. A caller can
+          create (leaving an unsealed manifest) and never upload. State the policy in
+          the code and README: an unsealed manifest older than its TTL, or older than
+          a stated default when no TTL is given, is eligible for cleanup, and list
+          endpoints MUST NOT present unsealed revisions as though they were published
+          artifacts. Implement the list-filtering now; a sweeper may be a follow-up,
+          but say which you did.
+
+          ISOLATE TESTING: unit tests against the existing fake/in-memory storage
+          seam, no real GCS. Cover: create writes an unsealed manifest; finalize seals
+          it and records observed values; finalize on a NEVER-created id returns 404;
+          finalize with a sha256 mismatch is rejected; re-finalize of a sealed
+          revision returns 409; a second revision can be created and sealed while
+          revision 1 stays byte-identical; unsealed revisions are excluded from list.
+
+          KEEP THE PUBLISHED CONTRACT HONEST. If any request or response shape
+          changes, update the swaggo annotations so /openapi.json still describes
+          reality — leartech-mcp-servers asserts its tool DTOs against that document
+          (its TestCreateArtifactBodyMatchesServiceSchema and siblings), so a silent
+          divergence there breaks the design MCP. If a shape does change, say so in
+          the PR description and note that the MCP's testdata golden needs refreshing.
+
+          LOGGING: follow the estate standard already wired via internal/logging
+          (zerolog, snake_case, service/version/cluster stamped). Log create and
+          finalize with op, artifact_id, revision, label, tenant, outcome and the
+          sealed/unsealed transition. CARDINALITY: artifact_id is a GUID and revision
+          is unbounded — JSON body fields only, NEVER Loki stream labels.
+
+          END-TO-END VERIFICATION IS MANUAL, DELIBERATELY. The full round trip needs
+          an interactive user token obtained by a BROWSER LOGIN (the loopback
+          authorization-code flow in the mcp-testing-hydra kit), which an agent cannot
+          obtain — so do NOT add a kind:check step attempting it. A dev-agent
+          check step could not produce a deterministic verdict anyway (catalog rule
+          R25). Your job is the unit-tested code change; a human re-runs
+          create -> PUT -> finalize -> get-by-label -> byte-match afterwards.
+
+          Done = PR merged (open via open_pr, drive gates green).

@@ -83,12 +83,70 @@ var (
 	// shaRE matches a git commit sha (7–40 hex). A with.sha that isn't one (e.g.
 	// the literal HEAD or a branch name) never resolves at check time (R24).
 	shaRE = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
+	// gitOpsRepoRE matches the cluster GitOps repos (jx-build-cluster-<name>: gsm,
+	// akv, gcp, az, …), owner-agnostic. A step targeting one edits live helmfiles
+	// and JX-rendered config-root across the fleet — privileged infra work no
+	// matter which agentType runs it (R26).
+	gitOpsRepoRE = regexp.MustCompile(`(^|/)jx-build-cluster-[a-z0-9-]+$`)
+	// configRootRE matches a goal instructing edits to the JX-rendered config-root
+	// tree. config-root/ is boot-rendered output; hand-editing it is always wrong
+	// because boot overwrites it — the source is the helmfile / .jx/gitops inputs.
+	// A dev agent reads the goal literally, so a goal naming it is a hazard the
+	// structural rules can't see (R27).
+	configRootRE = regexp.MustCompile(`config-root`)
 )
 
-// infraAgentType is the privileged infra agent (release-verify / deploy-health /
-// chart-config). Concrete steps using it are allowed ONLY in PlanTemplates (R22):
-// a plain catalog Plan must compose infra via a use: template, never hand-author it.
-const infraAgentType = "leartech-agent-infra"
+// infraAgentPrefix matches the privileged infra agents (release-verify /
+// deploy-health / chart-config). Concrete steps using one are allowed ONLY in
+// PlanTemplates (R22): a plain catalog Plan must compose infra via a use:
+// template, never hand-author it.
+//
+// PREFIX, not equality. This was `== "leartech-agent-infra"`, which did NOT match
+// leartech-agent-infra-go — the agentType every working verify-release-flow check
+// actually runs on (release-pipeline-status, promote-status, bootjob-for-commit,
+// deploy-health). So the rule policing privileged infra could be bypassed by
+// hand-authoring the MORE capable variant. Any leartech-agent-infra* is infra.
+const infraAgentPrefix = "leartech-agent-infra"
+
+// isInfraAgent reports whether an agentType is one of the privileged infra agents.
+func isInfraAgent(agentType string) bool {
+	return strings.HasPrefix(agentType, infraAgentPrefix)
+}
+
+// lintVerdictStep (R25) flags a kind: check step handed to a DEV agentType.
+//
+// WHY THIS RULE EXISTS. A dev agent is a single LLM query() session: it exits 0
+// unless it crashes or hits max-turns, so it CANNOT convert a verdict into a
+// non-zero exit code. A goal that says "FAIL (exit non-zero) if any assertion
+// fails; the verdict is this step's exit code" is therefore untrue — the runtime
+// throws the verdict away (see hub/status/agent-verdict-exit-code-fix-2026-08-05.md,
+// still SPEC). Observed live 2026-08-12: artifact-rest-and-mcp/verify-roundtrip
+// reported "six of six assertion classes un-executed → verdict FAIL" in prose and
+// the session still exited 0; it only went Failed because an unrelated
+// expected_pr_missing guard happened to fire.
+//
+// Deterministic verification belongs on an infra agent with a CANNED ACTION,
+// composed via use: a PlanTemplate — which R22 requires for infra steps. The two
+// rules together point at the one correct shape; previously R22 pushed authors OFF
+// infra without R25 pointing them back at a template, so the compliant-looking
+// escape hatch was a dev-agent goal step that silently cannot fail.
+func lintVerdictStep(agentType, kind string, s map[string]any, sw string, f *Findings) {
+	if kind != "check" || !devAgentTypes[agentType] {
+		return
+	}
+	// WARNING, not an error — deliberately, for now. Promoting this to an error today
+	// would fail three already-merged plans (agent-gcs-artifact-read/verify-agent-can-read,
+	// artifact-endpoints and artifact-rest-and-mcp/verify-roundtrip) and block every
+	// subsequent PR, while the PlanTemplate this rule tells authors to use DOES NOT YET
+	// EXIST — the canned actions today are release/promote/bootjob/deploy-health, none of
+	// which can do an authenticated in-cluster round trip. Telling authors "don't do this"
+	// with no alternative is worse than the warning. Promote to f.err once a
+	// roundtrip-verify PlanTemplate exists and those three plans are migrated.
+	f.warn("R25", sw, "kind: check on a dev agentType ("+agentType+") cannot produce a deterministic verdict — "+
+		"a dev agent is one LLM session that exits 0 unless it crashes, so its pass/fail is prose the runtime discards. "+
+		"Compose a PlanTemplate via `use:` whose infra step uses a canned action (release-pipeline-status, promote-status, "+
+		"bootjob-for-commit, deploy-health), or propose a new PlanTemplate if none covers the assertion")
+}
 
 // lintInputs (R21) checks a concrete step's inputs match what its agentType's
 // runtime consumes — the agent Job fails at run time otherwise (a `goal`-only
@@ -114,11 +172,66 @@ func lintInputs(agentType string, s map[string]any, sw string, f *Findings) {
 				f.err("R21", sw, "dev-agent step inputs need `branch` — the Initiative's legacy single-repo shape requires both repo and branch (or use a `repos:` list)")
 			}
 		}
-	case agentType == "leartech-agent-infra":
+	case isInfraAgent(agentType):
 		if asStr(inp["action"]) == "" {
 			f.err("R21", sw, "infra-agent step inputs need `action` (e.g. chart-config, release-health-check) — the infra agent is action-driven, not goal-driven")
 		}
 	}
+}
+
+// stepTargetRepo returns the repo a concrete step acts on — step-level `repo`
+// (some kinds set it there) or inputs.repo (the dev-agent Initiative shape).
+func stepTargetRepo(s map[string]any) string {
+	if r := asStr(s["repo"]); r != "" {
+		return r
+	}
+	return asStr(mapOf(s["inputs"])["repo"])
+}
+
+// lintGitOpsRepoTarget (R26) flags a concrete step whose target repo is a cluster
+// GitOps repo (jx-build-cluster-*), regardless of agentType.
+//
+// WHY THIS RULE EXISTS. R22 keeps privileged infra out of plain Plans, but it keys
+// on the agentType (leartech-agent-infra*). Editing a cluster GitOps repo — its
+// helmfiles and JX-rendered config-root, which mutate live infra across the fleet —
+// is exactly that privileged work, yet a DEV agent (leartech-agent-go) pointed at
+// jx-build-cluster-gsm carries a compliant dev shape and sails straight past R22.
+// Observed on the ORIGINAL decom-orchestrator-service Plan (plan-catalog#36, commit
+// 469942e): two leartech-agent-go steps removing the Orch release from
+// jx-build-cluster-{gsm,akv}. The target repo — not the agentType — is what makes a
+// step infra, so R26 gates on the repo. Plan-only (called from lintPlan); a
+// PlanTemplate is the sanctioned, OWNERS-gated home for GitOps changes.
+//
+// HARD ERROR. This closes the governance hole from the repo side, the same way R22
+// closes it from the agentType side. It briefly shipped as a warning (an
+// already-merged plan tripped it), but that plan — agent-gcs-artifact-read — has
+// since been de-infra'd (its cluster-overlay enablement moved to a documented
+// operator procedure, exactly as #36 did), so nothing committed trips it and the
+// rule can block for real. A one-off GitOps decommission/enablement is operator
+// work (authoring_capabilities.yaml: needs-human:gitops-overlay); a recurring one
+// belongs in an OWNERS-gated PlanTemplate composed via use:.
+func lintGitOpsRepoTarget(s map[string]any, sw string, f *Findings) {
+	repo := stepTargetRepo(s)
+	if repo == "" || !gitOpsRepoRE.MatchString(repo) {
+		return
+	}
+	f.err("R26", sw, "step targets cluster GitOps repo "+repo+" — editing its helmfiles / JX-rendered config-root is privileged infra work regardless of agentType (R22 keys on agentType, so a dev agent here bypasses it). Compose the change via an OWNERS-gated infra PlanTemplate (use:) or have an operator apply it manually; a plain Plan must not hand-author edits to jx-build-cluster-* repos")
+}
+
+// lintGoalHazards (R27) scans a concrete step's inputs.goal for hazards the
+// structural rules are blind to — today, instructions touching config-root.
+//
+// WARNING, not error: goal prose is heuristic (a goal saying "never edit
+// config-root" would false-positive a hard rule), so this surfaces the hazard for
+// human + ai-review rather than hard-gating. High-signal in practice — any goal
+// naming config-root is worth a look, because config-root/ is boot-rendered output
+// and hand-editing it is always wrong (boot overwrites it; edit the source).
+func lintGoalHazards(s map[string]any, sw string, f *Findings) {
+	goal := asStr(mapOf(s["inputs"])["goal"])
+	if goal == "" || !configRootRE.MatchString(goal) {
+		return
+	}
+	f.warn("R27", sw, "step goal references config-root — the JX-rendered config-root tree is boot output and must never be hand-edited (boot overwrites it). Edit the source instead (helmfile.yaml / .jx/gitops inputs) and let boot re-render; if the goal only warns against editing config-root, ignore this")
 }
 
 func strset(keys ...string) map[string]bool {
@@ -386,11 +499,18 @@ func lintPlan(planName string, spec map[string]any, where string, f *Findings, i
 				// R22 infra steps are template-only. lintPlan runs for kind: Plan
 				// only, so any concrete infra step here is a violation — infra is
 				// composed via a use: PlanTemplate, never hand-authored in a Plan.
-				if at == infraAgentType {
-					f.err("R22", sw, "infra steps (agentType leartech-agent-infra) are not allowed in a plain Plan — compose a PlanTemplate via `use:` (e.g. use: verify-release-flow); infra steps belong only in PlanTemplates")
+				if isInfraAgent(at) {
+					f.err("R22", sw, "infra steps (agentType "+at+") are not allowed in a plain Plan — compose a PlanTemplate via `use:` (e.g. use: verify-release-flow); infra steps belong only in PlanTemplates")
 				}
+				// R25 verdict steps must be deterministic — see lintVerdictStep.
+				lintVerdictStep(at, asStr(s["kind"]), s, sw, f)
 				lintInputs(at, s, sw, f) // R21 inputs shape by agentType
 			}
+			// R26/R27 gate on the TARGET (repo, goal prose), not the agentType —
+			// run them regardless of whether agentType was set, so a dev agent
+			// pointed at a GitOps repo can't slip past the agentType-keyed R22.
+			lintGitOpsRepoTarget(s, sw, f) // R26 gitops-repo target is infra
+			lintGoalHazards(s, sw, f)      // R27 goal-prose hazards (config-root)
 		}
 		// R19 test/kind coherence
 		lintTestDirected(planIsTest, s, sw, f)

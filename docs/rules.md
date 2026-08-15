@@ -1,4 +1,4 @@
-# Plan Catalog rules (R1–R24)
+# Plan Catalog rules (R1–R27)
 
 _Generated from `pkg/planlint` — do not edit by hand; run `make rules`._
 
@@ -30,6 +30,9 @@ Every rule the deterministic `plan-lint` gate enforces. Errors block merge; a fa
 | [R22](#r22) | Infra steps live in templates | Infra steps (agentType leartech-agent-infra) are privileged, cross-cutting operations — release-verify, deploy-health, chart-config. In the PUBLIC catalog a plain Plan must not hand-author them: they belong in curated, OWNERS-gated PlanTemplates and are composed via use:. Hand-authored infra in a submitted Plan is a governance + security hole (a submitter declaring privileged infra work directly) and duplicates the standard verification the deployment path injects. Infra steps are allowed ONLY in kind: PlanTemplate. |
 | [R23](#r23) | verify-release-flow is auto-injected | The platform auto-composes verify-release-flow after every deployable PR step (kind:pr carrying a repo), wired to the REAL merged PR (pr=${steps.<step>.pr}). A hand-authored `use: verify-release-flow` that dependsOn such a step therefore duplicates that injection — two verify-release-flow expansions — and typically also carries a broken hand-set sha. (A standalone verify-release-flow that does NOT dependsOn a PR step — verifying an already-deployed service by explicit sha — is legitimate and allowed.) |
 | [R24](#r24) | Resolvable commit sha | A supplied `with.sha` must be a real commit sha (7–40 hex) so the release/verify checks can resolve the commit; a ref like HEAD or a branch name never resolves at check time and the check fails. With auto-injection you normally omit sha entirely — the injected verify uses the merged PR. |
+| [R25](#r25) | Verdict steps must be deterministic | A kind: check step handed to a DEV agentType (go/ng/rust/py) cannot produce a deterministic verdict. A dev agent is a single LLM query() session: it exits 0 unless it crashes or hits max-turns, so a goal saying "FAIL (exit non-zero) if any assertion fails" is untrue — the runtime discards the verdict (see hub/status/agent-verdict-exit-code-fix-2026-08-05.md, still SPEC). Observed live: a verify step reported six of six assertions un-executed and verdict FAIL in prose while the session exited 0. Deterministic verification belongs on an infra agent with a canned action, which R22 requires be composed via use: a PlanTemplate. |
+| [R26](#r26) | GitOps repo targets are template-only | A step whose target repo is a cluster GitOps repo (jx-build-cluster-*) edits live helmfiles and JX-rendered config-root across the fleet — privileged infra work no matter which agentType runs it. R22 catches this only when the step declares an infra agentType, so a dev agent (e.g. leartech-agent-go) pointed at jx-build-cluster-gsm bypasses it. That is exactly the governance hole R22 exists to close, reached from the repo side rather than the agent side. A one-off GitOps decommission/enablement is operator work (needs-human:gitops-overlay); a recurring one belongs in an OWNERS-gated PlanTemplate. |
+| [R27](#r27) | Goal-prose hazards | The structural rules cannot see inside a step's free-text inputs.goal, so a hazardous instruction — today, editing the JX-rendered config-root tree — slips through. config-root/ is boot-rendered output; hand-editing it is always wrong because boot overwrites it, and a dev agent reads the goal literally. (Advisory warning — goal prose is heuristic, so this surfaces the hazard for human + ai-review rather than hard-gating.) |
 
 ## R1 — Valid document
 
@@ -174,4 +177,22 @@ Every rule the deterministic `plan-lint` gate enforces. Errors block merge; a fa
 **Why:** A supplied `with.sha` must be a real commit sha (7–40 hex) so the release/verify checks can resolve the commit; a ref like HEAD or a branch name never resolves at check time and the check fails. With auto-injection you normally omit sha entirely — the injected verify uses the merged PR.
 
 **Fix:** Set with.sha to a full commit sha (40 hex), or omit it and rely on the injected PR token. Do not use HEAD or a branch name.
+
+## R25 — Verdict steps must be deterministic
+
+**Why:** A kind: check step handed to a DEV agentType (go/ng/rust/py) cannot produce a deterministic verdict. A dev agent is a single LLM query() session: it exits 0 unless it crashes or hits max-turns, so a goal saying "FAIL (exit non-zero) if any assertion fails" is untrue — the runtime discards the verdict (see hub/status/agent-verdict-exit-code-fix-2026-08-05.md, still SPEC). Observed live: a verify step reported six of six assertions un-executed and verdict FAIL in prose while the session exited 0. Deterministic verification belongs on an infra agent with a canned action, which R22 requires be composed via use: a PlanTemplate.
+
+**Fix:** Replace the hand-authored check with a `use:` step composing a PlanTemplate whose infra step uses a canned action (release-pipeline-status, promote-status, bootjob-for-commit, deploy-health). If no template covers the assertion, propose a new PlanTemplate (OWNERS-reviewed) rather than asserting it in a dev-agent goal.
+
+## R26 — GitOps repo targets are template-only
+
+**Why:** A step whose target repo is a cluster GitOps repo (jx-build-cluster-*) edits live helmfiles and JX-rendered config-root across the fleet — privileged infra work no matter which agentType runs it. R22 catches this only when the step declares an infra agentType, so a dev agent (e.g. leartech-agent-go) pointed at jx-build-cluster-gsm bypasses it. That is exactly the governance hole R22 exists to close, reached from the repo side rather than the agent side. A one-off GitOps decommission/enablement is operator work (needs-human:gitops-overlay); a recurring one belongs in an OWNERS-gated PlanTemplate.
+
+**Fix:** Remove the GitOps step from the Plan. Compose the change via an OWNERS-gated infra PlanTemplate (use:), or have an operator apply it manually. A plain catalog Plan must not hand-author edits to jx-build-cluster-* repos.
+
+## R27 — Goal-prose hazards
+
+**Why:** The structural rules cannot see inside a step's free-text inputs.goal, so a hazardous instruction — today, editing the JX-rendered config-root tree — slips through. config-root/ is boot-rendered output; hand-editing it is always wrong because boot overwrites it, and a dev agent reads the goal literally. (Advisory warning — goal prose is heuristic, so this surfaces the hazard for human + ai-review rather than hard-gating.)
+
+**Fix:** Do not instruct edits to config-root in a step goal. Edit the source (helmfile.yaml / .jx/gitops inputs) and let boot re-render config-root. If the goal merely warns against editing config-root, this is safe to ignore.
 

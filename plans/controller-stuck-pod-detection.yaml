@@ -1,0 +1,156 @@
+# Give the AgentRun reconciler eyes on the pod, so a wedged agent Job stops
+# presenting as a healthy long-running one.
+#
+# THE GAP, AND WHY IT EXISTS (verified 2026-08-15)
+# The controller's RBAC grants agentruns, agentruns/status, agenttypes, batch/jobs
+# and core/events. There is NO `pods` permission and no Pod watch anywhere in the
+# reconciler. It therefore cannot observe a container that never starts. A Job whose
+# pod sits in ImagePullBackOff or CreateContainerConfigError has no terminal Job
+# condition, so the AgentRun stays `Running` and the Plan stays `Running` —
+# indefinitely, silently, with nothing to alert on.
+#
+# This was an ACKNOWLEDGED regression, not an oversight. gate/agent/job_reconciler.py
+# names it in its own docstring as deferred to the Go controller: "crash-stickies on
+# hard pod death, FAST IMAGEPULL/STUCK-POD DETECTION, orphan-row cleanup, and
+# turns/cost metrics … this path is not yet load-bearing so the regression is
+# acceptable per the rewrite plan". That was a Slice-B-era judgement in early July.
+# The Plan CRD is now the execution path, so it IS load-bearing.
+#
+# THE WORKED EXAMPLE ALREADY EXISTS
+# The hello-go7 dogfood run (hub/status/ba-agent-and-event-remediation.md) failed
+# exactly this way: a missing `hello-go7-db` secret produced CreateContainerConfigError,
+# and the release-monitor "was blind — no kubectl — so it literally can't diagnose".
+# The fix then was to give the k8s MCP a `deploy_health` tool. The agent Job path never
+# got the equivalent.
+#
+# DO NOT INVENT A CLASSIFICATION VOCABULARY
+# The k8s MCP already solved this half. Its pod_state tool "returns pod phase +
+# waiting/terminated reasons + per-container status. Lifts ImagePullBackOff/OOMKilled-
+# style stuck reasons to top level for fast triage", and deploy_health surfaces
+# waiting_reason=CreateContainerConfigError with the "secret ... not found" message.
+# Mirror that vocabulary so triage reads the same wherever an operator looks.
+#
+# WHY A DIRECT CLIENT READ, NOT AN MCP CALL
+# pr_context_mcp.go correctly goes through the MCP for PR metadata, because the MCP
+# owns the GitHub credentials, rate limits and caching. Pod state is different: the
+# controller already holds a Kubernetes client and already owns the Job. Reading the
+# Job's own pods is its job, not a cross-service concern — an MCP hop here would add
+# latency and a failure mode for no ownership benefit.
+#
+# NOT IN SCOPE — a separate gap, deliberately not bundled
+# turns/cost metrics are the other still-missing item from that same docstring, and
+# AgentRunStatus carries no field for them. Worth its own Plan; folding it in here
+# would make a focused observability change into a CRD-schema change.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: controller-stuck-pod-detection
+spec:
+  paused: true
+  steps:
+    - name: stuck-pod-detection
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: stuck-pod-detection
+        repo: mikelear/leartech-orchestrator-controller
+        branch: feat/stuck-pod-detection
+        goal: >-
+          Let the AgentRun reconciler notice when its Job's pod cannot start, instead of
+          reporting Running forever.
+
+          CONFIRM THE PREMISE FIRST. Check that the reconciler still has no pod access —
+          the kubebuilder rbac markers on AgentRunReconciler should list agentruns,
+          agentruns/status, agenttypes, batch/jobs and core/events, with no core/pods
+          entry, and there should be no Pod watch or Owns() for pods. If pod access has
+          since been added, STOP and report that in the PR description rather than
+          building on a stale premise.
+
+          HOOK THE EXISTING REQUEUE — DO NOT ADD A POD INFORMER. The reconciler already
+          polls while the Job runs: the `default:` "agent Job still running" branch returns
+          RequeueAfter 5s. That branch fires every 5 seconds on exactly the population you
+          care about — a Running AgentRun with a live Job — so it is where the pod read
+          belongs. Do NOT add Owns(&corev1.Pod{}), a Pod informer, or a pod-to-AgentRun
+          mapper: none is needed, and each adds cache and mapping surface for no gain.
+          SetupWithManager should still be For(AgentRun).Owns(Job) when you are done.
+
+          RBAC. Add core/pods to the kubebuilder markers, regenerate, and make the matching
+          chart change. A polling read needs only get;list — include watch solely if you
+          prefer verbatim parity with the existing agent-infra-go-rbac.yaml precedent, and
+          say which you chose and why. Follow that file for wording and placement rather
+          than inventing a new block. Read-only always: the controller must never gain pod
+          delete or exec.
+
+          DETECTION. In that still-running branch, read the Job's pods and extract each
+          container's waiting reason and message. Classify into two buckets and treat them
+          differently:
+
+          - NOT-YET-STARTED, which is normal and must NOT be flagged: ContainerCreating,
+            PodInitializing, and a brief ImagePullBackOff while a large image pulls.
+          - STUCK, which must be surfaced: CreateContainerConfigError (the hello-go7 case
+            — a missing Secret or ConfigMap), InvalidImageName, ErrImagePull and
+            ImagePullBackOff that persist beyond a grace period.
+
+          Mirror the vocabulary the k8s MCP's pod_state and deploy_health tools already
+          use for these reasons, so an operator triaging from Loki, from the MCP, or from
+          the AgentRun sees the same words for the same condition. Read those tools before
+          choosing names.
+
+          SURFACE IT IMMEDIATELY, FAIL IT SLOWLY, AND FAIL ONLY WHAT CANNOT SELF-HEAL.
+          Three rules, and the distinctions are the point:
+          - As soon as ANY stuck reason is observed, write it to AgentRunStatus.Message
+            with the reason AND the pod's own message (the "secret X not found" detail is
+            the entire diagnostic value — a bare reason code is nearly useless). Do not
+            change the phase. An operator or dashboard can now see why nothing is
+            happening. This half is pure gain and applies to every stuck reason.
+          - Only CreateContainerConfigError and InvalidImageName may go on to FAIL the run,
+            and only after the condition persists beyond the grace period. These cannot fix
+            themselves: a missing Secret does not appear on its own.
+          - ErrImagePull / ImagePullBackOff are SURFACED BUT NEVER FAIL the run, however
+            long they persist. They self-heal, and a registry incident can outlast any
+            grace period we would be willing to set — failing then would convert someone
+            else's outage into our lost work. Loud and visible is the right answer, not
+            terminal. If you disagree after reading the code, say so in the PR description
+            rather than quietly widening the failing set.
+
+          CONFIG SEAM. Make the grace period an injected field —
+          `StuckPodGracePeriod time.Duration` on AgentRunReconciler — defaulted where the
+          reconciler is wired in cmd/server, NOT read from an env var inside the reconcile
+          path. Every other knob on that struct (Events, Store, Injection, Maestro,
+          APIReader, ClusterID, DefaultAgentType) is injected this way, so tests set it
+          directly with no env manipulation. Pick a default clearly longer than a cold pull
+          of the agent image and justify the number in the PR description.
+
+          DO NOT TOUCH THE HAPPY PATH. A pod that is Running, or a Job that reaches a
+          terminal condition normally, must behave exactly as it does today. This is
+          additive observation, not a change to the state machine. In particular do not
+          alter the DeadlineExceeded respawn logic or the uncached-APIReader Job-absence
+          confirmation — both exist for reasons a passing test suite will not explain to
+          you.
+
+          STUCK IS NOT A RESPAWN — SAY SO IN THE PR. A stuck-pod failure goes terminally
+          Failed; it must NOT be routed through the DeadlineExceeded under-budget respawn.
+          That is deliberate: the only reasons that can fail here are config errors that
+          will recur identically on a fresh pod, so respawning would burn the iteration
+          budget re-hitting the same wall and hide the cause behind retry noise. Write one
+          line in the PR description explaining this, so a later reader does not
+          "helpfully" fold stuck-pods into the retry budget.
+
+          ISOLATE TESTING: table-driven unit tests with the controller-runtime fake
+          client, in the style of the existing agentrun_controller_test.go. Cover: a
+          healthy Running pod is untouched; ContainerCreating and PodInitializing are NOT
+          flagged; CreateContainerConfigError is surfaced on Message with the pod's
+          message text included; a STUCK reason inside the grace period does NOT fail the
+          run; the same reason beyond the grace period DOES fail it; a multi-container pod
+          reports the offending container. Plus a chart-render test asserting the pods
+          RBAC rule is present, matching the existing chart_*_test.go style. Non-negative
+          coverage delta. No cluster required.
+
+          LOGGING TO VERIFY: one structured line when a STUCK reason is first observed and
+          one when it causes a failure, carrying the run, the pod, the container, the
+          reason and the message. Follow the field-set conventions in loop_logging.go —
+          read it before choosing key names, it is explicit about not mixing camelCase and
+          snake_case spellings of the same correlation id in one record. The bar is that
+          "why did this run sit Running for an hour" is answerable from Loki alone.
+
+          Done = PR merged (open via open_pr, drive gates green).

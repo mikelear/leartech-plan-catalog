@@ -8,7 +8,7 @@ passes the gate — and how to read the gate's feedback and self-correct.
 
 1. Write a Plan to `plans/<name>.yaml` (or a PlanTemplate to `templates/<name>.yaml`).
 2. Open a PR. Three checks run:
-   - **`plan-lint`** — the deterministic HARD gate (rules R1–R22 + kubeconform; must pass).
+   - **`plan-lint`** — the deterministic HARD gate (rules R1–R27 + kubeconform; must pass).
    - **`plan-cluster-verify`** — server-side dry-run against the live CRD (must pass).
    - **`plan-ai-review`** — an advisory model review (never blocks).
 3. Read the feedback (see "Reading feedback" below), fix, push again.
@@ -91,10 +91,39 @@ run time (there is no `goal` field at step level; it goes **inside** `inputs`). 
     service: leartech-plan-api
     goal: | …                        # config actions take a goal; health checks don't
   ```
-  Known actions: `chart-config` (`cluster`, `service`, `goal`), `release-health-check`
-  (`service`, `namespace`, `budgetMinutes`). Use a canned action — the infra agent does
-  not run arbitrary free-form goals. If no template covers your need, PROPOSE a new
+  Known actions — `chart-config` (`cluster`, `service`, `goal`), `release-health-check`
+  (`service`, `namespace`, `budgetMinutes`), and the four the `verify-release-flow`
+  template composes, which are what real release verification runs on:
+  `release-pipeline-status`, `promote-status`, `bootjob-for-commit`, `deploy-health`.
+  Use a canned action — the infra agent does not run arbitrary free-form goals.
+
+  **Verification belongs HERE, not in a dev-agent goal (R25).** If you need to PROVE
+  something — a health check, a rollout landed, an endpoint answers — it must be an
+  infra step with a canned action, composed via `use:`. A `kind: check` step on a dev
+  agentType CANNOT fail: a dev agent is one LLM `query()` session that exits 0 unless
+  it crashes, so a goal saying "FAIL (exit non-zero) if any assertion fails" is not
+  true — the runtime discards the verdict
+  (`hub/status/agent-verdict-exit-code-fix-2026-08-05.md`, still SPEC). This was
+  observed live on 2026-08-12: a verify step reported *six of six assertion classes
+  un-executed → verdict FAIL* in prose and its session still exited 0.
+
+  Note the trap R22 sets on its own: it pushes you OFF hand-authored infra, and the
+  path of least resistance is then a dev-agent `check` step that passes every gate and
+  silently cannot fail. The correct move is `use:` a PlanTemplate — or propose one.
+
+  If no template covers your need, PROPOSE a new
   PlanTemplate (OWNERS review it) rather than hand-authoring the infra step.
+
+  **A step is "infra" two ways — both are gated.** R22 catches it by **agentType**
+  (`leartech-agent-infra*`). **R26** catches it by **target repo**: any step — even a
+  `leartech-agent-go` dev step — whose `repo`/`inputs.repo` is a cluster GitOps repo
+  (`jx-build-cluster-*`) is infra too, because editing cluster helmfiles /
+  `config-root` is privileged cross-cutting work no matter who does it. Source-only
+  helmfile edits and `config-root` edits are treated the same: both mutate cluster
+  desired-state, so both are `needs-human:gitops-overlay`. A one-off GitOps change is
+  an operator action; a recurring one belongs in an OWNERS-gated PlanTemplate. And
+  **never instruct `config-root` edits in a goal** — it is boot-rendered output and
+  hand-edits are clobbered on the next reconcile (**R27** warns when a goal names it).
 - **BA agent** — `leartech-agent-ba` runs its own entrypoint (`gate.agent.ba_agent`),
   so it is neither the Initiative nor the infra-action shape. R21 does **not** yet
   enforce its inputs (it passes unvalidated); match an existing BA step if you write one.
