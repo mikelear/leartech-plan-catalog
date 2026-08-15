@@ -1,0 +1,270 @@
+# An agent Job silently terminated its OWN healthy run. Make that mechanically
+# impossible, and make the one repo where it can happen shout about itself in Loki.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# WHAT HAPPENED — 2026-08-15, plan decom-orchestrator-cli-coupling, jx-staging/gcp
+# ─────────────────────────────────────────────────────────────────────────────
+#   12:47:43  agent runs `uv run pytest -q --no-cov` on leartech-automated-agent
+#             (the pre-push-validation lesson REQUIRES running the repo's gates)
+#   12:48:02  status.patch  SA=jx-staging:default  OpenAPI-Generator/32.3.2/python
+#             -> targetPR = 513   (a TEST FIXTURE constant)
+#   12:48:03  controller copies st.PR=513 -> GET /pulls/513 -> 404   (noise, NOT the cause)
+#   12:48:13  status.patch  SA=default  x4  -> phase = Failed
+#             controller observes it -> step Failed -> plan Failed, TERMINAL
+#   12:48:43  pytest reports 2 failures in test_agent_exit_code_normalisation.py
+#   12:51:10  real open_pr writes targetPR=217 — too late, step terminal-frozen
+#   13:01:28  agent exits 0.  13:01:43  PR 217 MERGES.
+#
+# The work fully SUCCEEDED. The bookkeeping said Failed, permanently.
+#
+# THE MECHANISM — three conditions had to coincide
+#   1. The agent was working ON leartech-automated-agent — the repo that IMPLEMENTS
+#      AgentRuns. Its test suite therefore exercises code that patches AgentRun status.
+#      `resolved_pr=513` is a fixture constant in test_agent_exit_code_normalisation.py
+#      (7 occurrences).
+#   2. `_enter_common_patches` uses patch.dict(os.environ, {...}, clear=False), so the
+#      pod's AGENT_RUN_NAME / AGENT_RUN_NAMESPACE / LEARTECH_AGENTRUN_STATUS survive
+#      into the test. It mocks the LLM boundary (load_initiative, query,
+#      _resolve_pr_number) but nothing on the Kubernetes path — so run_initiative
+#      reaches the #202 targetPR backstop at initiative.py:301 and writes for real.
+#      Its docstring claims the test "runs hermetically". It is hermetic for the LLM,
+#      not for the cluster.
+#   3. The Job SA (`default`) holds agentruns/status get,update,patch — granted
+#      DELIBERATELY by jobspawn.go for the C1 report-back.
+#
+# The guard at initiative.py:288 is env-based ("Local/dev runs -> skip entirely"). On a
+# laptop the three vars are unset so it no-ops; jobspawn.go:153-158 sets all three on
+# every agent Job. So the same test is hermetic locally and destructive in-cluster.
+# An env-var guard is a fine RUNTIME switch and a useless TEST boundary — a test author
+# cannot opt out of a guard they have no reason to know exists.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# WHY THIS IS RARE — AND WHY WE STILL FIX IT STRUCTURALLY
+# ─────────────────────────────────────────────────────────────────────────────
+# Exactly one repo qualifies today, and it qualifies because it IS the AgentRun
+# implementation: a self-reference, not a general hazard. Go repos are safer — the
+# controller-runtime FAKE client is the house pattern and its whole suite uses it — but
+# that is CONVENTION, not construction: a Go test calling a real client in-cluster would
+# behave identically. And the class is broader than Kubernetes: GH_TOKEN is projected
+# into every agent pod too, so a test that shells `gh` acts on real repos with real
+# credentials. Same shape, language-independent.
+#
+# DELIBERATELY NOT DOING: a plan-lint rule that refuses dev-agent steps against
+# leartech-automated-agent. Three reasons. (a) It would block the decommission
+# programme, which requires repeated PRs against exactly that repo. (b) plan-lint is
+# STATIC and cannot know what a repo's tests do; a hardcoded repo list is stale the
+# moment another repo grows a k8s client. (c) It is the wrong layer — R22 keyed on
+# agentType and missed dev-agents-on-GitOps; R26 fixed it by keying on the target. A
+# repo-name rule would repeat that mistake one level up, encoding today's instance
+# instead of the property. Fixes 1 and 2 below make the Plan-level question moot.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# HOW IT WAS DIAGNOSED — record this; the ladder is the reusable artefact
+# ─────────────────────────────────────────────────────────────────────────────
+#   1. kubectl get -o json    state now: step pr=513 vs AgentRun targetPR=217 — a
+#                             contradiction, but no cause
+#   2. kubectl logs           MISLEADING. Pod-scoped; dies with the pod. Twice led to
+#                             "there is no logging" when Loki had the data.
+#   3. Loki                   durable. agent run_end exit_code=0 AFTER the Failed verdict
+#   4. status.decisions       which controller branch fired: step-terminal @12:48:13,
+#                             NO StepDeadRunner, NO retryCount -> refuted the
+#                             cache-lag/dead-runner hypothesis
+#   5. managedFields          WHO OWNS THE FIELD: manager=OpenAPI-Generator wrote
+#                             status.phase alone -> a third writer exists
+#   6. GKE audit log          WHICH IDENTITY: SA=jx-staging:default,
+#                             OpenAPI-Generator/32.3.2/python, 7 writes in 11s
+#   7. Loki, agent pod        what it was doing: `uv run pytest`, traceback in obslog.py
+#   8. grep 513 tests/        7 hits: resolved_pr=513
+#
+# TWO LESSONS WORTH MORE THAN THE FIX
+#   * kubectl logs is not a log store. Always Loki first.
+#   * APPLICATION LOGGING CANNOT CATCH A FOREIGN WRITER. No controller or agent
+#     instrumentation would have found this — the write did not come from the expected
+#     path. Only managedFields / audit answer "who touched this resource". managedFields
+#     is free, always present, and should be step ONE of any such question.
+#   * The one line that would have named it never emitted: initiative.py:305 logs
+#     `targetpr_backstop_fired` immediately after the patch, and Loki has ZERO hits —
+#     obslog.emit is exactly where the pytest traceback landed. The write succeeded; the
+#     forensic signal crashed.
+#
+# RBAC CANNOT FIX THIS. Kubernetes RBAC has no field-level granularity: the Role grants
+# agentruns/status get,update,patch and cannot be narrowed to "targetPR only". The
+# protection must be ADMISSION-level. Both mechanisms are available on-cluster:
+# ValidatingAdmissionPolicy (admissionregistration.k8s.io/v1, native, k8s 1.35) and
+# Kyverno (installed, 4 admission replicas).
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: agent-selfwrite-guard
+spec:
+  paused: true
+  steps:
+    - name: sanitise-subprocess-identity
+      kind: pr
+      agentType: leartech-agent-py
+      inputs:
+        name: sanitise-subprocess-identity
+        repo: mikelear/leartech-automated-agent
+        branch: feat/sanitise-subprocess-identity
+        goal: >-
+          Stop this repo's own test suite being able to write to the live AgentRun it is
+          running inside, and make this repo announce loudly in Loki that it is the one
+          repo where that is even possible.
+
+          READ THE PLAN HEADER FIRST. It carries the verified timeline, the exact
+          mechanism, the diagnostic ladder, and an explicit list of what is NOT the
+          cause. Do not re-derive it.
+
+          ── 1. SANITISE THE SUBPROCESS ENVIRONMENT (the structural fix). The AgentRun
+          identity is needed only by this process's OWN code. Nothing it shells out to
+          should ever see it. At startup, capture AGENT_RUN_NAME, AGENT_RUN_NAMESPACE and
+          LEARTECH_AGENTRUN_STATUS into module state, then REMOVE them from os.environ,
+          and have the four read sites in initiative.py (around :224-226, :285-287, :383)
+          plus obslog.py's namespace field read the captured values instead. Every Bash
+          tool invocation — pytest included — then inherits an environment with no
+          AgentRun identity, and the existing guard at :288 does exactly what its own
+          comment already claims: "Local/dev runs -> skip entirely". A pytest subprocess
+          genuinely is NOT the AgentRun; make that true rather than hoped-for.
+
+          Verify the captured-value refactor does not break obslog's ambient fields —
+          those appear on every log line and are how runs are correlated in Loki.
+
+          ── 2. SHOUT ABOUT THIS REPO IN LOKI (Mike's explicit ask, and the reason this
+          step exists at all). This repo is the ONLY one whose tests can touch live
+          AgentRuns, that fact is deeply non-obvious, and the work to remove the Python
+          is in flight — so anyone debugging it in the meantime must be told. Emit a
+          prominent WARN-level structured line ONCE at agent startup whenever the run's
+          target repo is self-referential (this repo), carrying at minimum:
+          - that this repo IMPLEMENTS the AgentRun runtime, so its test suite exercises
+            code that patches AgentRun status;
+          - that the AgentRun identity has been stripped from subprocess env (fix 1), so
+            a test CANNOT reach the live run — and that if run status still looks wrong,
+            that is a regression in this guard;
+          - the diagnostic route, named explicitly: check `managedFields` on the AgentRun
+            to find which manager owns `status.phase`, then the GKE audit log for the
+            ServiceAccount and user-agent. Say that `kubectl logs` is NOT sufficient
+            because it dies with the pod.
+          Give it a stable, greppable `event` name (e.g. `self_referential_repo`) so a
+          Loki query finds every such run in one go, and follow the obslog house style
+          (snake_case event, ambient run fields). Keep it to ONE line per run — this is a
+          signpost, not a running commentary.
+
+          ── 3. CONTAINMENT for the test that fired. In
+          tests/test_agent_exit_code_normalisation.py, `_enter_common_patches` (:211-231)
+          preserves the pod env via clear=False. Make it explicitly drop the AgentRun
+          identity, matching how tests/test_agent_test_mode.py already defends itself
+          (monkeypatch.delenv('LEARTECH_RUN_ID') on every case). Then sweep the suite for
+          any OTHER test that invokes run_initiative or otherwise reaches
+          agentrun_client / test_mode patchers without clearing that env, and fix those
+          too — report what you found. This is belt-and-braces behind fix 1, not a
+          substitute for it.
+
+          ── 4. FIX THE FORENSIC SIGNAL THAT CRASHED. initiative.py:305 emits
+          `targetpr_backstop_fired` immediately after the backstop patch, and it did not
+          appear in Loki because obslog.emit raised (that traceback is the pytest failure
+          at 12:48:43). Establish why emit can raise there and make the backstop's
+          logging failure-proof — a forensic signal that dies when things go wrong is
+          worse than none, because its absence reads as "this did not happen".
+
+          DO NOT change the #202 backstop's PURPOSE — recovering targetPR when an agent
+          skips open_pr is legitimate and load-bearing for stop-on-merge correlation.
+          Only its reachability from subprocesses is in scope.
+
+          ISOLATE TESTING: assert the captured identity is used after os.environ is
+          stripped; assert a subprocess launched by the agent sees NO AgentRun env vars;
+          assert the backstop no-ops when identity is absent; assert the
+          self_referential_repo line is emitted exactly once with the expected event name
+          and fields; assert obslog ambient fields still populate. Add a regression test
+          that reproduces the incident shape — run_initiative under a preserved pod-like
+          env must NOT issue a k8s patch. `uv run ruff format --check app gate tests`,
+          `uv run ruff check app gate tests`, `uv run mypy app gate` and `uv run pytest`
+          must all pass.
+
+          Done = PR merged (open via open_pr, drive gates green).
+
+    - name: protect-agentrun-phase
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: protect-agentrun-phase
+        repo: mikelear/leartech-orchestrator-controller
+        branch: feat/protect-agentrun-phase
+        goal: >-
+          Make it impossible for anything other than the controller to set an AgentRun's
+          phase, so a leaked subprocess can never again terminate a healthy run — in this
+          repo or any future one we have not thought about.
+
+          READ THE PLAN HEADER FIRST for the verified incident and mechanism.
+
+          ── 1. WHY NOT RBAC. Kubernetes RBAC has no field-level granularity. The Role
+          `leartech-orchestrator-controller-agent-status` grants agentruns/status
+          get,update,patch and CANNOT be narrowed to "targetPR and headBranch only".
+          Confirm this for yourself before designing, then use admission control.
+
+          ── 2. ADD A PHASE-WRITE ADMISSION POLICY. On update of agentruns/status, reject
+          any request that CHANGES status.phase unless the requesting identity is the
+          controller's ServiceAccount. Writes to targetPR / headBranch / message from the
+          agent SA must continue to work untouched — those are the legitimate C1
+          report-back and the open_pr MCP path.
+
+          Choose between native ValidatingAdmissionPolicy (admissionregistration.k8s.io/v1,
+          available on this cluster, CEL, no extra dependency — comparing oldObject and
+          object plus request.userInfo is exactly its use case) and a Kyverno ClusterPolicy
+          (Kyverno is installed with 4 admission replicas, and the cluster already runs
+          Kyverno policies such as verify-image-signatures). State which you chose and why.
+          Prefer the native policy unless there is a concrete reason not to — fewer moving
+          parts and no controller dependency for a rule this simple.
+
+          ⚠️ RESOLVE THIS BEFORE SHIPPING — test-mode legitimately writes phase from the
+          agent SA. gate/agent/test_mode.py's patch_agentrun_phase sets status.phase from
+          within the agent Job, and that is a real, gated feature (LEARTECH_AGENT_TEST_MODE_ALLOWED
+          plus a test-mode annotation on the run). A naive policy BREAKS it. Decide and
+          justify one of: allow the agent SA to set phase only when the AgentRun carries
+          the test-mode annotation; or route test-mode's phase write through the
+          controller; or scope the policy to exclude test-mode-annotated runs. Do not
+          discover this in staging — the Plan is telling you now.
+
+          SHIP IT IN THIS REPO'S CHART, not in a cluster GitOps repo. The chart already
+          ships cluster-scoped resources (CRDs, priorityclass, clusterrole), so the policy
+          belongs beside them; editing jx-build-cluster-* is privileged infra work and out
+          of bounds for this step.
+
+          ── 3. FAIL VISIBLY, NOT SILENTLY. A rejected write must produce a clear message
+          naming the field, the offending identity and why. An admission denial that reads
+          as a generic 403 will send the next person down the same multi-hour path this
+          incident took.
+
+          ── 4. DERIVE THE STEP PR RATHER THAN CARRYING IT FORWARD. Independent of the
+          admission policy, and it makes a wrong PR number harmless whatever writes it:
+          observeStepStatus carries prior.PR forward UNCONDITIONALLY (:2211) but corrects
+          it only when the child AgentRun's targetPR is non-empty (:2242), and
+          terminal-stickiness then freezes whatever is there. Read the step's PR from its
+          child AgentRun at use time instead — st.AgentRunName is already on the step
+          status, so the join exists. A dev step yields its real PR; a check step yields
+          empty; a fixture value can never survive.
+
+          ── 5. LOG STATE TRANSITIONS AT INFO, AND ALWAYS STAMP completionTime. The
+          incident's Failed verdict was NEVER logged — the controller never wrote it, and
+          nothing recorded observing it. Log every AgentRun and step phase transition at
+          Info (from -> to, reason, run, step) and stamp completionTime on every terminal
+          transition; its absence in this incident was itself the signal a path had
+          bypassed the terminal handler. Do NOT achieve this by enabling V(1) globally —
+          the steady-state 5s requeue path is V(1) and would flood Loki. Follow the field
+          conventions in loop_logging.go; read it first, it is explicit about not mixing
+          camelCase and snake_case spellings of one correlation id.
+
+          DO NOT TOUCH: the DeadlineExceeded respawn, the uncached-APIReader Job-absence
+          confirmation, or the stuck-pod detection just landed by
+          controller-stuck-pod-detection (PR 116) — all recent, all deliberate.
+
+          ISOLATE TESTING: for the policy, assert a phase change from a non-controller SA
+          is REJECTED, a phase change from the controller SA is ALLOWED, a targetPR /
+          headBranch write from the agent SA is ALLOWED, and whatever test-mode carve-out
+          you chose behaves as designed. For the derive change, table-driven unit tests
+          with the controller-runtime fake client: a stale prior PR is not carried past a
+          correct AgentRun targetPR; a check step yields empty; the incident's ordering
+          (a PR value present BEFORE the child publishes targetPR) yields the correct
+          value. Chart-render test for the policy manifest. Non-negative coverage delta,
+          no cluster.
+
+          Done = PR merged (open via open_pr, drive gates green).
