@@ -118,16 +118,44 @@ spec:
           ── 1. SANITISE THE SUBPROCESS ENVIRONMENT (the structural fix). The AgentRun
           identity is needed only by this process's OWN code. Nothing it shells out to
           should ever see it. At startup, capture AGENT_RUN_NAME, AGENT_RUN_NAMESPACE and
-          LEARTECH_AGENTRUN_STATUS into module state, then REMOVE them from os.environ,
-          and have the four read sites in initiative.py (around :224-226, :285-287, :383)
-          plus obslog.py's namespace field read the captured values instead. Every Bash
-          tool invocation — pytest included — then inherits an environment with no
-          AgentRun identity, and the existing guard at :288 does exactly what its own
-          comment already claims: "Local/dev runs -> skip entirely". A pytest subprocess
-          genuinely is NOT the AgentRun; make that true rather than hoped-for.
+          LEARTECH_AGENTRUN_STATUS into module state, then REMOVE them from os.environ.
+          Every Bash tool invocation — pytest included — then inherits an environment with
+          no AgentRun identity, and the existing guard at initiative.py:288 does exactly
+          what its own comment already claims: "Local/dev runs -> skip entirely". A pytest
+          subprocess genuinely is NOT the AgentRun; make that true rather than hoped-for.
 
-          Verify the captured-value refactor does not break obslog's ambient fields —
-          those appear on every log line and are how runs are correlated in Loki.
+          ⚠️ SWEEP EVERY READER — DO NOT WORK FROM A LIST. Stripping os.environ breaks any
+          code path that reads these vars at CALL time, and an incomplete sweep converts
+          this fix into a silent outage. Find every `os.environ` reader of the identity
+          vars and redirect it to the captured values. The sweep at time of writing found
+          SIX, and the enumerated list in an earlier revision of this Plan missed two of
+          them — treat this list as a starting point to verify, not as complete:
+            * initiative.py — three sites (around :224-226, :285-287, :383)
+            * obslog.py — `_context()` (around :75) and its `_CONTEXT_ENV` map
+            * test_mode.py — :468-469 AND :542-543, BOTH reading AGENT_RUN_NAMESPACE
+          Re-run the sweep yourself; if you find a seventh, that is the point of this
+          instruction. `agentrun_client.py` is safe — it takes name/namespace as
+          parameters, not from env.
+
+          ⚠️ THE test_mode.py SITES ARE LOAD-BEARING AND WILL BREAK SILENTLY. At :468-470,
+          `can_patch_agentrun = bool(run_id) and bool(namespace)`. After the strip that
+          goes False, so the AgentRun annotation stamp AND `patch_agentrun_phase` are BOTH
+          skipped — silently disabling test-mode, which is the exact feature the sibling
+          `protect-agentrun-phase` step's carve-out exists to preserve. Worse, the warning
+          it then logs (:472-475) says the vars being unset is "normal on a laptop
+          invocation but should NEVER happen in a controller-spawned Job" — so post-strip
+          it would fire on every in-cluster test-mode run and actively mislead. Redirect
+          those reads to the captured values AND update that warning's wording so it
+          remains true.
+
+          ⚠️ obslog IS A LIVE PER-LINE READ, AND IT COSTS TWO FIELDS NOT ONE.
+          `obslog._context()` is `{key: os.environ[env] for key, env in _CONTEXT_ENV.items()
+          if os.environ.get(env)}` — evaluated on EVERY log record, covering `run_id`
+          (LEARTECH_RUN_ID) and `namespace` (AGENT_RUN_NAMESPACE). If either var it reads
+          is stripped without repointing, every Loki line silently loses that ambient
+          field — and `run_id` is the primary correlation key for every query in this
+          Plan's own diagnostic ladder. Repoint `_context()` at a captured snapshot taken
+          before the strip, and assert ambient fields still populate afterwards.
 
           ── 2. SHOUT ABOUT THIS REPO IN LOKI (Mike's explicit ask, and the reason this
           step exists at all). This repo is the ONLY one whose tests can touch live
@@ -174,9 +202,14 @@ spec:
           stripped; assert a subprocess launched by the agent sees NO AgentRun env vars;
           assert the backstop no-ops when identity is absent; assert the
           self_referential_repo line is emitted exactly once with the expected event name
-          and fields; assert obslog ambient fields still populate. Add a regression test
-          that reproduces the incident shape — run_initiative under a preserved pod-like
-          env must NOT issue a k8s patch. `uv run ruff format --check app gate tests`,
+          and fields. THREE ASSERTIONS THAT MUST NOT BE OMITTED, because each covers a way
+          this fix can silently break something: (a) obslog ambient fields — BOTH run_id
+          and namespace — still populate on every record after the strip; (b) TEST-MODE
+          STILL WORKS: with test-mode allowed and the annotation present,
+          patch_agentrun_phase still reaches the AgentRun after the strip (this is the
+          regression the sibling step's carve-out exists to protect, so proving it here is
+          not optional); (c) a regression test reproducing the incident shape —
+          run_initiative under a preserved pod-like env must NOT issue a k8s patch. `uv run ruff format --check app gate tests`,
           `uv run ruff check app gate tests`, `uv run mypy app gate` and `uv run pytest`
           must all pass.
 
@@ -302,8 +335,9 @@ spec:
           object plus request.userInfo is exactly its use case) and a Kyverno ClusterPolicy
           (Kyverno is installed with 4 admission replicas, and the cluster already runs
           Kyverno policies such as verify-image-signatures). State which you chose and why.
-          Prefer the native policy unless there is a concrete reason not to — fewer moving
-          parts and no controller dependency for a rule this simple.
+          PREFER NATIVE VAP — fewer moving parts, no controller dependency for a rule this
+          simple, and review on PR #40 independently endorsed it. Deviate only with a
+          concrete reason stated in the PR description.
 
           ⚠️ RESOLVE THIS BEFORE SHIPPING — test-mode legitimately writes phase from the
           agent SA. gate/agent/test_mode.py's patch_agentrun_phase sets status.phase from
@@ -311,8 +345,12 @@ spec:
           plus a test-mode annotation on the run). A naive policy BREAKS it. Decide and
           justify one of: allow the agent SA to set phase only when the AgentRun carries
           the test-mode annotation; or route test-mode's phase write through the
-          controller; or scope the policy to exclude test-mode-annotated runs. Do not
-          discover this in staging — the Plan is telling you now.
+          controller; or scope the policy to exclude test-mode-annotated runs. THE FIRST
+          IS THE TIGHTEST and is the reviewed recommendation — it keeps the guard ON for
+          every normal run and does not route a test-only write through the controller.
+          Do not discover this in staging — the Plan is telling you now. Note the sibling
+          step asserts test-mode still functions after the env strip, so if you break it
+          here that test should catch you.
 
           SHIP IT IN THIS REPO'S CHART, not in a cluster GitOps repo. The chart already
           ships cluster-scoped resources (CRDs, priorityclass, clusterrole), so the policy
