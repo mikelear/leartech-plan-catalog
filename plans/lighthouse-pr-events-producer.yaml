@@ -57,7 +57,16 @@ metadata:
 spec:
   paused: true
   steps:
+    # kind: apply is REQUIRED, not decorative. An omitted kind is "" which the CRD
+    # treats as "pr" (documented back-compat default), and plan-api then rejects a
+    # first pr-step with no agentType — but a use: step cannot declare agentType,
+    # because validateUseStepShape forbids it (the template supplies it). So a
+    # kind-less use: step in first position is unsubmittable: HTTP 400
+    # "first step must declare agentType (or be a fanIn step)". Kind is one of the
+    # few fields a use: step MAY carry, which is how the injector sets kind: check
+    # on the verify-release-flow it composes.
     - name: bootstrap-repo
+      kind: apply
       use: bootstrap-authed-service
       with:
         name: leartech-lighthouse-pr-events
