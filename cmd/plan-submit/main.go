@@ -2,8 +2,17 @@
 // Phase-3 sibling of sync-templates-to-controller, which handles PlanTemplates).
 //
 // On merge to main the release postsubmit runs this on BOTH clusters; each
-// invocation submits every plans/*.yaml (excluding example-*) to its OWN local
-// plan-api via POST /plans. plan-api is the SINGLE writer — it validates, applies
+// invocation submits the plans/*.yaml (excluding example-*) that THIS MERGE
+// TOUCHED to its OWN local plan-api via POST /plans.
+//
+// Scoping to the merge's own diff is what makes the catalog a HISTORY rather
+// than a mirror. plan-api de-duplicates on the live CRD (apiserver
+// AlreadyExists -> 409), not on a durable record of what was submitted, so a
+// full-directory submit would recreate any Plan deleted from a cluster on the
+// next unrelated merge. -all restores the full sweep for a deliberate backfill
+// (e.g. seeding a fresh cluster from the repo).
+//
+// plan-api is the SINGLE writer — it validates, applies
 // the auto-composition injection policy, and creates the Plan CRD (always paused,
 // i.e. a proposal a human unpauses). This tool is a THIN forwarder: it does not
 // re-validate or re-inject — the exact same contract the plan MCP's create_plan
@@ -41,21 +50,52 @@ func main() {
 	dir := flag.String("dir", "plans", "directory of Plan YAML files to submit")
 	planAPI := flag.String("plan-api-url", os.Getenv("LEARTECH_PLAN_API_URL"), "base URL of the local cluster's plan-api (e.g. http://leartech-plan-api.jx-staging:8080)")
 	dryRun := flag.Bool("dry-run", false, "project + print the CreatePlanRequest payloads without calling plan-api (no token needed)")
+	all := flag.Bool("all", false, "submit EVERY plan in -dir rather than only those this merge touched (backfill: seeding a fresh cluster from the repo)")
+	base := flag.String("base", "HEAD^", "git revision to diff against when scoping (default HEAD^ = the merge's first parent, i.e. main's previous tip)")
 	flag.Parse()
 
-	if err := run(*dir, *planAPI, *dryRun); err != nil {
+	if err := run(*dir, *planAPI, *dryRun, *all, *base); err != nil {
 		fmt.Fprintln(os.Stderr, "plan-submit:", err)
 		os.Exit(1)
 	}
 }
 
-func run(dir, planAPI string, dryRun bool) error {
+func run(dir, planAPI string, dryRun, all bool, base string) error {
 	files, err := discover(dir)
 	if err != nil {
 		return err
 	}
-	if len(files) == 0 {
+	if len(files) == 0 && !all {
+		// A merge that deletes the last plan still has deletions to report, so
+		// fall through to the scoping block rather than returning here.
+		fmt.Printf("plan-submit: no submittable Plan YAML under %s/ (excluding example-*).\n", dir)
+	} else if len(files) == 0 {
 		fmt.Printf("plan-submit: no submittable Plan YAML under %s/ (excluding example-*) — nothing to do.\n", dir)
+		return nil
+	}
+
+	if all {
+		fmt.Printf("plan-submit: -all — submitting every submittable plan in %s/ (%d), not just this merge's.\n", dir, len(files))
+	} else {
+		changedRel, deletedRel, cerr := changedPlanFiles(dir, base)
+		if cerr != nil {
+			return cerr
+		}
+		// A deleted plan file is the one legitimate repo/cluster divergence:
+		// the catalog records that the Plan existed, and this tool must NOT
+		// re-create it. It cannot delete the CRD either (no delete authority
+		// here, and deleting a Plan mid-flight is an operator decision), so
+		// say so loudly rather than dropping it silently.
+		for _, d := range deletedRel {
+			fmt.Printf("  NOTE %s removed in %s..HEAD — plan-submit does not delete Plan CRDs; remove it in-cluster if it should go.\n", d, base)
+		}
+		scoped := selectChanged(files, changedRel)
+		fmt.Printf("plan-submit: %s..HEAD touched %d of %d submittable plan(s) in %s/ — submitting only those.\n",
+			base, len(scoped), len(files), dir)
+		files = scoped
+	}
+	if len(files) == 0 {
+		fmt.Println("plan-submit: no plan additions or changes in this merge — nothing to submit.")
 		return nil
 	}
 
