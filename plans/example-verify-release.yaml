@@ -19,7 +19,15 @@ metadata:
 spec:
   paused: true
   steps:
+    # An explicit kind is required on a use: step, and this example previously
+    # omitted it. An omitted kind is "" ≡ "pr" (CRD back-compat default), and
+    # plan-api rejects a first pr-step with no agentType — which a use: step cannot
+    # declare, since the template supplies it. This file never caught it because
+    # cmd/plan-submit excludes example-* from submission, so the catalog's only
+    # worked example of the use: shape was one that plan-api would refuse. `check`
+    # matches what the auto-injection policy sets when it composes this template.
     - name: verify
+      kind: check
       use: verify-release-flow
       with:
         repo: mikelear/leartech-plan-api
