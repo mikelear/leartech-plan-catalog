@@ -127,6 +127,14 @@ spec:
           produces; set it to this service's own Service DNS. Add a chart-render test
           asserting both event names appear in produces:.
 
+          AND ASSERT THE KEYS, NOT JUST THE NAMES. Event-name presence is the easy half.
+          The silent-failure point is DRIFT between the annotation keys declared in the
+          chart's EventRegistration and the keys the announce code actually sends: the
+          names match, the registration renders, the test passes, and every announce is
+          rejected at runtime for a missing required annotation. Derive both sides from
+          one source, or add a test that reads the rendered chart and fails non-zero when
+          the key sets differ. A test that only checks names does not cover this.
+
           NEVER RETURN 5xx TO LIGHTHOUSE. Lighthouse's relay retries transport errors only
           (five attempts, doubling backoff) and drops a non-2xx response after logging a
           warning — there is no persistence and no redelivery. A 5xx therefore buys
@@ -144,20 +152,50 @@ spec:
           migrations Job — this service has no database; leartech-plan-api is the
           precedent for a template-derived service that removed them cleanly. ADD the
           EventRegistration. Keep the ExternalSecret, extended for the HMAC token and the
-          Maestro client secret.
+          Maestro client secret. Keep the default ServiceAccount but add NO Role and NO
+          RoleBinding: plan-api's chart adds rbac.yaml because it talks to the apiserver,
+          and this service must not. If the rendered chart grants any API permission, that
+          is a defect, not a convenience.
+
+          ON THE SCAFFOLD'S "KEEP EVERYTHING" INSTRUCTION. The bootstrap step that created
+          this repo was told to keep the inherited wiring lazy rather than judge what the
+          service needs — deliberately, because at that point nothing knew what this
+          service was for. That judgement belongs to YOU, here. This service has no
+          datastore and is authenticated by an HMAC signature on the webhook, not by a
+          user bearer. Remove the inherited wiring it genuinely does not use and record in
+          the PR description what you removed and why. Do NOT keep dead code merely
+          because an earlier step said to keep it.
 
           DO NOT REGISTER THIS PLUGIN WITH LIGHTHOUSE. Adding the external_plugins entry
           is an operator-applied GitOps change on the cluster repos and is explicitly out
           of scope. Do not open PRs against jx-build-cluster-gsm or jx-build-cluster-akv.
           The service being deployed and idle is the correct end state for this Plan.
 
-          QUALITY BAR. Raise the coverage threshold in the Makefile's test-coverage target
-          from 60.0 to 80.0 and meet it — this service is small and its one branch decision
-          is the whole product, so there is no excuse for thin coverage. `make pre-push`
-          must pass in full: fmt, vet, swag-check, tidy-check, build, test, lint, vuln,
-          secrets. Keep the golden toolchain exactly as the template pins it; do not swap
-          linters or loosen versions. If a gate genuinely does not apply to a webhook
-          receiver, say so in the PR description rather than deleting it quietly.
+          QUALITY BAR. Raise the coverage threshold in this repo's Makefile test-coverage
+          target from 60.0 to 80.0 and meet it. That literal is the ONLY place the number
+          lives for a template-scaffolded service — it is copied in, not sourced from a
+          catalog — so changing it here changes it for this service and nothing else.
+
+          MAKE THE NUMBER REAL. Nothing currently runs test-coverage: it is absent from CI
+          and `pre-push` runs `test`, not `test-coverage`. A threshold no gate reads is
+          decoration. Wire `make test-coverage` into this repo's own
+          .lighthouse/jenkins-x test pipeline so the floor is enforced on every PR here.
+          Do not attempt to change this for other repos or for the template — that is a
+          separate, fleet-wide piece of work.
+
+          HOW TO REACH 80 HONESTLY. The scaffold you inherited sits at roughly 49% overall,
+          with whole packages at 0% that have nothing to do with this service. Reaching the
+          floor by DELETING inherited code this service does not use is correct and
+          expected. Reaching it by writing tests that exercise inherited code you are not
+          using is waste, and reaching it with tests that assert nothing is worse than
+          missing the bar — it will be treated as a failed review, not a pass. If after
+          removing genuine surplus you still cannot reach 80 without hollow tests, stop at
+          the honest number and say so in the PR description with the figure and why.
+
+          `make pre-push` must pass in full: fmt, vet, swag-check, tidy-check, build, test,
+          lint, vuln, secrets. Keep the golden toolchain exactly as the template pins it;
+          do not swap linters or loosen versions. If a gate genuinely does not apply to a
+          webhook receiver, say so in the PR description rather than deleting it quietly.
 
           LOGGING TO VERIFY. This is how a human will confirm the path end to end, so it
           is a deliverable, not a nicety. Emit one structured line on webhook receipt and
