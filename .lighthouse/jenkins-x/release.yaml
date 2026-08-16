@@ -57,14 +57,22 @@ spec:
             set -u
             apk add --no-cache bash git curl >/dev/null 2>&1
             bash scripts/sync-templates-to-controller.sh
-        # Phase-3 catalog GH route: submit merged plans/*.yaml to plan-api (the
-        # SINGLE writer — it validates, applies the auto-composition injection
+        # Phase-3 catalog GH route: submit THIS MERGE'S plans/*.yaml to plan-api
+        # (the SINGLE writer — it validates, applies the auto-composition injection
         # policy, and creates a PAUSED proposal). This is the automation sibling
         # of the plan MCP's create_plan (same POST /plans; s2s token instead of a
         # forwarded user bearer). Runs on BOTH clusters; each self-submits to its
         # LOCAL plan-api, so both estates receive the proposal with no cross-cluster
         # networking. Dormant until the plan-catalog-release s2s secret is
         # provisioned (optional secret envs stay empty → the step self-skips).
+        #
+        # SCOPED TO THE MERGE DIFF (HEAD^..HEAD), unlike the template sync above.
+        # The template sync targets a git repo and is a reconciler — re-asserting
+        # an unchanged template is a no-op. This targets an apiserver via a
+        # one-shot Create that de-duplicates on the LIVE CRD (409 AlreadyExists),
+        # so re-asserting the whole directory would RESURRECT any Plan deleted
+        # from a cluster on the next unrelated merge. Scoping keeps plans/ a
+        # history of what was defined and reviewed, not a mirror of the cluster.
         - image: golang:1.24-alpine
           name: submit-plans
           resources:

@@ -27,11 +27,17 @@ caller sent*, `validator.go` / `dto/create.go`). A catalog Plan can never be
 instantiated running, even by a direct API call. Two front doors reach plan-api:
 
 - **Automatic on merge** — the catalog release postsubmit
-  ([`cmd/plan-submit`](../cmd/plan-submit)) submits every `plans/*.yaml`
-  (excluding `example-*`) to plan-api on **both clusters**, using the
-  `plan-catalog-internal-services` s2s client (scope `leartechapi.internal_services`,
-  audience `leartech-plan-api`). This is the catalog GH route — the automation
-  sibling of `create_plan`.
+  ([`cmd/plan-submit`](../cmd/plan-submit)) submits the `plans/*.yaml` **that the
+  merged PR changed** (`HEAD^..HEAD`, excluding `example-*`) to plan-api on **both
+  clusters**, using the `plan-catalog-internal-services` s2s client (scope
+  `leartechapi.internal_services`, audience `leartech-plan-api`). This is the
+  catalog GH route — the automation sibling of `create_plan`.
+  - Scoping is deliberate: plan-api de-duplicates on the **live CRD** (409
+    `AlreadyExists`), so a full-directory submit would recreate a Plan deleted from
+    a cluster on the next unrelated merge. The catalog is a history of Plans as
+    **defined and reviewed**; it makes no claim about what ran. Deleting a plan
+    file never deletes a Plan CRD — the release log reports the removal instead.
+    `-all` forces the full sweep for a backfill.
 - **Explicit** — **MCP `create_plan`** or the **Portal** (a user/AI session), for
   targeted or parameterized instantiation where the **target** (cluster / namespace
   / tenant) and **params** are chosen per-call.

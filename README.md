@@ -67,13 +67,25 @@ Concrete **Plans** reach the estate through `plan-api` — the single writer tha
 validates, applies the auto-composition injection policy, and creates the Plan CRD.
 Three front doors converge on it: MCP `create_plan` (forwards a user bearer), the
 Portal, and — on merge — this repo's release postsubmit
-([`cmd/plan-submit`](cmd/plan-submit)), which submits every `plans/*.yaml`
-(excluding `example-*`) to plan-api with an s2s token. The release runs on **both
-clusters**, each self-submitting to its local plan-api, so both estates receive the
-proposal. However it arrives, a Plan always lands **paused** — a second,
-human-gated promote/unpause controls execution. The full three-gate lifecycle
-(with `paused` enforced at every layer) is documented in
+([`cmd/plan-submit`](cmd/plan-submit)), which submits the `plans/*.yaml` **that the
+merged PR actually changed** (excluding `example-*`) to plan-api with an s2s token.
+The release runs on **both clusters**, each self-submitting to its local plan-api,
+so both estates receive the proposal. However it arrives, a Plan always lands
+**paused** — a second, human-gated promote/unpause controls execution. The full
+three-gate lifecycle (with `paused` enforced at every layer) is documented in
 [`docs/plan-lifecycle.md`](docs/plan-lifecycle.md).
+
+> **Why the plan leg is diff-scoped but the template sync is not.** The template
+> sync targets a git repo: it is a **reconciler**, and re-asserting an unchanged
+> template is a no-op, so mirroring the whole directory is both safe and
+> self-healing. `plan-submit` targets an apiserver via a one-shot create that
+> de-duplicates on the **live CRD** (`AlreadyExists` → HTTP 409), with no durable
+> record of what was submitted. Re-asserting the whole directory would therefore
+> **resurrect** any Plan deleted from a cluster on the next unrelated merge.
+> Scoping each release to `HEAD^..HEAD` keeps `plans/` a record of what was
+> *defined and reviewed* — not a mirror of cluster state, and not a claim about
+> what ran. Deleting a plan file never deletes a Plan CRD; the release log says so
+> explicitly. `plan-submit -all` restores the full sweep for a deliberate backfill.
 
 > The catalog auto-submit leg runs as the `plan-catalog-internal-services` s2s
 > client (scope `leartechapi.internal_services`, audience `leartech-plan-api`),
