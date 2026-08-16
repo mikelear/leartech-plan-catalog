@@ -60,8 +60,42 @@ CRITERIA_VERSION="${CRITERIA_VERSION:-unknown}"
 echo "plan-ai-review: criteria v${CRITERIA_VERSION} loaded from $CRITERIA_FILE ($(printf '%s' "$SYS" | wc -c | tr -d ' ') bytes)"
 
 shopt -s nullglob
-FILES=(plans/**/*.yaml plans/*.yaml templates/**/*.yaml templates/*.yaml)
-[ ${#FILES[@]} -eq 0 ] && { echo "plan-ai-review: no Plan YAML to review."; exit 0; }
+ALL_FILES=(plans/**/*.yaml plans/*.yaml templates/**/*.yaml templates/*.yaml)
+
+# SCOPE THE REVIEW TO WHAT THIS PR CHANGED.
+#
+# Reviewing every plan on every PR cost N-files x M-models x 2-clusters per push
+# and, worse, produced findings about files the PR never touched — a reader can't
+# tell an inherited finding from a new one, and a stale-branch artifact reads as a
+# defect the submitter introduced (the false "duplicate" claims came from here).
+# The advisory verdict is only actionable if it is about the diff.
+#
+# Three-dot vs the PR base = changes since the merge-base, which is what the PR
+# actually proposes. Deletions are excluded (--diff-filter=d): a removed Plan has
+# nothing to review. The AVAILABLE-TEMPLATE catalog below is deliberately NOT
+# scoped — a submitter should be pointed at every template they could compose.
+BASE="${PULL_BASE_SHA:-}"
+if [ -z "$BASE" ] && git -c safe.directory='*' rev-parse --verify --quiet origin/main >/dev/null 2>&1; then
+  BASE="origin/main"
+fi
+FILES=()
+if [ -n "$BASE" ] && git -c safe.directory='*' rev-parse --verify --quiet "$BASE" >/dev/null 2>&1; then
+  while IFS= read -r f; do
+    case "$f" in
+      plans/*.yaml|plans/*/*.yaml|templates/*.yaml|templates/*/*.yaml)
+        [ -f "$f" ] && FILES+=("$f") ;;
+    esac
+  done < <(git -c safe.directory='*' diff --name-only --diff-filter=d "$BASE"...HEAD 2>/dev/null)
+  echo "plan-ai-review: scoped to ${#FILES[@]} changed file(s) vs ${BASE} (${#ALL_FILES[@]} in repo)."
+else
+  # Unresolvable base (no git, shallow clone, missing PULL_BASE_SHA). Reviewing
+  # everything is the safe direction for an ADVISORY gate — it over-reports rather
+  # than staying silent on a real change — but say so loudly, because the output
+  # will then contain findings about untouched files.
+  FILES=("${ALL_FILES[@]}")
+  echo "plan-ai-review: WARNING — no diff base resolvable; falling back to ALL ${#FILES[@]} file(s). Findings may concern files this PR did not change."
+fi
+[ ${#FILES[@]} -eq 0 ] && { echo "plan-ai-review: no Plan/PlanTemplate YAML changed in this PR — nothing to review."; exit 0; }
 
 # AVAILABLE-TEMPLATE catalog: name + params for every PlanTemplate in the repo.
 # Fed to the reviewer so it can point submitters at templates they should COMPOSE

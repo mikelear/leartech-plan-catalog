@@ -83,7 +83,11 @@ spec:
           script: |
             #!/bin/sh
             set +e
-            apk add --no-cache bash curl >/dev/null 2>&1
+            # git is REQUIRED, not incidental: scripts/plan-ai-review.sh scopes the
+            # review to the PR's own diff, and python:3.12-alpine ships no git. Without
+            # it the script cannot resolve a base and silently falls back to reviewing
+            # every plan in the repo — the exact behaviour the scoping removed.
+            apk add --no-cache bash curl git >/dev/null 2>&1
             # pyyaml is REQUIRED, not optional. Without it the script's template-catalog
             # loader falls through to "(template catalog unavailable — pyyaml missing)" and
             # criterion 7 cannot run. That was silently true on EVERY review until
