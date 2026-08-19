@@ -1,0 +1,111 @@
+# Make a deadline respawn visible in Loki. Today it is the least observable and most
+# consequential transition the controller makes.
+#
+# THE GAP (verified 2026-08-19 against internal/controller/agentrun_controller.go)
+# The failed-Job branch reads:
+#
+#   if reason == "DeadlineExceeded" && run.Status.Iteration < budget {
+#       _ = r.Delete(ctx, &job)
+#       return r.spawn(ctx, &run, &at, run.Status.Iteration+1, agentv1alpha1.PhaseIterating)
+#   }
+#
+# Three things are invisible there. It logs NOTHING of its own, so no line says a respawn
+# happened or why. It then calls spawn(), which logs the phase transition with
+# PhaseTransitionReasonSpawn — the same reason a first start uses — so in Loki a respawn is
+# indistinguishable from an initial spawn. And the Job delete error is discarded with `_ =`.
+#
+# WHY THIS ONE MATTERS MORE THAN ITS SIZE
+# This is the transition behind the respawn-false-success incident: a deadline kill produced
+# a fresh iteration that rubber-stamped an already-open PR, and the controller was correct
+# throughout — the run genuinely had restarted. Diagnosing it took reading Job objects,
+# because no log said "iteration 2 of 5 after DeadlineExceeded". The agent-side half now
+# writes a handoff comment to the PR; this is the controller-side half.
+#
+# THE VOCABULARY ALREADY EXISTS — EXTEND IT, DO NOT INVENT ONE
+# phase_transition_logging.go defines a closed set of reasons: spawn, job-completed,
+# job-failed, job-disappeared, agent-type-not-found, test-mode-skip-spawn, stop-on-merge,
+# step-terminal, stuck-pod. A respawn reason belongs in that set, spelled the same way, and
+# emitted through phaseTransitionAgentRunFields like every other transition.
+#
+# NOT IN SCOPE
+# Do not change WHEN a respawn happens, the budget default of 5, or the completing-run guard
+# that settles a run as Succeeded when TargetPR is already set. This Plan changes what is
+# recorded, not what is decided. turns/cost metrics are a separate gap needing a CRD field.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: controller-respawn-observability
+spec:
+  paused: true
+  steps:
+    - name: respawn-observability
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: respawn-observability
+        repo: mikelear/leartech-orchestrator-controller
+        branch: feat/respawn-observability
+        goal: >-
+          Make a deadline-driven AgentRun respawn identifiable in Loki, so "why did this run
+          start again, and how much of its budget is left" is answerable from logs alone.
+
+          CONFIRM THE PREMISE FIRST. In internal/controller/agentrun_controller.go find the
+          failed-Job branch that tests `reason == "DeadlineExceeded" && run.Status.Iteration
+          < budget`. Confirm it still has no log call of its own, that it reaches
+          `r.spawn(...)`, and that spawn's phase-transition line uses
+          PhaseTransitionReasonSpawn. Also confirm phase_transition_logging.go has no
+          respawn reason constant. If any of that has changed, STOP and report it in the PR
+          description rather than building on a stale premise.
+
+          ADD THE REASON TO THE EXISTING VOCABULARY. Add a respawn constant to
+          phase_transition_logging.go alongside the others, following the spelling
+          convention of its neighbours (they are lower-case hyphenated: job-completed,
+          stop-on-merge, stuck-pod). Read that file before choosing the string. The
+          transition must be emitted through phaseTransitionAgentRunFields like every other
+          one, so the field set stays identical across transitions — do not hand-roll a
+          different key layout for this line.
+
+          THREAD THE REASON THROUGH SPAWN, DO NOT DUPLICATE THE LOG. spawn() currently
+          hard-codes the spawn reason. Give it the reason as a parameter (or an equivalent
+          seam) so the respawn path passes the respawn reason and the first-start path keeps
+          spawn. Do NOT add a second phase_transition line in the respawn branch on top of
+          spawn's — one transition, one line, is the invariant that file documents: "If Loki
+          ever sees a phase change on an AgentRun WITHOUT a matching line here, a path
+          bypassed the controller." Two lines for one transition is as misleading as none.
+
+          CARRY THE NUMBERS THAT MAKE IT ACTIONABLE. The respawn line must let a reader
+          answer both questions without opening Kubernetes: the Job failure reason that
+          triggered it (DeadlineExceeded), the iteration being left, the iteration being
+          started, and the budget ceiling. A line saying only "respawned" repeats the
+          problem in a different font.
+
+          STOP SWALLOWING THE DELETE ERROR. The branch discards the outgoing Job's delete
+          error with `_ = r.Delete(ctx, &job)`. A failed delete leaves the old Job alongside
+          the new one, which is worth knowing and is currently unknowable. Log it at error
+          level and continue — do NOT return the error and do NOT block the respawn, because
+          a stale Job must not prevent the run from making progress. Say in the PR
+          description why continuing is right.
+
+          FOLLOW THE FIELD CONVENTIONS. loop_logging.go is explicit that the same
+          correlation id must not appear in two spellings across records. Read it and
+          phase_transition_logging.go before choosing key names, and reuse the existing keys
+          rather than adding near-duplicates.
+
+          ISOLATE TESTING: table-driven unit tests with the controller-runtime fake client,
+          in the style of the existing agentrun_controller_test.go and
+          phase_transition_logging_test.go. Cover: a first spawn still records the spawn
+          reason; a DeadlineExceeded failure under budget records the respawn reason and
+          carries the outgoing iteration, the new iteration and the budget; a
+          DeadlineExceeded failure AT budget does not respawn and does not record the
+          respawn reason; a non-deadline Job failure does not record it either; and a run
+          with TargetPR set still settles through the completing-run guard unchanged. Assert
+          on the emitted fields, not on substrings of a formatted message. Non-negative
+          coverage delta. No cluster required.
+
+          LOGGING TO VERIFY: after this lands, a deadline respawn in Loki shows one
+          phase_transition record whose reason is the new respawn value, carrying the
+          iteration numbers and the budget, and a distinct error record if the outgoing Job
+          could not be deleted. Include the LogQL you would use to find a respawn in the PR
+          description.
+
+          Done = PR merged (open via open_pr, drive gates green).
