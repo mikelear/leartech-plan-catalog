@@ -1,0 +1,110 @@
+# Make spawn() follow the conflict discipline finish() already uses, and make the
+# phase-transition audit log countable.
+#
+# THE EVIDENCE (Loki, controller-respawn-observability, 2026-08-19)
+# Every spawn produced this, five times out of five:
+#
+#   07:38:05.947  agent Job constructed                             iteration=1
+#   07:38:06.253  phase_transition: agentrun phase moved (spawn)    reason=spawn
+#   07:38:06.371  agent Job constructed                             iteration=1
+#   07:38:06.683  phase_transition: agentrun phase moved (spawn)    reason=spawn
+#   07:38:06.696  Reconciler error   the object has been modified; please apply
+#                                    your changes to the latest version
+#
+# One logical spawn, two "constructed" lines, two phase_transition lines, one error.
+# Four of those sequences happened AFTER the run was terminal — a `finish` write lost
+# the same conflict, the requeue read a stale cache, and the reconciler re-entered
+# spawn on a completed run. Nothing broke: the Job name is deterministic so Create
+# returns AlreadyExists, and the announce is guarded by an annotation. The damage is
+# to the record, not the behaviour.
+#
+# WHY THIS MATTERS MORE THAN THE NOISE
+# phase_transition_logging.go exists so that "a phase change in the resource with no
+# matching log line means a path bypassed the controller" is a reliable signal. That
+# argument only holds if the line count matches the transition count. Today it
+# over-reports: it logs transitions that never persisted. An auditor counting lines
+# gets double, and the asymmetry the file is built to detect stops being meaningful.
+#
+# FINISH() ALREADY SOLVED HALF OF THIS — COPY IT, DO NOT INVENT
+# finish() handles the same conflict cleanly (`if apierrors.IsConflict(err) { return
+# ctrl.Result{Requeue: true}, nil }`) and does its Maestro announce AFTER a successful
+# write. spawn() does neither: it returns the conflict as a reconcile error, and it
+# announces before the write. Four more IsConflict sites exist in plan_controller.go.
+# spawn() is the outlier, not the pioneer.
+#
+# THE PRE-WRITE LOG IS DELIBERATE — DO NOT SIMPLY MOVE IT
+# finish() documents why the audit line fires before the Update: "so the log carries
+# the intent even when the Update itself errors and the reconcile requeues". That is a
+# real requirement and moving the line after the write would discard it. The task is to
+# keep the intent AND make the log countable, not to trade one for the other.
+#
+# NOT IN SCOPE
+# Do not add a cache-consistency layer, an APIReader re-read of the AgentRun, or a Pod
+# informer. Do not change when a spawn or a respawn happens, the budget, the
+# completing-run guard, or the respawn reason added in controller#125.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: controller-spawn-conflict-handling
+spec:
+  paused: true
+  steps:
+    - name: spawn-conflict-handling
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: spawn-conflict-handling
+        repo: mikelear/leartech-orchestrator-controller
+        branch: feat/spawn-conflict-handling
+        goal: >-
+          Stop a single AgentRun spawn from producing two phase-transition audit lines and
+          a reconcile error, without losing the evidence a failed write is meant to leave.
+
+          CONFIRM THE PREMISE FIRST. In internal/controller/agentrun_controller.go compare
+          spawn() with finish(). Confirm that finish() returns
+          `ctrl.Result{Requeue: true}, nil` on `apierrors.IsConflict` and announces to
+          Maestro only AFTER a successful `r.Status().Update`, while spawn() returns the
+          conflict as an error and announces before its write. Confirm plan_controller.go
+          has further IsConflict sites, so this discipline is the house pattern rather than
+          a new idea. If spawn() has since been changed, STOP and report that in the PR
+          description.
+
+          MIRROR FINISH, DO NOT INVENT. In spawn(): treat a conflict on
+          `r.Status().Update` as a clean requeue exactly as finish() does, and move the
+          `announceRunStarted` call to after the successful write. Use finish() as the
+          reference for both — same helper, same shape, same ordering — so the two paths
+          read identically to someone comparing them.
+
+          KEEP THE PRE-WRITE INTENT, AND MAKE THE LOG COUNTABLE. finish() documents why the
+          audit line fires before the Update: it carries the intent even when the write
+          errors. Preserve that. What must change is that a reader can tell an ATTEMPTED
+          transition from a PERSISTED one — today they are byte-identical, so counting
+          phase_transition lines in Loki double-counts every spawn. Choose the mechanism
+          yourself and justify it in the PR description; a field on the record distinguishing
+          the two, or a distinct line when the write conflicts, are both reasonable. The bar
+          is that a LogQL query can count real transitions and get the true number, and that
+          a failed write still leaves a trace.
+
+          DO NOT PAPER OVER THE RE-ENTRY. A requeued reconcile currently re-enters spawn
+          because it reads a stale AgentRun from the informer cache, and after a terminal
+          finish it re-entered spawn on a COMPLETED run four times in one observed run. You
+          are NOT being asked to fix the cache read — no APIReader re-read, no Pod informer,
+          no new consistency layer. But say plainly in the PR description whether your change
+          makes that re-entry harmless or merely quieter, because a future reader will
+          otherwise assume the underlying race is gone.
+
+          ISOLATE TESTING: table-driven unit tests with the controller-runtime fake client,
+          in the style of agentrun_controller_test.go and phase_transition_logging_test.go.
+          Cover: a conflict on the spawn status write produces a requeue and NOT a returned
+          error; a conflicted spawn does not announce to Maestro; a successful spawn
+          announces exactly once; and a conflicted-then-retried spawn yields exactly one
+          countable persisted transition. Assert on emitted fields rather than on formatted
+          message substrings. Non-negative coverage delta. No cluster required.
+
+          LOGGING TO VERIFY: after this lands, one spawn produces one countable
+          phase_transition record, a conflicting write leaves a distinguishable trace rather
+          than a bare duplicate, and "Reconciler error" no longer fires for an ordinary
+          optimistic-concurrency conflict. Include in the PR description the LogQL you would
+          run to count transitions for a single run_id and confirm it now matches reality.
+
+          Done = PR merged (open via open_pr, drive gates green).
