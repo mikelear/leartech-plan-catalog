@@ -1,0 +1,92 @@
+# Point the BA AgentType at the default ServiceAccount, so the last fragment of the
+# decommissioned Python agent chart can go.
+#
+# THE GAP (verified 2026-08-28 against the deployed clusters and the chart)
+# The Python leartech-automated-agent service was removed from GitOps and its workloads
+# pruned from both clusters. One resource had to be left behind:
+# serviceaccount/leartech-automated-agent-job-runner. It belonged to that chart, but
+# charts/leartech-orchestrator-controller/values.yaml still names it on ONE AgentType:
+#
+#     - name: leartech-agent-ba
+#       serviceAccountName: leartech-automated-agent-job-runner
+#
+# Deleting the SA today would break every BA agent Job with "serviceaccount not found".
+# The other six AgentTypes already resolve to `default` (or, for infra-go, their own
+# dedicated SA), so BA is the only holdout.
+#
+# WHY DEFAULT, AND NOT A NEW DEDICATED SA
+# Mike's call: the BA agent is currently a proof that the path exists and works, not a
+# workload with distinct access needs. If a later change gives it real requirements —
+# its own RBAC, its own imagePullSecrets — that belongs with THAT work, where the
+# requirement is known and can be justified. Inventing a dedicated SA now would be
+# guessing at a need nobody has stated, and it is one more object to keep in step.
+#
+# THE TEMPLATE ALREADY DOES THE WORK
+# templates/agenttypes.yaml renders:
+#     serviceAccountName: {{ .serviceAccountName | default $.Values.agent.serviceAccount | quote }}
+# and `agent.serviceAccount` is `default` in chart values, with no per-cluster override in
+# either GitOps repo. So DELETING the line is the whole change — do not add a replacement.
+#
+# NOT IN SCOPE
+# Do not touch the other AgentTypes, `agent.serviceAccount` itself, or infra-go's dedicated
+# SA. Do not delete the orphaned ServiceAccount from the clusters — that is an operator
+# action once this ships, and a Plan should not reach into a cluster.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: controller-ba-agent-default-sa
+spec:
+  paused: true
+  steps:
+    - name: ba-agent-default-sa
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: ba-agent-default-sa
+        repo: mikelear/leartech-orchestrator-controller
+        branch: feat/ba-agent-default-sa
+        goal: >-
+          Stop the BA AgentType depending on a ServiceAccount that belonged to the
+          decommissioned Python agent chart, so that orphaned object can be deleted.
+
+          CONFIRM THE PREMISE FIRST. In charts/leartech-orchestrator-controller/values.yaml
+          find the `leartech-agent-ba` entry under `agentTypes.defaults` and confirm it sets
+          `serviceAccountName: leartech-automated-agent-job-runner`. Confirm
+          templates/agenttypes.yaml renders serviceAccountName with
+          `| default $.Values.agent.serviceAccount`, and that `agent.serviceAccount` is
+          `default`. If any of that has changed, STOP and report it in the PR description
+          rather than building on a stale premise.
+
+          THE CHANGE IS A DELETION. Remove the `serviceAccountName` line from the
+          leartech-agent-ba entry so it falls through to the chart default, exactly as
+          leartech-agent-go, -py, -ng and -rust already do. Do NOT add a replacement
+          ServiceAccount, do NOT add RBAC, and do NOT set `serviceAccountName: default`
+          explicitly — the fallback already produces that, and an explicit value would make
+          BA look deliberately different from its four siblings when it is not.
+
+          LEAVE THE OTHERS ALONE. leartech-agent-infra-go has its own dedicated SA
+          (templates/agent-infra-go-rbac.yaml) because it makes read-only Kubernetes calls
+          in-process; that is a real requirement and must not be swept up here. Do not
+          change `agent.serviceAccount`, and do not touch any other AgentType entry.
+
+          WHY NOT A DEDICATED SA — SAY IT IN THE PR. The BA agent is currently a proof that
+          the path exists and works, not a workload with distinct access needs. If later
+          work gives it real requirements, that work can introduce the SA with a stated
+          justification. Write one line to that effect so a future reader does not
+          "restore" a dedicated SA believing something was lost.
+
+          ISOLATE TESTING: a chart-render test in the style of the existing
+          chart_agenttype_*_test.go files, asserting that the rendered leartech-agent-ba
+          AgentType has serviceAccountName "default", and that leartech-agent-infra-go still
+          has its own. Assert on the rendered value rather than on the absence of a line in
+          values.yaml, so the test covers the behaviour and not the spelling. Non-negative
+          coverage delta. No cluster required.
+
+          VERIFY IN LOKI AFTER MERGE: nothing changes at runtime until the chart is promoted
+          and boot applies it, so do not expect a signal from this run. State in the PR
+          description what an operator should check once it lands — that the rendered
+          AgentType shows the default SA — and note that deleting
+          serviceaccount/leartech-automated-agent-job-runner is an operator step AFTER that,
+          not part of this PR.
+
+          Done = PR merged (open via open_pr, drive gates green).
