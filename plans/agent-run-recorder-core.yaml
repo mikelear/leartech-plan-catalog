@@ -1,0 +1,94 @@
+# The per-run recorder: discovery, the record, and the corpus. No LLM, no PR writes.
+#
+# WHY THIS IS SPLIT FROM THE NARRATIVE
+# This half needs cluster read and one repo's contents:write. The other half needs a gateway
+# virtual key and writes to other repos' PRs. Different credentials, different blast radius,
+# and this half is verifiable on its own — records either appear in the corpus or they do
+# not. It also defines the record format that mcp-loki-run-report and the cross-run pass
+# both key on, so it wants to land first.
+#
+# THE RECORDER MUST BE LOUD ABOUT ITS OWN FAILURES
+# It must never fail a Plan — but "never fail" has been read as "be silent" all over this
+# estate, and that is what today's whole cleanup was about: a renovate job reporting
+# Complete having done nothing, a release step swallowing a missing CronJob with `|| echo`,
+# an announce failing at warn for weeks. A recorder that records nothing and exits zero is
+# the same defect wearing a different hat.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: agent-run-recorder-core
+spec:
+  paused: true
+  steps:
+    - name: recorder-core
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: recorder-core
+        repo: mikelear/leartech-agent-run-recorder
+        branch: feat/recorder-core
+        goal: >-
+          Build the per-run recorder's deterministic half: find finished Dev Agent runs,
+          build a record for each, and commit it to the corpus. No model call and no PR
+          writes in this change.
+
+          CONFIRM THE PREMISE FIRST. This repo currently holds only a README; read it, it
+          states the intended shape. Then read mikelear/leartech-code-audit, which is this
+          estate's existing scheduled-analysis service, and follow its structure — app/,
+          Dockerfile, charts/, .lighthouse, with the CronJob deployed from this repo's own
+          chart rather than from GitOps. Confirm mikelear/leartech-agent-run-reports exists
+          and is empty. If any of that is not as described, STOP and report it.
+
+          DISCOVERY, WITHOUT LOKI. A finished AgentRun already carries most of what is
+          needed: spec.agentType, spec.repo, spec.inputs, spec.budgetIter, and
+          status.phase / iteration / jobName / startTime / completionTime, plus the labels
+          agent.leartech.io/plan and agent-leartech-io/plan-step. Read them from the cluster.
+          Note that status.iteration against spec.budgetIter is how you tell a run needed
+          respawns — record it.
+
+          IDEMPOTENT WITHOUT A STATE STORE. One record per run at
+          runs/<utc-date>/<run-id>.json in the corpus; if it exists, skip. Do not add a
+          watermark file or a database. Bound discovery by Loki's 720h retention, since an
+          older run cannot be reconstructed — and SAY in the run's own log how many runs
+          were skipped as too old, rather than silently ignoring them.
+
+          THE AGGREGATES COME FROM run_report OVER MCP. Do not reimplement the arithmetic
+          here and do not try to import internal/lokiserver — Go's internal/ rule forbids it
+          from another module. If run_report is not yet available, STOP and report that; do
+          not write a private copy of it that will then diverge.
+
+          PROVENANCE IS THE POINT OF THE RECORD. Derive the prompt that actually ran:
+          agentType to AgentType.spec.image to the tag, to the git tag v<tag>-{az,gcp}, to
+          the commit, to a permalink for docs/agent-system-prompt.md at that commit, plus
+          its sha256. Without that link a behaviour change cannot be attributed to a prompt
+          change, which is the entire reason the corpus exists.
+
+          ABSENT IS NOT ZERO. Every field that can be genuinely unavailable must render
+          differently from one that is genuinely zero — a prompt permalink that could not be
+          derived, a source that logged nothing, a run past retention. An empty value that
+          reads as a fact is worse than a missing one.
+
+          JSON AND MARKDOWN FROM ONE SOURCE. Write runs/<utc-date>/<run-id>.json and .md.
+          The JSON is authoritative and the markdown is a rendering of it — generate both
+          from the same in-memory value so they cannot disagree. Commit to main of the
+          corpus repo; never push to any PR branch, which jx deletes after merge.
+
+          NEVER FAIL A PLAN, BUT NEVER BE SILENT. Exit zero whatever happens. Log every
+          failure at ERROR, and if there were runs to record and none were recorded, say so
+          explicitly — a recorder that writes nothing and exits zero is the same defect as
+          the release step that swallowed a missing CronJob for months.
+
+          RBAC EXPLICITLY IN THE CHART. It reads agentruns, plans and agenttypes. Declare
+          exactly that and no more. A forbidden read in this estate has previously produced
+          a 500 for an entire webhook rather than a clean failure, so do not rely on a
+          not-found path.
+
+          ISOLATE TESTING: table-driven Go tests, no cluster and no network — fake the
+          cluster reads and the MCP call the way the repo's dependencies allow. Cover:
+          discovery skipping an already-recorded run; a run past retention being reported as
+          skipped rather than dropped; absent versus zero for every field that can be
+          absent; the JSON and markdown agreeing because they share a source; and a failure
+          in every external call still exiting zero WITH an error log. Non-negative coverage
+          delta.
+
+          Done = PR merged (open via open_pr, drive gates green).

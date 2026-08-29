@@ -1,0 +1,90 @@
+# The half a human reads: the narrative, the PR comment, and the actions.
+#
+# WHAT THIS IS FOR
+# The deterministic record says what happened. This says WHY, whether the prompt should
+# change, and what could not be established because the logging was poor. The last of those
+# is not a footnote — the single most useful prompt fix so far came from an absence, not
+# from data: wait-tool verdicts were clipped past 2000 characters, so what any wait call
+# returned was unknowable from the agent's own logs, and the fix followed from writing that
+# sentence down.
+#
+# TWO KINDS OF PROMPT DEFECT, TWO CONFIDENCES
+#   Mismatch     — the prompt disagrees with reality. Evidenced by a verbatim tool error.
+#                  Near-mechanical. This produced "the argument is pr_number, not pr".
+#   Choice       — the prompt is legal but misleading, so the agent chooses badly and still
+#                  succeeds. Evidenced by a ratio, never by an error. This caught the
+#                  fail-fast contradiction: wait-tool use went 2:7 to 8:1 after the fix.
+# They must not be presented as one list. One is nearly a fix; the other is a hypothesis.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: agent-run-recorder-report
+spec:
+  paused: true
+  steps:
+    - name: recorder-report
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: recorder-report
+        repo: mikelear/leartech-agent-run-recorder
+        branch: feat/recorder-report
+        goal: >-
+          Add the reporting half: turn a committed record into a narrative, post it to the
+          run's PR, and raise an issue when there is something a human should act on.
+
+          CONFIRM THE PREMISE FIRST. agent-run-recorder-core must have landed and the corpus
+          must contain records. Read a real record and build against its actual field names.
+          If the corpus is empty, STOP and report it — do not design a record format here,
+          it is defined by the other half.
+
+          GO, INCLUDING THE MODEL CALL. leartech-ai-gateway is OpenAI-compatible: GET
+          /v1/models lists the models, POST /v1/chat/completions is the call. That is an
+          HTTP POST with JSON. Do not introduce Python and do not add an agent SDK — this is
+          one completion over a computed record, not a tool-using agent. Use the gateway's
+          `echo` model for any integration test so tests spend nothing.
+
+          ITS OWN VIRTUAL KEY. Provision and consume a gateway key for this service alone,
+          mirroring how the BA agent's key is wired (an ExternalSecret whose target Secret
+          supplies AI_GATEWAY_API_KEY). Separate so cost is attributable per key, it
+          rate-limits independently, and a runaway recorder cannot spend another consumer's
+          budget.
+
+          WHAT THE NARRATIVE MUST CONTAIN. What happened; why it decided what it did, read
+          off the ordered trajectory; potential prompt changes; and what could not be
+          established and why. Split the prompt changes into MISMATCHES, each carrying the
+          verbatim error that evidences it, and CHOICE PATTERNS, each carrying the metric
+          that evidences it. Do not merge them into one list — a mismatch is nearly a fix, a
+          choice pattern is a hypothesis, and presenting them at equal confidence is how a
+          wrong prescription gets applied.
+
+          THE MODEL EXPLAINS; IT DOES NOT DETECT. Everything it is given is already computed.
+          If the gateway call fails, post and commit the deterministic content anyway and
+          record the narrative as ABSENT. Never retro-fit a missing narrative by guessing,
+          and never let a model-written sentence assert something the record does not
+          contain.
+
+          A PROMPT CHANGE IS A PROPOSAL. State it with its evidence and stop. Do not edit
+          docs/agent-system-prompt.md and do not open a PR against leartech-automated-agent
+          from this service. A change there goes through tests/test_prompt_contract.py like
+          any other.
+
+          THE PR COMMENT. Sticky — update the existing comment rather than adding one per
+          run. It carries the prompt's sha256, the permalink to the prompt at the commit the
+          image was built from, and a link to the committed record. The PR will usually be
+          merged already; that is fine and expected, GitHub accepts comments indefinitely
+          and the next agent reads the PR. Never push to the PR branch.
+
+          ISSUES ONLY WHEN THERE IS AN ACTION, AND NEVER TWICE. Raise them on
+          mikelear/leartech-agent-run-reports only, which keeps this service's token scoped
+          to one repo. An issue is for something a human or a later agent should act on, not
+          a copy of every report. Update an existing open issue rather than opening a
+          duplicate, and say in the PR description how that was made idempotent.
+
+          ISOLATE TESTING: table-driven Go tests, no network. Cover: mismatches and choice
+          patterns rendering as separate sections; a gateway failure still producing the
+          deterministic output with the narrative marked absent; the sticky comment updating
+          rather than duplicating; an issue not being raised when nothing fired; and an issue
+          being updated rather than duplicated on a second pass. Non-negative coverage delta.
+
+          Done = PR merged (open via open_pr, drive gates green).

@@ -1,0 +1,94 @@
+# Aggregate a run's Loki lines into the numbers a reviewer actually reads.
+#
+# THE EVIDENCE
+# internal/lokiserver already ships reconstruct_run, service_errors and tool_calls. Those
+# return LINES. Every review of a Dev Agent run then did the same arithmetic by hand: count
+# the turns, build a tool histogram, work out the wait-tool ratio, compare line counts per
+# source, and read every tool error verbatim. That arithmetic is the whole gap between
+# "the logs are there" and "someone can tell what happened".
+#
+# WHAT THE HAND ARITHMETIC ACTUALLY CAUGHT
+#   - the wait-tool ratio moving 2:7 to 8:1 after one prompt edit — the clearest evidence a
+#     prompt change worked that this estate has produced. Nothing failed before or after it.
+#   - MCP calls happening while mcp-servers logged 9 lines — a logging gap found by
+#     comparing per-source line counts, not by any error.
+#   - four image and prompt defects, all from reading tool errors VERBATIM.
+#
+# WHY AN MCP TOOL AND NOT A LIBRARY
+# Go's internal/ rule means no other module can import internal/lokiserver. The run recorder
+# is a separate repo, so it must call this over MCP — and making it a tool means a human or
+# an agent can ask the same question interactively.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mcp-loki-run-report
+spec:
+  paused: true
+  steps:
+    - name: loki-run-report
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: loki-run-report
+        repo: mikelear/leartech-mcp-servers
+        branch: feat/loki-run-report
+        goal: >-
+          Add a `run_report` tool to internal/lokiserver that turns one run's Loki lines
+          into the aggregates a reviewer reads, so nobody has to do that arithmetic by hand
+          again.
+
+          CONFIRM THE PREMISE FIRST. In internal/lokiserver read tools.go and confirm
+          reconstruct_run, service_errors and tool_calls exist, how each is registered, and
+          that no run_report exists. Reuse their registration, their input-struct shape
+          (run id, namespace, since-hours, limit) and their logging — same helpers, same
+          field vocabulary. If something equivalent already exists, STOP and report that
+          rather than adding a second one.
+
+          WHAT IT MUST RETURN. Turn count; wall-clock; a histogram of tool calls by name;
+          the wait-tool ratio, meaning fail-fast calls against full-terminal calls, named
+          explicitly because that ratio is the estate's only proven prompt-change signal;
+          line counts PER SOURCE (agent, controller, maestro, mcp-servers, plan-api); the
+          count of MCP calls; and every tool error.
+
+          ERRORS GO BACK VERBATIM. Do not summarise, truncate or classify them. Four image
+          and prompt defects came from reading them exactly as emitted; a summarised error
+          would have hidden all four. Everything else in the report is counted, but the
+          errors are quoted.
+
+          ABSENT IS NOT ZERO — THIS IS THE POINT OF THE TOOL. Several fields can be
+          genuinely unavailable rather than genuinely zero, and the two must never render
+          the same way. If the advertised-tool set is not present in the logs (it is emitted
+          by a separate change that may not have landed yet), report it as UNAVAILABLE, not
+          as an empty set — an empty set reads as "no tools were advertised", which is a
+          false statement about the run. Same for a run older than Loki's 720h retention,
+          and same for a source that logged nothing.
+
+          NO SILENT CAPS. If a query hit its limit, the report must say so on its face. A
+          truncated run that renders as a short run is worse than an error: it invites a
+          confident wrong conclusion about how the agent behaved.
+
+          COMPUTE available MINUS called WHEN IT CAN. Once the advertised MCP servers and
+          allowed tools appear in a run's logs, report which advertised tools were never
+          called. That set is the only evidence for a class of prompt defect that raises no
+          error at all — the agent reaches for bash instead of a tool it was given, and
+          succeeds slowly. Until that emission exists, follow the absent-is-not-zero rule
+          above.
+
+          ISOLATE TESTING: table-driven Go tests against fixture Loki responses, no cluster
+          and no network — mirror however the existing lokiserver tests fake their
+          transport. Cover: each aggregate computed from a known fixture; errors returned
+          verbatim including one exceeding any clip length; absent versus zero rendering
+          differently for every field that can be absent; a limit-hit run reporting that it
+          was capped; and a run with no lines at all. Non-negative coverage delta.
+
+          RECONCILE AGAINST THE MANUAL BASELINE — THIS IS THE ACCEPTANCE TEST. A hand-written
+          analysis of real runs is committed in mikelear/leartech-agent-run-reports under
+          baselines/. Run this tool against those same run ids and compare every aggregate
+          against the baseline: turn count, tool histogram, wait-tool ratio, per-source line
+          counts, and the error list. Put the comparison in the PR description. Where they
+          differ, say which is wrong and why — the baseline may be the mistaken one, but a
+          difference must be explained, never averaged away or quietly dropped. Fixtures you
+          wrote yourself only prove the code does what you assumed; the baseline is the only
+          check that the assumption matches a real run.
+
+          Done = PR merged (open via open_pr, drive gates green).

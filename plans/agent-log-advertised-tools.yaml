@@ -1,0 +1,69 @@
+# Emit what the agent COULD have called, not only what it did.
+#
+# THE EVIDENCE
+# The run recorder has to answer "why did it not call the right MCP tool". Today that is
+# unanswerable: gate/agent/ba_agent.py builds `allowed_tools=BA_ALLOWED_TOOLS` and
+# `mcp_servers={**build_remote_mcp_servers()}` (also gate/agent/main.py), and neither is
+# ever logged. Loki shows every tool the agent CALLED and nothing about what was on offer,
+# so `available - called` — the set that names an ignored tool — cannot be computed.
+#
+# The one prompt fix that would have been caught by this: the wait tools' PR argument was
+# documented as `pr` when the tool expects `pr_number`. A rejected-argument error did
+# eventually surface it, but a tool advertised and never called is the same class of defect
+# with no error at all — the agent simply reaches for bash instead and succeeds slowly.
+#
+# NOT IN SCOPE
+# Do not change which tools are advertised, the allow-list contents, the MCP wiring, or
+# anything the agent does with them. This is one log line.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: agent-log-advertised-tools
+spec:
+  paused: true
+  steps:
+    - name: log-advertised-tools
+      kind: pr
+      agentType: leartech-agent-py
+      inputs:
+        name: log-advertised-tools
+        repo: mikelear/leartech-automated-agent
+        branch: feat/log-advertised-tools
+        goal: >-
+          Emit one structured log record at run start naming every MCP server and every
+          tool the agent was allowed to use, so a later reader can compute which advertised
+          tools were never called.
+
+          CONFIRM THE PREMISE FIRST. In gate/agent/ba_agent.py find the ClaudeAgentOptions
+          construction and confirm `allowed_tools` and `mcp_servers` are set there and are
+          not logged anywhere; check gate/agent/main.py for the same shape. Search the
+          package for any existing emission of the allow-list before adding one. If it is
+          already logged, STOP and report that in the PR description rather than adding a
+          second line.
+
+          COPY THE EXISTING LOGGING SHAPE, DO NOT INVENT ONE. gate/agent/obslog.py is how
+          this package emits structured records and gate/agent/tool_logging.py is the
+          closest precedent — same helper, same snake_case field vocabulary, same logger
+          naming. The record must carry the run id so it joins to the rest of the run.
+
+          WHAT THE RECORD MUST MAKE POSSIBLE. A reader with only Loki and one run id must
+          be able to list the advertised MCP servers and the allowed tool names. Field
+          names are yours to choose but they are a wire contract the recorder will key on,
+          so state them in the PR description and keep them stable.
+
+          EMIT IT AT INFO. Not debug. The controller runs at info and a V(1)-equivalent
+          record is the same as no record — leartech-orchestrator-controller has three
+          separate comments in internal/controller recording exactly that mistake costing
+          weeks. A test must assert the record survives the deployed verbosity, not merely
+          that the call happens.
+
+          ISOLATE TESTING: pytest, in the style of the existing tests/ suite, with no
+          network and no cluster. Cover: the record is emitted once per run; it contains
+          every advertised server and every allowed tool; it carries the run id; and it is
+          emitted at a level that survives the deployed log configuration. Non-negative
+          coverage delta.
+
+          LOGGING TO VERIFY: include in the PR description the LogQL query that returns the
+          advertised set for a single run id, so the next reader does not have to derive it.
+
+          Done = PR merged (open via open_pr, drive gates green).
