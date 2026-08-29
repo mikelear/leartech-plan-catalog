@@ -1,0 +1,72 @@
+# Make a failed bash call diagnosable from Loki alone.
+#
+# THE EVIDENCE
+# gate/agent/tool_logging.py clips every tool result at 2000 characters. That clip already
+# destroyed one investigation: every wait-tool result logged an identical 2013-char body
+# with the verdict past the cut, so "what did each wait call return" could not be answered
+# from the agent's own logs and the MCP server's logs had to be read instead. The fix was
+# _verdict_fields, which promotes status / verdict / merged / remaining_seconds BEFORE the
+# clip.
+#
+# Bash results have the same problem and no equivalent fix. The exit code and the error text
+# sit inside the clipped body, so "why did it fail multiple bash calls" is answerable only
+# when the failure happens to be short. That is the second question the run recorder has to
+# answer and it currently cannot.
+#
+# COPY _verdict_fields — THE MECHANISM ALREADY EXISTS AND IS TESTED
+# This is the same promotion applied to a different result shape. Do not raise _MAX, do not
+# add a second logging path, and do not log full bash output — the clip exists to bound
+# volume and that reasoning still holds.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: agent-bash-failure-fields
+spec:
+  paused: true
+  steps:
+    - name: bash-failure-fields
+      kind: pr
+      agentType: leartech-agent-py
+      inputs:
+        name: bash-failure-fields
+        repo: mikelear/leartech-automated-agent
+        branch: feat/bash-failure-fields
+        goal: >-
+          Promote a failed bash call's exit status and error text to structured fields so a
+          reader with only Loki can tell WHY it failed, without raising the 2000-character
+          result clip.
+
+          CONFIRM THE PREMISE FIRST. In gate/agent/tool_logging.py read _MAX,
+          _VERDICT_KEYS and _verdict_fields, and confirm the promotion happens before the
+          text is clipped and that log_tool_result splices the result in. Then establish
+          what a Bash tool result actually looks like when the command fails — the exact
+          shape of the content the SDK hands back, including where the exit status appears.
+          Do not guess it from the tool name; find it, and state what you found in the PR
+          description. If bash failures already carry promoted fields, STOP and say so.
+
+          MIRROR _verdict_fields, DO NOT INVENT A SECOND PATH. Same helper style, same
+          snake_case field names, same splice into the obslog.emit call, promotion strictly
+          before clipping. Field names are a wire contract the recorder will key on, so
+          state them in the PR description.
+
+          WHAT TO PROMOTE, AND WHAT NOT TO. The exit status, and enough of the error to
+          identify it — the first line, or the last, whichever actually carries the message
+          for a failing shell command; justify the choice. Do NOT promote the whole output
+          and do NOT raise _MAX: the clip bounds log volume and that reasoning is unchanged.
+          A promoted field that is itself 2000 characters has moved the problem, not fixed
+          it.
+
+          DO NOT BREAK THE VERDICT FIELDS. _verdict_fields is load-bearing and recently
+          added for the same class of bug. Its tests must still pass untouched, and a bash
+          result must not start emitting verdict keys or vice versa.
+
+          ISOLATE TESTING: pytest, no network, no cluster. Cover: a failing bash result
+          whose body exceeds 2000 characters still yields the exit status and an
+          identifiable error; a succeeding bash call does not emit a spurious failure field;
+          the existing verdict-field behaviour is unchanged; and the promoted error is
+          itself bounded. Non-negative coverage delta.
+
+          LOGGING TO VERIFY: include in the PR description the LogQL query that lists every
+          failed bash call for one run id with its exit status and error.
+
+          Done = PR merged (open via open_pr, drive gates green).
