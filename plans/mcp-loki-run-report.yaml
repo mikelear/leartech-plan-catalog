@@ -81,8 +81,14 @@ spec:
           differently for every field that can be absent; a limit-hit run reporting that it
           was capped; and a run with no lines at all. Non-negative coverage delta.
 
-          LOGGING TO VERIFY: include in the PR description the exact call a reviewer makes
-          to get a report for one run id, and paste the output for a real recent run so the
-          shape is on the record.
+          RECONCILE AGAINST THE MANUAL BASELINE — THIS IS THE ACCEPTANCE TEST. A hand-written
+          analysis of real runs is committed in mikelear/leartech-agent-run-reports under
+          baselines/. Run this tool against those same run ids and compare every aggregate
+          against the baseline: turn count, tool histogram, wait-tool ratio, per-source line
+          counts, and the error list. Put the comparison in the PR description. Where they
+          differ, say which is wrong and why — the baseline may be the mistaken one, but a
+          difference must be explained, never averaged away or quietly dropped. Fixtures you
+          wrote yourself only prove the code does what you assumed; the baseline is the only
+          check that the assumption matches a real run.
 
           Done = PR merged (open via open_pr, drive gates green).
