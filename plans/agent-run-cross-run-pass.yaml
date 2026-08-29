@@ -1,0 +1,89 @@
+# The pass that reads many run records at once — the only reader the corpus has.
+#
+# WHY THIS IS NOT AN EXTRA
+# The per-run pass answers "what did this run do". A whole class of question needs several
+# runs compared, and a per-run pass structurally cannot answer any of it:
+#
+#   - Is this the fifth time? An unwritable GOMODCACHE looked like an agent quirk in one
+#     run — it invented a cache workaround and carried on. It was only an IMAGE defect once
+#     the same workaround turned up in an earlier run. One occurrence is noise.
+#   - Did a prompt change work? Wait-tool use went 2:7 to 8:1 after one prompt edit. That is
+#     a comparison between runs grouped by prompt sha. A single run's ratio means nothing.
+#   - Drift that never fails: turn count creeping up, more bash and fewer MCP calls.
+#   - Silence that should be noise: no run in three days called an advertised tool.
+#
+# If only the per-run pass ever runs, the committed corpus has no reader and PR comments
+# alone would have done the whole job. This is what justifies keeping records at all.
+#
+# THIS PLAN IS LAST IN THE SEQUENCE AND SELF-GATING
+# It needs a corpus with records in it, written by the per-run pass. The premise check below
+# will STOP if that does not exist yet, rather than inventing a format.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: agent-run-cross-run-pass
+spec:
+  paused: true
+  steps:
+    - name: cross-run-pass
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: cross-run-pass
+        repo: mikelear/leartech-agent-run-recorder
+        branch: feat/cross-run-pass
+        goal: >-
+          Add the cross-run pass: a second, less frequent run of this service that reads
+          many committed run records together and reports what is true ACROSS runs.
+
+          CONFIRM THE PREMISE FIRST, AND STOP IF IT IS ABSENT. This depends on the per-run
+          pass already writing records to mikelear/leartech-agent-run-reports under
+          runs/<utc-date>/<run-id>.json. Confirm that path exists and contains records, and
+          read the actual JSON to learn the real field names. If the corpus is empty or the
+          per-run pass is not implemented yet, STOP and say so in the PR description — do
+          NOT invent a record format and do not build against a schema you designed
+          yourself. The whole value of this pass is that it reads what the other pass
+          actually wrote.
+
+          SAME BINARY, SECOND SUBCOMMAND, SECOND CRONJOB. Do not create a new service. Reuse
+          this repo's existing structure — app/, charts/, .lighthouse — and follow
+          leartech-code-audit, which is the estate's precedent for a scheduled analysis
+          service owning its own CronJob in its own chart. The schedule is less frequent
+          than the per-run pass; choose it and justify it in the PR description.
+
+          GO, INCLUDING THE MODEL CALL. leartech-ai-gateway is OpenAI-compatible
+          (GET /v1/models lists models, POST /v1/chat/completions is the call), so the
+          narrative is an HTTP POST with JSON. Do not introduce Python. Do not add an agent
+          SDK — this is one completion over a computed comparison, not a tool-using agent.
+
+          DETECTION IS DETERMINISTIC; THE MODEL ONLY EXPLAINS. Compute every comparison in
+          Go and pass the model the computed result plus the verbatim evidence. At minimum:
+          the same tool-error class recurring across records; a metric compared between
+          records grouped by prompt sha256; a metric trending across records; and an
+          advertised tool with zero calls across consecutive records. If the gateway call
+          fails, the deterministic comparison must still be written and the narrative
+          recorded as ABSENT — never inferred, never retro-fitted.
+
+          OUTPUT, AND DO NOT CREATE NOISE. Write a period report into the corpus alongside
+          the per-run records, and raise a GitHub issue ONLY when a rule fires and only on
+          mikelear/leartech-agent-run-reports (which keeps this service's token scoped to
+          one repo). It runs repeatedly over an overlapping window, so it MUST NOT open a
+          duplicate issue for a finding it has already raised — update the existing open
+          issue instead. Say in the PR description how you made that idempotent.
+
+          NO SILENT CAPS. If the pass reads only the last N records, or skips records it
+          could not parse, the report must say so explicitly. A report that silently covered
+          less than it appears to reads as "nothing found" when it means "did not look".
+
+          A PROMPT CHANGE IS A PROPOSAL. If the comparison suggests the prompt should change,
+          say so with the evidence and stop there. Do not edit
+          docs/agent-system-prompt.md from this service and do not open a PR against
+          leartech-automated-agent automatically.
+
+          ISOLATE TESTING: table-driven Go tests, no network and no cluster. Use the
+          gateway's `echo` model only if an integration test is genuinely needed; unit tests
+          must not call the gateway at all. Cover each rule firing and not firing, the
+          grouping by prompt sha, issue idempotency, and that a gateway failure still yields
+          the deterministic report. Non-negative coverage delta.
+
+          Done = PR merged (open via open_pr, drive gates green).
