@@ -111,14 +111,15 @@ spec:
           substitute, do not retarget, do not report success. Test that the instruction is
           present, in the style prompt-contract-checks-tool-schemas established.
 
-          DO NOT GRANT ACCESS FROM INSIDE THE AGENT. Do not add a bootstrap that creates a
-          repo, invites a collaborator, or accepts an invitation. The token the agent holds
-          (GH_TOKEN, from the tekton-git secret, identity LeartechKeeperBot) carries
-          admin:org, admin:enterprise, delete_repo and write:packages. Self-granting would
-          make any brief able to obtain access to anything in the organisation, which is a
-          far worse defect than the one being fixed. Provisioning is a human and GitOps
-          concern; the agent's only correct move is to verify and refuse. If you believe a
-          bootstrap is warranted, argue it in the PR description and do not implement it.
+          PROVISIONING IS ALREADY SOLVED ELSEWHERE — DO NOT REBUILD IT HERE. The estate has a
+          bootstrap route for new repos: the repo-factory MCP's create_repo, driven by the
+          bootstrap-authed-service PlanTemplate, which creates the repo and invites the six
+          machine bots (see BotCollaborators in leartech-mcp-servers internal/repofactory).
+          This failure happened because two repos were created by hand and skipped it, not
+          because the route is missing. So do not add repo creation, collaborator invitation
+          or invitation acceptance to the agent runtime: the agent's correct move is to
+          verify and refuse, and the operator's is to run the bootstrap. Point at the
+          bootstrap in the failure's remediation field so the next reader is sent there.
 
           THE PLAN CR SHOULD SHOW THE REASON, AND THAT IS NOT THIS REPO. The controller
           rendered `reason: "Failed"` with no message. Even after this change, `kubectl get
