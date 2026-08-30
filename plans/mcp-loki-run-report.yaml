@@ -67,12 +67,42 @@ spec:
           truncated run that renders as a short run is worse than an error: it invites a
           confident wrong conclusion about how the agent behaved.
 
-          COMPUTE available MINUS called WHEN IT CAN. Once the advertised MCP servers and
-          allowed tools appear in a run's logs, report which advertised tools were never
-          called. That set is the only evidence for a class of prompt defect that raises no
-          error at all — the agent reaches for bash instead of a tool it was given, and
-          succeeds slowly. Until that emission exists, follow the absent-is-not-zero rule
-          above.
+          COMPUTE available MINUS called. The advertised set now exists — it was added by
+          leartech-automated-agent#244 and its field names are a FIXED wire contract you
+          must read, not choose:
+
+              event=agent_advertised_tools   (level INFO, one record per run)
+              mcp_servers=[sorted server names]     allowed_tools=[sorted tool names]
+              mcp_server_count=<int>                allowed_tool_count=<int>
+              run_id=<ambient>                      namespace=<ambient>
+
+          Those names are pinned by tests in that repo
+          (test_log_advertised_tools_stable_event_name and
+          test_log_advertised_tools_names_every_server_and_tool), so read them from a real
+          record rather than restating them from this brief — if this brief and the emitter
+          ever disagree, the emitter is right.
+
+          COMPUTE BOTH DIRECTIONS — the second one is the stronger signal. The agent runs
+          with permission_mode='bypassPermissions', so allowed_tools is a DECLARED list and
+          NOT an enforced boundary. Proven in the baseline runs: ToolSearch was called and is
+          not declared, and an earlier run called leartech-k8s and leartech-tekton tools that
+          appear in no declared list. So:
+
+            declared - called   tools declared and unused. WEAK evidence — a tool may simply
+                                be irrelevant to that run's work. 8 of 16 in the baseline.
+            called - declared   tools used but never declared. STRONGER — it means the
+                                declared list has drifted from what the agent actually needs.
+
+          A report that computed only the first would have called the baseline run clean.
+
+          Report which advertised tools were never called. That set is the only evidence for
+          a class of prompt defect that raises no error at all — the agent reaches for bash
+          instead of a tool it was given, and succeeds slowly. In the baseline run, Bash was
+          114 of 228 calls against 43 MCP calls, and whether that is reasonable was
+          impossible to judge precisely because the advertised set did not yet exist.
+
+          Runs from BEFORE that change carry no such record, and the baseline is one of
+          them. For those, follow the absent-is-not-zero rule above: report UNAVAILABLE.
 
           ISOLATE TESTING: table-driven Go tests against fixture Loki responses, no cluster
           and no network — mirror however the existing lokiserver tests fake their
@@ -81,9 +111,14 @@ spec:
           differently for every field that can be absent; a limit-hit run reporting that it
           was capped; and a run with no lines at all. Non-negative coverage delta.
 
-          RECONCILE AGAINST THE MANUAL BASELINE — THIS IS THE ACCEPTANCE TEST. A hand-written
-          analysis of real runs is committed in mikelear/leartech-agent-run-reports under
-          baselines/. Run this tool against those same run ids and compare every aggregate
+          RECONCILE AGAINST THE MANUAL BASELINE — THIS IS THE ACCEPTANCE TEST. The baseline
+          is committed at mikelear/leartech-agent-run-reports
+          baselines/2026-08-29-agent-log-advertised-tools.md, for run id
+          agent-log-advertised-tools-log-advertised-tools. It asserts, among others:
+          228 tool calls, 4 errors, 114 Bash against 43 MCP across 11 tools, a wait-tool
+          ratio of 9:1 fail-fast to full-terminal, 33m33s wall clock, and per-source line
+          counts of agent 460 / controller 42 / maestro 26 / mcp-servers 12 / plan-api 0.
+          Run this tool against that run id and compare every aggregate
           against the baseline: turn count, tool histogram, wait-tool ratio, per-source line
           counts, and the error list. Put the comparison in the PR description. Where they
           differ, say which is wrong and why — the baseline may be the mistaken one, but a
