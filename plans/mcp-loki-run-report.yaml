@@ -80,6 +80,12 @@ spec:
           Do NOT simply build on reconstruct_run unmodified — it would inherit this blind
           spot. Either widen the query or report what it misses; say which you chose and why.
 
+          AGGREGATE ACROSS EVERY ATTEMPT, AND SAY HOW MANY THERE WERE. One AgentRun can
+          have several pods, because the Job retries. Aggregating one pod and presenting it
+          as the run understates turns, calls, cost and errors without any sign that it has.
+          Report per-attempt figures and the attempt count, and note that this is NOT the
+          same as AgentRun.status.iteration, which only moves on a controller respawn.
+
           NO SILENT CAPS. If a query hit its limit, the report must say so on its face. A
           truncated run that renders as a short run is worse than an error: it invites a
           confident wrong conclusion about how the agent behaved.
