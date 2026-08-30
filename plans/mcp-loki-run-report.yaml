@@ -63,6 +63,23 @@ spec:
           false statement about the run. Same for a run older than Loki's 720h retention,
           and same for a source that logged nothing.
 
+          COUNT LINES TWO WAYS AND REPORT THE DELTA — THE INSTRUMENT MUST CHECK ITSELF.
+          reconstruct_run queries `{namespace=...} | json | run_id="..."`. The `| json` stage
+          silently discards every line that is not JSON, and for the baseline run that is
+          519 of 980 lines — 53 percent of the run, including all human-readable progress
+          output. Loki HAS those lines; the query cannot see them. Verified: `{pod="..."}`
+          returns 980, the run_id query returns 461.
+
+          That is the most dangerous shape of gap, because a query dropping half its input
+          returns a confident, complete-looking answer with no error and nothing absent to
+          notice. So report BOTH counts: the broad count for the run's pod (the pod name is
+          on AgentRun.status.jobName, so no guessing) and the count the structured query
+          actually parsed, and the difference between them. A reader must be able to see
+          "980 lines exist, 461 were parseable" rather than trust 461 as the whole run.
+
+          Do NOT simply build on reconstruct_run unmodified — it would inherit this blind
+          spot. Either widen the query or report what it misses; say which you chose and why.
+
           NO SILENT CAPS. If a query hit its limit, the report must say so on its face. A
           truncated run that renders as a short run is worse than an error: it invites a
           confident wrong conclusion about how the agent behaved.
