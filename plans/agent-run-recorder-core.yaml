@@ -46,6 +46,32 @@ spec:
           Note that status.iteration against spec.budgetIter is how you tell a run needed
           respawns — record it.
 
+          A RUN CAN HAVE MORE THAN ONE POD. ENUMERATE THEM ALL. The Job retries on
+          failure, so one AgentRun can have several pods, and taking the first one silently
+          analyses a single attempt as though it were the run. That happened while writing
+          these briefs: a run was recorded as 240 calls / 241 turns / $29.24 from
+          `-l job-name=... {.items[0]}`, when a second pod had run for a further 21 minutes.
+
+          Read every pod for the job, label each attempt, and report the attempt count. And
+          keep it SEPARATE from AgentRun.status.iteration: a Job backoff retry and a
+          controller respawn are different mechanisms, and only the respawn moves that
+          counter. In the observed run, iteration stayed at 1 across two pods — accurate and
+          deeply misleading.
+
+          COST MAY BE GENUINELY UNKNOWABLE, AND MUST SAY SO. cost_usd and turns appear only
+          in the run_end record, which a killed attempt never writes. In the observed run
+          attempt 2 was terminated by stop-on-merge and emitted no run_end, so the total is
+          above the recorded figure by an unmeasured amount. Report the per-attempt figures
+          you have, the attempts that produced none, and DO NOT sum them into a total that
+          looks complete. A confident subtotal is worse than an explicit gap.
+
+          THE AGENT'S EXIT CODE IS NOT THE RUN'S OUTCOME. In the observed run the agent
+          reported exit_code=1 and verdict blocked_or_unfinished while the AgentRun phase was
+          Succeeded and the PR had merged — the controller stopped an overrun agent that
+          could not see its own PR merge. Record both, and take the AgentRun phase plus the
+          controller's message as authoritative. A record keying on the agent's self-verdict
+          would have called that run a failure.
+
           IDEMPOTENT WITHOUT A STATE STORE. One record per run at
           runs/<utc-date>/<run-id>.json in the corpus; if it exists, skip. Do not add a
           watermark file or a database. Bound discovery by Loki's 720h retention, since an
