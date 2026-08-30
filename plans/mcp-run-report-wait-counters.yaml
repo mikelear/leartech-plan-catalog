@@ -1,0 +1,103 @@
+# The fix for run_report's field semantics silently zeroed the one metric that matters most.
+#
+# THE EVIDENCE
+# mcp-servers#81 fixed six documented defects and every one now matches the baseline exactly.
+# The physical reconciliation against deployed 0.0.78 also found this, recorded in
+# mikelear/leartech-agent-run-reports baselines/RECONCILIATION-run_report-vs-baseline1.md:
+#
+#   wait_tool_ratio           9:1  ->  ""   (empty)
+#   wait_fail_fast_calls      9    ->  0
+#   wait_full_terminal_calls  1    ->  0
+#
+# While the SAME response's histogram contains:
+#
+#   mcp__leartech-jx3-flow__wait_for_first_failure_or_all_pass: 9
+#   mcp__leartech-jx3-flow__wait_for_terminal: 1
+#
+# THE CAUSE, AND WHY IT WAS INVISIBLE
+# runreport.go declares the constants as SHORT names —
+#   waitFailFastTool     = "wait_for_first_failure_or_all_pass"
+#   waitFullTerminalTool = "wait_for_terminal"
+# and matches them with an exact `case`. The agent emits the FULL prefixed name, so the case
+# never fires. They worked before #81 only because the tool was then counting the mcp-servers
+# HOST's records, which carry the short name — exactly the records #81 correctly stopped
+# counting. Fixing tool_call_count (240 -> 228) broke the wait ratio in the same change.
+#
+# WHY THIS IS NOT A COSMETIC METRIC
+# The wait-tool ratio is the ONLY proven prompt-change signal this estate has. It moved 2:7
+# to 8:1 after a single prompt edit and is the clearest evidence a prompt change worked that
+# has been produced here. It is now permanently zero while every other number in the report
+# improved — a silent loss of the one measurement the corpus exists to trend.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mcp-run-report-wait-counters
+spec:
+  paused: true
+  steps:
+    - name: run-report-wait-counters
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: run-report-wait-counters
+        repo: mikelear/leartech-mcp-servers
+        branch: fix/run-report-wait-counters
+        goal: >-
+          Make run_report's wait-tool counters count the wait calls the agent actually makes,
+          so the wait ratio stops reading zero.
+
+          CONFIRM THE PREMISE FIRST. In internal/lokiserver/runreport.go read waitFailFastTool
+          and waitFullTerminalTool and the `case` that matches them, then find a real emitted
+          tool_call record for run agent-log-advertised-tools-log-advertised-tools and compare
+          the tool name. The constants are short; the agent emits the prefixed form. If the
+          code already matches the prefixed form, STOP and report that.
+
+          THREE WAIT TOOLS EXIST AND TWO OF THEM ARE NOT THE SAME THING. Do not reach for a
+          substring match on "wait". At least these exist:
+
+              mcp__leartech-jx3-flow__wait_for_first_failure_or_all_pass   fail-fast
+              mcp__leartech-jx3-flow__wait_for_terminal                    full-terminal
+              mcp__leartech-tekton__wait_first_failure                     a DIFFERENT server's tool
+
+          The third is a separate tool on a separate server with a confusingly similar name.
+          Decide deliberately whether it counts toward the fail-fast total, say which and why
+          in the PR description, and make the code express that decision explicitly rather
+          than by accident of string matching.
+
+          DO NOT RESTORE THE OLD SOURCE OF THE NUMBERS. The counters previously worked by
+          reading the mcp-servers HOST's records, which #81 correctly stopped counting because
+          they double-counted the agent's own calls (tool_call_count 240 against a true 228).
+          Counting host records again would regress that. The agent's own tool_call records are
+          the source.
+
+          AN UNCOUNTABLE RATIO MUST NOT RENDER AS ZERO OR EMPTY. Today the ratio renders as an
+          empty string with both counters at 0, which reads as "no wait calls were made" — a
+          false statement about a run that made ten. This tool already has an Availability
+          vocabulary for exactly this (advertised_tools returns unavailable with a reason);
+          a run that genuinely made no wait calls and a run whose wait calls could not be
+          identified must be distinguishable.
+
+          RE-RUN THE FULL TWELVE-ROW RECONCILIATION, NOT JUST THE WAIT ROWS. This regression
+          exists because #81 predicted "9:1 unchanged" from reading the code and did not
+          re-measure. Run the tool against agent-log-advertised-tools-log-advertised-tools with
+          and without the `pods` argument, and put every row in the PR description against the
+          baseline. A change that fixes the wait ratio and moves any other row has not
+          succeeded.
+
+          SECOND, SEPARATE ITEM — the 485 vs 461 gap. The reconciliation records an unexplained
+          difference: structured_line_count reports 485 where the baseline hand-counted 461
+          JSON lines in the same pod. A `| json | run_id=` filter should be a SUBSET of
+          parseable lines, so 485 is the wrong direction and the filter does not explain it.
+          Establish which is right. The baseline may well be the mistaken side — it has been
+          corrected twice — so evidence decides, not deference. If you cannot resolve it,
+          say so plainly and leave the reconciliation's "unexplained" note standing rather
+          than adjusting either number to agree.
+
+          ISOLATE TESTING: table-driven Go tests, no cluster, no network, extending
+          runreport_test.go and runreport_http_test.go. Cover: each wait tool counted under its
+          prefixed name; the tekton look-alike handled per your stated decision; a run with
+          genuinely no wait calls rendering differently from one where they could not be
+          identified; and a host-record fixture proving tool_call_count does not regress to
+          double-counting. Non-negative coverage delta.
+
+          Done = PR merged (open via open_pr, drive gates green).
