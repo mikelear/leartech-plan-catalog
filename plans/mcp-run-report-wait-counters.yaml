@@ -52,6 +52,38 @@ spec:
           the tool name. The constants are short; the agent emits the prefixed form. If the
           code already matches the prefixed form, STOP and report that.
 
+          THE REAL TASK IS TO MAKE THIS CLASS OF FAILURE LOUD, NOT TO FIX TWO STRINGS.
+          Every defect found in this tool so far is the same species: the reader INFERS meaning
+          from strings the emitter never promised. isError() guessed at `level`. isMCP() guessed
+          at a `server` field. isTurn() guessed at event names its own comment admitted were
+          undocumented. The wait counters guessed at a name form. Attempts guessed pods by
+          substring. Six symptoms, one missing contract — and every one returned a plausible
+          number rather than an error.
+
+          So fix the strings, and then make the next drift impossible to miss:
+
+          COUNT WHAT YOU COULD NOT CLASSIFY, AND PUT IT IN THE REPORT. Every classification in
+          this tool is a decision that can silently fail to match. Track the residual and
+          surface it: tool_call records whose tool matched no known wait tool; records whose
+          error state could not be determined; structured lines that parsed but carried no
+          recognised event. A field reading "9 fail-fast, 1 full-terminal, 0 unclassified" is
+          verifiable; "0 fail-fast, 0 full-terminal" is not, and is what shipped. Had this
+          existed, all six earlier defects would have announced themselves on their first run.
+
+          CENTRALISE THE VOCABULARY IN ONE PLACE. The tool-name forms, event names, error
+          signals and field names it depends on are a contract with leartech-automated-agent's
+          obslog/tool_logging. Put them in one declared set with the emitter named alongside
+          each, so the next reader does not rediscover them by grepping, and so a mismatch is
+          one edit in one place rather than a hunt. State in the PR description where that
+          lives and what it covers.
+
+          PREFER READING A FACT THE EMITTER STATES OVER DERIVING IT. Where the agent already
+          emits the answer, use it: `ok:false` is the error signal, `run_end.turns` is the turn
+          count, the full prefixed name is the tool identity. Do NOT re-derive any of those
+          from level strings, event-name guesses or prefixes when the emitter says it outright.
+          If a needed fact is genuinely not emitted, say so in the PR description — that is a
+          change for the emitter's repo, not a heuristic here.
+
           THREE WAIT TOOLS EXIST AND TWO OF THEM ARE NOT THE SAME THING. Do not reach for a
           substring match on "wait". At least these exist:
 
