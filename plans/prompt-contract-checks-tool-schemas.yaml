@@ -1,0 +1,82 @@
+# Make the prompt's claims about MCP tools testable against the tools themselves.
+#
+# THE PROBLEM THIS SOLVES
+# docs/agent-system-prompt.md restates tool signatures, e.g.
+# `wait_for_first_failure_or_all_pass(repo, pr_number, run_id)`. That is a SECOND source of
+# truth for a contract the MCP schema already defines, and duplicated contracts drift. The
+# existing tests/test_prompt_contract.py already catches some of this — a tool must be
+# catalogued and allowed, no dead gate.<module> references, no bare `pr` argument — but it
+# never compares the prompt against what the servers actually publish.
+#
+# It was written after the prompt named three deleted tools and a developer's home
+# directory and nothing failed. The same class of gap remains for TYPES: the prompt fixed
+# the argument NAME (pr_number, not pr) and says nothing about the type, and the agent has
+# passed a string three times across two runs.
+#
+# This is consumer-driven contract testing: the prompt is the consumer, the tool schema is
+# the provider, and the test asserts the consumer's assumptions against the provider.
+#
+# THE TESTS MUST STAY OFFLINE
+# The existing suite runs with no network and no cluster, and that must not change — a test
+# that silently skips when credentials are absent is worse than no test. Follow the pattern
+# this repo already uses for the prompt itself: scripts/render_system_prompt.py regenerates
+# a committed artefact and a bare run FAILS if the artefact is stale.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: prompt-contract-checks-tool-schemas
+spec:
+  paused: true
+  steps:
+    - name: prompt-contract-tool-schemas
+      kind: pr
+      agentType: leartech-agent-py
+      inputs:
+        name: prompt-contract-tool-schemas
+        repo: mikelear/leartech-automated-agent
+        branch: feat/prompt-contract-tool-schemas
+        goal: >-
+          Make the prompt's documented tool signatures verifiable against the schemas the
+          MCP servers actually publish, so a prompt that misstates an argument name or type
+          fails a test instead of costing turns at run time.
+
+          CONFIRM THE PREMISE FIRST. Read tests/test_prompt_contract.py and
+          scripts/render_system_prompt.py and confirm: the contract test runs offline, it
+          already checks tool names against a catalogue, and nothing compares the prompt to
+          a published schema. Read docs/agent-system-prompt.md and list every place it
+          states a tool signature or argument. If signatures are already schema-checked,
+          STOP and report that.
+
+          SNAPSHOT THE SCHEMAS, DO NOT FETCH THEM IN THE TEST. Add a script that discovers
+          the live tool schemas and writes a committed artefact, and have the contract test
+          assert against that artefact. Mirror scripts/render_system_prompt.py exactly:
+          --write regenerates, a bare run FAILS when the artefact is stale. Do NOT make the
+          test conditional on credentials or network — a test that skips itself when
+          unconfigured reports success while checking nothing, which is the failure mode
+          this whole effort exists to remove.
+
+          WHAT THE TEST MUST CATCH. At minimum, for every tool the prompt names: the tool
+          exists in the snapshot; every argument the prompt names exists on that tool; and
+          where the prompt states or implies an argument's type, it matches the schema. The
+          motivating case is `pr_number`, which the prompt names correctly and whose type it
+          never mentions while the schema requires an integer — the agent has passed a
+          string three times across two runs, on two different tools.
+
+          PREFER DELETING A DUPLICATED CONTRACT TO TESTING IT. Where the prompt restates a
+          signature that the schema already gives the model at call time, consider whether
+          the prompt needs to say it at all. Argue the choice in the PR description rather
+          than assuming: the `pr_number` name clause exists because the agent once passed
+          `pr`, so removing guidance has a real cost. Removing a duplicate is better than
+          testing it; keeping an untested duplicate is the worst of the three.
+
+          NOT IN SCOPE. Do not change the prompt's content beyond what the new test forces,
+          do not change which tools are advertised or allowed, and do not add a runtime
+          check inside the agent — this is a build-time contract, not a guard rail.
+
+          ISOLATE TESTING: pytest, offline, in the style of the existing suite. Cover: a
+          prompt naming a tool absent from the snapshot fails; a prompt naming an argument
+          absent from a tool fails; a prompt stating the wrong type fails; a stale snapshot
+          fails; and the current prompt passes. Prove each is load-bearing by breaking it.
+          Non-negative coverage delta.
+
+          Done = PR merged (open via open_pr, drive gates green).

@@ -1,0 +1,81 @@
+# Stop rejecting the PR number this estate actually produces.
+#
+# THE EVIDENCE — three occurrences, two runs, two different tools
+#
+#   run 1  mcp__leartech-tekton__diagnose_pr_failures
+#          validating /properties/pr_number: type: 244 has type "string", want "integer"
+#   run 2  mcp__leartech-jx3-flow__wait_for_first_failure_or_all_pass   (twice)
+#          validating /properties/pr_number: type: 245 has type "string", want "integer"
+#
+# THIS IS NOT A MODEL MISTAKE. Every CRD in the estate carries a PR number as a STRING:
+# AgentRun.Spec.SourcePR, AgentRun.Status.TargetPR and PlanStepStatus.PR are all `string`.
+# The agent is handed "245" as a string, and the MCP demands an integer. It forwards what
+# it holds. The model already receives `type: integer` in the tool schema and still sends a
+# string, because a string is what the estate gave it.
+#
+# So the seam is ours, and it costs two turns per run. Fixing it in the prompt would ask a
+# model to paper over an inconsistency we own; fixing it in the server fixes every caller,
+# forever, and cannot drift.
+#
+# THE REJECTION HAPPENS BEFORE THE HANDLER
+# The message is a JSON Schema validation failure ("validating arguments: validating root:
+# validating /properties/pr_number"), raised by the framework before any Go code runs. A
+# custom UnmarshalJSON therefore will NOT be reached. The published schema itself has to
+# accept both forms. Establish how the schema is generated before choosing an approach.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mcp-accept-pr-number-as-string
+spec:
+  paused: true
+  steps:
+    - name: accept-pr-number-as-string
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: accept-pr-number-as-string
+        repo: mikelear/leartech-mcp-servers
+        branch: feat/accept-pr-number-as-string
+        goal: >-
+          Make every MCP tool that takes `pr_number` accept the string form the estate
+          actually produces, as well as an integer, so a caller holding "245" is not
+          rejected.
+
+          CONFIRM THE PREMISE FIRST, AND ESTABLISH THE MECHANISM. Find every declaration of
+          a `pr_number` argument across the servers — internal/jx3flowserver and
+          internal/prcontextserver both have several, and check the tekton server too. They
+          are declared as Go `int` with a `jsonschema` tag. Then establish HOW the published
+          schema is produced from those declarations and WHERE the incoming arguments are
+          validated against it. The observed error is a schema-validation failure raised
+          before the handler runs, so confirm that a custom UnmarshalJSON would not be
+          reached; if you find it would be, say so and use it, but do not assume either way.
+
+          MAKE THE SCHEMA HONEST ABOUT WHAT IS ACCEPTED. Whatever mechanism you choose, the
+          published schema must describe reality. Do not silently coerce behind a schema
+          that still claims integer-only — a schema that lies is how the next caller gets
+          surprised. Equally, do not simply widen the type and leave the handler to guess:
+          a string that is not a number must still be rejected, with a message naming the
+          argument and the value.
+
+          ONE HELPER, NOT A FIX PER SITE. There are many declarations; they must all behave
+          identically. A shared type or shared schema-construction helper is the point — if
+          a future tool adds another `pr_number` and gets different behaviour, this has
+          failed.
+
+          DO NOT CHANGE THE CRDs. It is tempting to make the estate carry PR numbers as
+          integers instead. That is a Kubernetes API change across AgentRun and Plan for a
+          cosmetic gain, and it is explicitly out of scope. The MCP boundary is the cheap
+          place to absorb this.
+
+          ISOLATE TESTING: table-driven Go tests, no cluster and no network. Cover, for at
+          least two different tools on different servers: an integer is accepted; the
+          equivalent string is accepted and produces an identical result; a non-numeric
+          string is rejected with a message naming the argument; and an absent argument
+          behaves exactly as it does today. Assert on the PUBLISHED SCHEMA too, so a future
+          change that narrows it back to integer-only fails here rather than in a run.
+          Non-negative coverage delta.
+
+          LOGGING TO VERIFY: state in the PR description the exact call that previously
+          failed — pr_number as the string "245" — and show it now succeeding.
+
+          Done = PR merged (open via open_pr, drive gates green).
