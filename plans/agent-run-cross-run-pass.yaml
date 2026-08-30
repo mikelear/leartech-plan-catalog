@@ -71,6 +71,31 @@ spec:
           duplicate issue for a finding it has already raised — update the existing open
           issue instead. Say in the PR description how you made that idempotent.
 
+          TREND THE RECORDER'S OWN COVERAGE — THIS IS HOW A FUTURE GAP GETS CAUGHT.
+          Every per-run record carries how much of its run was actually readable: total
+          lines for the pod, lines the structured query parsed, and lines per source. Treat
+          those as first-class metrics and compare them across runs exactly as you compare
+          the behavioural ones.
+
+          The reason is that gaps in observability cannot be enumerated in advance. MCP
+          servers get added, a field gets renamed, a prompt change makes the agent use a tool
+          that logs nothing, an image change drops a log call. Each is invisible in a
+          different way and none can be written as a rule beforehand. But all of them move
+          the coverage numbers, and a move is detectable without knowing the cause — the same
+          reason the wait-tool ratio caught a prompt contradiction nobody predicted.
+
+          ATTRIBUTE THE DROP, DO NOT JUST REPORT IT. Each record carries the prompt sha256,
+          the agent image tag and the MCP inventory. When coverage falls, group by those the
+          way you group behavioural metrics by prompt sha, and say what changed alongside it.
+          "Parse rate fell from 96 percent to 48 percent at image 0.51.0" is actionable;
+          "parse rate is 48 percent" is not.
+
+          A SOURCE THAT SHOULD HAVE LOGGED AND DID NOT IS A FINDING. Zero lines from a source
+          the run demonstrably exercised — MCP calls happened and mcp-servers logged nothing,
+          an AgentRun reached a terminal phase and the controller logged no transition — is
+          different from zero lines from a source the run never touched. Distinguish them.
+          In the baseline, 43 MCP calls produced 12 mcp-servers lines.
+
           NO SILENT CAPS. If the pass reads only the last N records, or skips records it
           could not parse, the report must say so explicitly. A report that silently covered
           less than it appears to reads as "nothing found" when it means "did not look".

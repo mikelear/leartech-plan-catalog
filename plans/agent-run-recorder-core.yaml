@@ -63,6 +63,13 @@ spec:
           its sha256. Without that link a behaviour change cannot be attributed to a prompt
           change, which is the entire reason the corpus exists.
 
+          RECORD HOW MUCH OF THE RUN WAS ACTUALLY READ. run_report reports both a broad
+          line count for the run's pod and the count its structured query parsed; carry both
+          into the record along with the difference. For the baseline run those numbers are
+          980 and 461 — more than half the output is invisible to a `| json` query, and a
+          record that quietly asserts 461 is the run is worse than one that says it read 461
+          of 980. Coverage of its own input is part of the record, not a footnote.
+
           ABSENT IS NOT ZERO. Every field that can be genuinely unavailable must render
           differently from one that is genuinely zero — a prompt permalink that could not be
           derived, a source that logged nothing, a run past retention. An empty value that
