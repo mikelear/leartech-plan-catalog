@@ -1,0 +1,88 @@
+# A re-submitted Plan whose brief has changed is currently a silent no-op.
+#
+# THE EVIDENCE, MEASURED 2026-08-30
+# Four queued Plans were amended three times each in the catalog. Every amendment merged,
+# every catalog release ran, every submit reported success — and the Plan CRs on the cluster
+# still carried the ORIGINAL briefs:
+#
+#   mcp-loki-run-report        cluster 3584 chars   file 7071   (half the brief missing)
+#   agent-run-recorder-core    cluster 3788        file 5913
+#   agent-run-cross-run-pass   cluster 3335        file 4905
+#
+# Unpausing any of them would have run a brief that six rounds of review had corrected. The
+# only reason it was caught is that someone grepped the CR for a phrase added in the last
+# amendment.
+#
+# WHY IT HAPPENS, AND WHY THE CURRENT BEHAVIOUR IS DEFENSIBLE
+# plan-api returns 409 on apierrors.IsAlreadyExists (internal/plans/handler.go), and
+# cmd/plan-submit in leartech-plan-catalog documents "an already-submitted plan (HTTP 409)
+# is a success" — deliberately, because plan-api de-duplicates on the live CRD rather than on
+# a record of what was submitted, so a full-directory submit would otherwise recreate any Plan
+# a human had deliberately deleted from a cluster.
+#
+# That reasoning is right for "do not resurrect a deleted Plan". It is wrong for "the brief
+# changed". Both cases currently look identical and both report success.
+#
+# THE CONSTRAINT THAT MAKES THIS NON-TRIVIAL
+# A Plan that is RUNNING must never have its spec swapped underneath it. Steps in flight were
+# spawned against the old brief, and an agent reading a goal that changed mid-run is worse
+# than a stale brief. Whatever is built must distinguish Plan states.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: plan-api-resubmit-semantics
+spec:
+  paused: true
+  steps:
+    - name: resubmit-semantics
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: resubmit-semantics
+        repo: mikelear/leartech-plan-api
+        branch: feat/resubmit-semantics
+        goal: >-
+          Make a re-submitted Plan whose content has changed stop being a silent no-op, without
+          ever mutating a Plan that is running.
+
+          CONFIRM THE PREMISE FIRST. In internal/plans/handler.go find where
+          apierrors.IsAlreadyExists produces the 409, and confirm nothing compares the
+          submitted spec against the existing CR. Read the header of
+          leartech-plan-catalog cmd/plan-submit/main.go, which documents 409-as-success and
+          explains WHY — do not treat that as a bug to delete; it exists so a full-directory
+          submit cannot resurrect a Plan a human deleted. If plan-api already compares specs,
+          STOP and report that.
+
+          DECIDE THE SEMANTICS AND ARGUE FOR THEM. There are at least three defensible answers
+          and you must pick one and justify it in the PR description, not implement all three:
+          replace the CR when the submitted spec differs and the Plan is safely replaceable;
+          reject with a distinct status and a message naming what differs; or accept but record
+          the divergence somewhere a human sees. What is NOT acceptable is the current outcome,
+          where "identical re-submit" and "the brief was rewritten" are indistinguishable and
+          both report success.
+
+          NEVER TOUCH A RUNNING PLAN. A Plan whose phase is not terminal and not paused has
+          steps in flight that were spawned against the existing brief. Swapping its spec is
+          worse than leaving it stale — an agent whose goal changes mid-run has no way to
+          notice. Whatever you build must key on Plan phase, and the safe set must be explicit
+          in the code rather than implied.
+
+          A DIFFERENCE MUST BE VISIBLE WITHOUT GREPPING A CR. However you resolve it, the
+          submitting side must be able to tell that a re-submit changed nothing, changed
+          something, or was refused. Today it cannot, and the failure was found only because
+          someone happened to grep a CR for a phrase from the newest amendment. State in the
+          PR description what a caller now sees in each of those three cases.
+
+          NOT IN SCOPE. Do not change the injection policy, do not change plan-submit in the
+          other repo as part of this change (say what it should do, in the PR description, and
+          leave it to a follow-up), and do not add a Plan-versioning scheme — this is about
+          making one existing decision visible, not introducing a new concept.
+
+          ISOLATE TESTING: table-driven Go tests with the controller-runtime fake client, in
+          the style of the existing handler tests. Cover: an identical re-submit; a re-submit
+          whose goal differs; the same against a Paused plan, a terminal plan and a Running
+          plan; and that a Running plan's spec is never modified whatever the difference.
+          Assert on the response the caller receives, not only on cluster state. Non-negative
+          coverage delta.
+
+          Done = PR merged (open via open_pr, drive gates green).
