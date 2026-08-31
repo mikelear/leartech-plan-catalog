@@ -46,10 +46,14 @@ spec:
           actually wrote.
 
           SAME BINARY, SECOND SUBCOMMAND, SECOND CRONJOB. Do not create a new service. Reuse
-          this repo's existing structure — app/, charts/, .lighthouse — and follow
-          leartech-code-audit, which is the estate's precedent for a scheduled analysis
-          service owning its own CronJob in its own chart. The schedule is less frequent
-          than the per-run pass; choose it and justify it in the PR description.
+          this repo's existing structure — app/, charts/, .lighthouse. For the CronJob-in-its-
+          own-chart pattern, leartech-code-audit is the estate's precedent. Follow it for that
+          SHAPE ONLY: it carries two presubmits where mcp-servers, plan-api and
+          orchestrator-controller all carry ten, so it is the estate's under-gated outlier and
+          must not be used as the reference for gates, pipelines or triggers. Modelling this
+          repo on it is exactly how recorder-core shipped with three gates instead of eight.
+          The schedule is less frequent than the per-run pass; choose it and justify it in the
+          PR description.
 
           GO, INCLUDING THE MODEL CALL. leartech-ai-gateway is OpenAI-compatible
           (GET /v1/models lists models, POST /v1/chat/completions is the call), so the
