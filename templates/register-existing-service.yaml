@@ -1,0 +1,62 @@
+# register-existing-service — register an ALREADY-EXISTING repo with both clusters.
+#
+# WHY THIS EXISTS SEPARATELY FROM bootstrap-authed-service
+# bootstrap-authed-service is the happy path for a service that does not exist yet. Its six
+# steps are create-repo, register-gcp, register-az, scaffold-pr, dev and release-check, and
+# four of those are wrong for a repo that already has content:
+#
+#   create-repo    the repo exists
+#   scaffold-pr    pushes a language template STRAIGHT TO main, overwriting real work
+#   dev            the service's code may already be written, or in an open PR
+#   release-check  asserts /health, which a CronJob or other non-serving workload never serves
+#
+# So a repo created by hand — or one whose bootstrap was interrupted after `create` — has no
+# route back onto the rails without this. The gap is real: leartech-agent-run-recorder was
+# created with `gh repo create`, and on 2026-08-30 it had 0 matches in Lighthouse config,
+# 0 in plugins and 0 webhooks, so no gate could fire, Keeper was not watching it, and no
+# release pipeline existed. A dev Plan against it opened a PR that could never be gated.
+#
+# WHAT IT DOES, AND WHAT IT DELIBERATELY DOES NOT
+# Only the two register steps, one per cluster, each a thin relay to the repo-factory MCP's
+# register_source_config. That tool edits the cluster's source-config, opens the PR,
+# auto-approves it so Tide merges, and records the PR onto the AgentRun — so the step is
+# MERGE-GATED and Succeeds only once the repo is genuinely registered and its webhook live.
+# It is idempotent: an already-registered repo opens no PR and Succeeds immediately, which is
+# what makes this template safe to re-run and safe to compose ahead of other work.
+#
+# It does NOT scaffold, does NOT touch the target repo's contents, and does NOT verify health.
+# Whether the registered service then releases and deploys is verify-release-flow's job, and
+# for a non-serving workload that check does not yet exist.
+#
+# The two clusters keep their source-config in DIFFERENT GitOps repos — gcp in
+# jx-build-cluster-gsm, az in jx-build-cluster-akv — so the steps target different repos and
+# carry no dependsOn between them; they are independent and may run concurrently.
+apiVersion: agent.leartech.io/v1alpha1
+kind: PlanTemplate
+metadata:
+  name: register-existing-service
+spec:
+  params:
+    - name: name
+      required: true # short repo/service name, no owner prefix (e.g. leartech-agent-run-recorder)
+    - name: namespace
+      required: true # the namespace the service deploys into (e.g. jx-staging)
+  steps:
+    - name: register-gcp
+      kind: pr
+      agentType: leartech-agent-infra
+      repo: mikelear/jx-build-cluster-gsm
+      inputs:
+        action: register-source-config
+        cluster: gcp
+        namespace: ${namespace}
+        service: ${name}
+    - name: register-az
+      kind: pr
+      agentType: leartech-agent-infra
+      repo: mikelear/jx-build-cluster-akv
+      inputs:
+        action: register-source-config
+        cluster: az
+        namespace: ${namespace}
+        service: ${name}
