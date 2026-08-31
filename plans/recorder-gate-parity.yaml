@@ -1,0 +1,86 @@
+# The run recorder ships an image through five fewer gates than every other Go service here.
+#
+# MEASURED 2026-08-31, from each repo's .lighthouse/jenkins-x/triggers.yaml
+#
+#   leartech-mcp-servers                10 presubmits
+#   leartech-plan-api                   10 presubmits
+#   leartech-orchestrator-controller    10 presubmits
+#       pr, lint, test, govulncheck, security-scan, image-scan, dynamic-scan,
+#       ai-review, end2end, ai-feedback
+#
+#   leartech-agent-run-recorder          3 presubmits   pr, lint, test
+#   leartech-code-audit                  2 presubmits   pr, ai-code-review
+#
+# WHY THE RECORDER ENDED UP AT THREE
+# Its brief told it to follow leartech-code-audit's structure, because code-audit is this
+# estate's existing scheduled-analysis CronJob service. That was right about the SHAPE and
+# wrong about the GATES: code-audit is the under-gated outlier, not the standard. The agent
+# followed the brief faithfully and had no way to know. The repo now releases an image on
+# merge to main, so it currently publishes without a vulnerability or image scan.
+#
+# WHICH FIVE APPLY, AND WHICH TWO DO NOT
+# Applicable and missing: govulncheck, security-scan, image-scan, ai-review, ai-feedback.
+# Each is a thin `uses:` wrapper onto a leartech-pipeline-catalog task, so they port directly.
+#
+# end2end and dynamic-scan are NOT in scope. end2end needs a preview URL to smoke and
+# dynamic-scan is DAST against a running endpoint; a CronJob serves neither. That is the
+# third instance of the same estate-wide gap — release-check asserts /health and deploy_health
+# requires a ready Deployment replica — and it is not this Plan's job to solve.
+#
+# code-audit has the same hole and reviews every PR in the estate. Out of scope here so this
+# stays one repo, one change; it needs its own Plan.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: recorder-gate-parity
+spec:
+  paused: true
+  steps:
+    - name: recorder-gate-parity
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: recorder-gate-parity
+        repo: mikelear/leartech-agent-run-recorder
+        branch: fix/gate-parity
+        goal: >-
+          Bring this repo's presubmit gates up to the estate's Go-service standard, so the
+          image it publishes has been scanned.
+
+          CONFIRM THE PREMISE FIRST. Read .lighthouse/jenkins-x/triggers.yaml here and in
+          mikelear/leartech-mcp-servers. This repo should have pr, lint and test; mcp-servers
+          should have ten. If this repo already carries the five below, STOP and report that.
+
+          COPY THE REFERENCE, NOT code-audit. mcp-servers, plan-api and orchestrator-controller
+          all carry the identical ten-presubmit set and are the standard. leartech-code-audit
+          carries two and is the outlier — this repo was originally modelled on it, which is
+          how the gap arose. Do not use code-audit as the reference for anything in this change.
+
+          ADD EXACTLY FIVE: govulncheck, security-scan, image-scan, ai-review, ai-feedback.
+          In mcp-servers each is a thin wrapper whose only content is a `uses:` onto a
+          leartech-pipeline-catalog task, referenced from triggers.yaml by a `source:` path —
+          note that three of them live in subdirectories (security-scan/, ai-review/). Mirror
+          that layout and those catalog references rather than authoring pipeline logic here.
+          Keep ai-feedback's optional/trigger/rerun_command shape as mcp-servers has it; it is
+          a comment-triggered advisory, not an always-run gate.
+
+          DO NOT ADD end2end OR dynamic-scan. end2end needs a preview URL to smoke and
+          dynamic-scan is DAST against a running endpoint. This repo deploys a CronJob and
+          serves no HTTP, so both would fail for a reason that is not a defect. State this in
+          the PR description so the omission is a recorded decision rather than an oversight.
+
+          EXPECT THE SCANS TO FIND THINGS, AND DO NOT SILENCE THEM. The point is a real
+          verdict on code that has never been scanned. If govulncheck or the security scan
+          fails, fix the finding or, where a finding is genuinely not applicable, record why in
+          the PR description. Do NOT add ignore files, thresholds, allowlists or `|| true` to
+          make a gate pass. A gate that cannot fail is worse than the absent gate it replaced,
+          because it reports safety it never checked.
+
+          VERIFY EACH GATE ACTUALLY RAN. A `source:` path that does not resolve, or a context
+          name that does not match, produces no check and no error — the gate simply never
+          appears, which is indistinguishable from passing. After the PR is open, confirm every
+          one of the five reports a status on both clusters and put the observed context names
+          and verdicts in the PR description. Five contexts that do not appear is a failure of
+          this change, not a pass.
+
+          Done = PR merged (open via open_pr, drive gates green).
