@@ -1,0 +1,91 @@
+# The plan MCP hands an agent a bare 409 where plan-api now returns a reason.
+#
+# THE OTHER CLIENT OF THE SAME CONTRACT
+# leartech-plan-api#33 made POST /plans return a resubmit verdict on 409 —
+# identical / differs / conflict_running — deployed on both clusters (v0.0.34-gcp and
+# v0.0.33-az both contain the merge). plan-api has two HTTP clients and NEITHER reads it,
+# in opposite directions:
+#
+#   plan-submit (catalog postsubmit)  treats 409 as SUCCESS, prints SKIP   — too lenient
+#   plan MCP create_plan              returns a typed APIError{409}        — too blunt
+#
+# The MCP is not broken the way plan-submit is: internal/planserver/client.go declares
+# APIError specifically so "MCP clients can distinguish a 403 (missing scope), 404 (plan not
+# found), 409 (already exists), and 5xx (plan-api down) without re-parsing the message", and
+# create_plan does return the error. But 409 alone does not say whether the caller's Plan was
+# applied, so an agent can equally reasonably conclude "it exists already, fine" or retry.
+#
+# WHY THAT MATTERS MORE FOR AN AGENT THAN FOR A SCRIPT
+# The Dev Agent runs with permission_mode bypassPermissions, so nothing mechanically stops it
+# working around an error it cannot interpret. An agent told only "409 already exists" after
+# submitting an amended Plan has no way to learn that its amendment was discarded, and the
+# on-cluster Plan keeps the old brief. That is the same defect plan-submit has, reached by a
+# different route.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mcp-create-plan-resubmit-verdict
+spec:
+  paused: true
+  steps:
+    - name: create-plan-verdict
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: create-plan-verdict
+        repo: mikelear/leartech-mcp-servers
+        branch: fix/create-plan-resubmit-verdict
+        goal: >-
+          Make create_plan tell its caller whether the Plan was applied, not just that a
+          conflict happened.
+
+          CONFIRM THE PREMISE FIRST. Read internal/planserver/tools.go CreatePlan and
+          internal/planserver/client.go APIError, and confirm a 409 reaches the caller as a
+          status code without the verdict. Then read leartech-plan-api's
+          internal/plans/handler.go and respondResubmitConflict on origin/main for the exact
+          wire contract — the field name and the exact verdict values. Do NOT infer the shape
+          from this brief: read the producer and quote it in the PR description. If the verdict
+          is already surfaced, STOP and report that.
+
+          SURFACE THE VERDICT AS DATA, NOT AS PROSE IN AN ERROR STRING. The caller is a model
+          deciding what to do next. A verdict it must regex out of a message is a contract
+          restated rather than shared — the exact failure this estate keeps finding. Put it on
+          the structured result the tool returns, alongside the status code, and keep APIError's
+          existing status-code discrimination intact.
+
+          THE TOOL DESCRIPTION MUST STATE WHAT differs MEANS. Today the description says 409
+          is returned "when a Plan already exists". That is true and useless: it does not say
+          the submission had no effect. Say plainly that differs means the caller's Plan was
+          NOT applied and the on-cluster Plan still holds its previous content, that identical
+          means there was nothing to apply, and that conflict_running means the Plan is
+          mid-flight. The schema is what the model reads at call time, so this belongs there.
+
+          DO NOT RETRY, AND DO NOT REPLACE. Do not add automatic retry on 409, and do not add
+          any delete-then-recreate or force path. plan-api deliberately never mutates the
+          on-cluster Plan and a running Plan's history must not be destroyed to force an
+          amendment through. The tool's job is to report accurately.
+
+          AN ABSENT OR UNRECOGNISED VERDICT MUST BE REPORTED AS UNKNOWN, NOT AS BENIGN. If a
+          409 body carries no verdict, or one this code does not recognise, say so explicitly
+          rather than falling back to a bare 409. The reader must never present a value it
+          could not determine as a determined one.
+
+          LOG IT WHERE IT CAN BE FOUND. CreatePlan already finishes its call with outcomes like
+          created / api_error / decode_error. A resubmit conflict must finish with an outcome
+          that names the verdict, so a run can be reconstructed from Loki by outcome rather
+          than by message text. Follow the estate logging standard and the surrounding
+          call.Finish pattern rather than inventing fields.
+
+          DO NOT DOCUMENT THE NEW BEHAVIOUR IN A COMMENT. The class of defect here is a
+          contract asserted in a comment and enforced nowhere. Put it in tests and in the tool
+          schema, which are the two things a caller actually reads.
+
+          ISOLATE TESTING: table-driven Go tests, offline, against a fake plan-api in the style
+          of the existing planserver suite. Cover: each of the three verdicts reaching the
+          caller as structured data; the tool description stating what differs means; a 409
+          with no verdict reported as unknown; a 409 with an unrecognised verdict reported as
+          unknown; no automatic retry on any of them; 201 unchanged; and the call outcome
+          naming the verdict. Prove each is load-bearing by breaking it. Non-negative coverage
+          delta.
+
+          Done = PR merged (open via open_pr, drive gates green).
