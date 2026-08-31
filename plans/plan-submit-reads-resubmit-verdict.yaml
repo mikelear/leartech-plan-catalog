@@ -1,0 +1,117 @@
+# plan-api now says whether a resubmit was applied. plan-submit does not read it.
+#
+# WHAT SHIPPED, AND WHERE
+# leartech-plan-api#33 (merged 2026-08-30, all 20 gates green) made POST /plans return a
+# resubmit verdict on 409: identical / differs / conflict_running, via
+# respondResubmitConflict. Its own comment states the intent plainly:
+#
+#   // A resubmit of an existing plan name is NOT a silent no-op.
+#
+# Deployed on both clusters, verified by ancestry rather than version number:
+#   v0.0.34-gcp CONTAINS the #33 merge   (gcp runs 0.0.34)
+#   v0.0.33-az  CONTAINS the #33 merge   (az  runs 0.0.33)
+#
+# WHAT plan-submit STILL DOES
+# cmd/plan-submit/main.go treats every 409 as success and never reads the body:
+#
+#   // Idempotent: an already-submitted plan (HTTP 409) is a success.
+#   case status == http.StatusConflict:
+#       fmt.Printf("  SKIP %s (%s) -> HTTP 409 already exists\n", ...)
+#
+# So amending a plan file and merging it prints SKIP, exits 0, and leaves the on-cluster
+# Plan carrying the OLD brief. That happened twice in one session: a Plan was unpaused
+# against a stale goal, and the only reason it was caught was a hand-written pre-flight
+# comparing the CR's goal length against the file before every unpause.
+#
+# THE SECOND FAIL-OPEN IN THE SAME STEP
+# .lighthouse/jenkins-x/release.yaml guards the step with:
+#
+#   if [ -z "${LEARTECH_PLAN_SUBMIT_CLIENT_SECRET:-}" ]; then
+#     echo "submit-plans: ... secret not provisioned — skipping (route dormant)."
+#     exit 0
+#   fi
+#
+# An unmounted secret silently stops ALL Plan submission with a green pipeline. The secret
+# is provisioned now, so the dormant route is dead code that can only ever hide a failure.
+#
+# WHAT THIS DOES NOT FIX
+# A failing release step surfaces only as a red gcp/release or az/release commit status on
+# a commit on main. No PR exists to comment on, the PipelineRun is garbage-collected within
+# about thirty minutes, and Tekton step logs are not queryable in Loki. So this change turns
+# a silent wrong result into a loud-but-unwatched failure. Release-outcome visibility is
+# separate, unstarted work and is NOT in scope here.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: plan-submit-reads-resubmit-verdict
+spec:
+  paused: true
+  steps:
+    - name: submit-reads-verdict
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: submit-reads-verdict
+        repo: mikelear/leartech-plan-catalog
+        branch: fix/plan-submit-resubmit-verdict
+        goal: >-
+          Make plan-submit fail when plan-api tells it an amendment was not applied.
+
+          CONFIRM THE PREMISE FIRST. Read cmd/plan-submit/main.go around the
+          http.StatusConflict case and confirm it prints SKIP and does not read the response
+          body. Then read leartech-plan-api's internal/plans/handler.go and
+          respondResubmitConflict on origin/main to get the exact wire contract — the field
+          name and the exact verdict values. Do NOT guess the shape from this brief: read the
+          producer and quote what you found in the PR description. If plan-submit already
+          reads the verdict, STOP and report that.
+
+          THE THREE VERDICTS, AND WHAT EACH MUST DO. identical is a genuine success — the
+          on-cluster Plan already matches the file, and printing SKIP is correct. differs
+          means the file changed and plan-api DID NOT apply it, so the submit has failed and
+          must exit non-zero. conflict_running means the Plan is mid-flight and must also
+          fail. Make each an explicit case; do not group differs with identical.
+
+          AN ABSENT OR UNRECOGNISED VERDICT MUST FAIL, NOT DEFAULT TO SUCCESS. If the body
+          carries no verdict, or one this code does not recognise, exit non-zero saying so
+          rather than falling back to the old treat-409-as-success behaviour. A reader that
+          cannot determine an outcome must say so — the same rule that made run_report render
+          UNAVAILABLE instead of 0. State in the PR description that this means a plan-api
+          older than #33 would now fail the step, and that both clusters already run a version
+          containing it.
+
+          DO NOT MAKE plan-submit REPLACE THE PLAN. plan-api deliberately never mutates the
+          on-cluster Plan, and a running Plan's history must not be destroyed to force an
+          amendment through. Do not add delete-then-recreate, force or upgrade behaviour. The
+          correct outcome is a clear failure.
+
+          THE ERROR MESSAGE IS THE DELIVERABLE. Whoever sees this failure sees it as a red
+          commit status on main with the PipelineRun already reaped, so the message is likely
+          the only artefact they get. It must name the plan, say the amendment was not applied,
+          and state the remediation: delete the Plan CR and re-submit. Where plan-api's body
+          describes what differs, include that rather than a bare verdict.
+
+          FAIL THE WHOLE STEP, NOT JUST THE ONE PLAN. plan-submit already counts failures and
+          exits non-zero when any occurred; a differs verdict must feed that same counter so
+          one stale plan fails the release step. Confirm by reading the exit path that this is
+          what happens.
+
+          SECOND ITEM, SAME FAIL-OPEN CLASS: remove the dormant-route guard in
+          .lighthouse/jenkins-x/release.yaml that exits 0 when
+          LEARTECH_PLAN_SUBMIT_CLIENT_SECRET is unset. The secret is provisioned on both
+          clusters. A missing secret must fail the step, because silently submitting no Plans
+          at all is the worst possible outcome of this pipeline and is currently green.
+          Confirm the secret exists before removing the guard, and say so in the PR.
+
+          DO NOT DOCUMENT THE NEW BEHAVIOUR IN A COMMENT. The defect being fixed is a comment
+          asserting an invariant nothing enforced. Put the behaviour in tests, named so the
+          intent is readable from the test name.
+
+          ISOLATE TESTING: table-driven Go tests, offline, no cluster, against a fake HTTP
+          server in the style of the existing suite. Cover: identical exits 0 and prints SKIP;
+          differs exits non-zero and the message names the plan and the remediation;
+          conflict_running exits non-zero; a 409 with no verdict exits non-zero; a 409 with an
+          unrecognised verdict exits non-zero; one differs among several plans fails the whole
+          run; and 201 still succeeds. Prove each is load-bearing by breaking it. Non-negative
+          coverage delta.
+
+          Done = PR merged (open via open_pr, drive gates green).
