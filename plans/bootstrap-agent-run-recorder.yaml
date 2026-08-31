@@ -1,0 +1,41 @@
+# leartech-agent-run-recorder was created by hand and never registered with either cluster.
+#
+# MEASURED 2026-08-30
+#   lighthouse config   0 matches for agent-run-recorder
+#   plugins             0 matches
+#   webhooks on repo    0
+#
+# No webhook means no gate can fire, Keeper is not watching the repo, and no release pipeline
+# exists — so the hourly CronJob this repo builds could never ship. agent-run-recorder-core
+# ran to Succeeded and opened PR #1 (+5608 lines, 42 files, including .lighthouse pipelines
+# that cannot fire), and its Plan is stuck at AwaitingReview because that PR cannot be gated
+# or merged. Nothing is wrong with the code; the repo was never put on the rails.
+#
+# CAUSE
+# The repo was created with `gh repo create` rather than via the repo-factory MCP's
+# create_repo / the bootstrap-authed-service PlanTemplate, so nothing after `create` ran —
+# not the bot collaborators (applied by hand since, to match repo-factory's BotCollaborators
+# set) and not either cluster's source-config registration.
+#
+# WHY register-existing-service RATHER THAN bootstrap-authed-service
+# The bootstrap template's scaffold-pr step pushes a language template straight to main, which
+# would overwrite this repo's real work, and its release-check asserts /health, which a CronJob
+# does not serve. register-existing-service is the two register steps alone. It is idempotent,
+# so this Plan is safe to re-run.
+#
+# AFTER THIS MERGES, PR #1 STILL NEEDS A TRIGGER. Gates fire on webhook events, and PR #1 was
+# opened before the webhook existed. Expect to push to its branch or comment /test on it to
+# get the first run — registration does not retroactively gate an open PR.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: bootstrap-agent-run-recorder
+spec:
+  paused: true
+  steps:
+    - name: reg
+      kind: apply
+      use: register-existing-service
+      with:
+        name: leartech-agent-run-recorder
+        namespace: jx-staging
