@@ -47,11 +47,6 @@ spec:
           - secretRef:
               name: leartech-plan-catalog-ai-key
               optional: true
-          # Boot/variables bookkeeping env (AZURE_* creds + JX_REPOSITORY_*) so
-          # `jx gitops variables` can allocate a unique per-context build number on
-          # AZ. Without it this sibling collided with plan-lint/plan-cluster-verify
-          # on PipelineActivity build 1 and its build-setup failed, skipping the
-          # actual model review (looked like a "deepseek parse" flake — it wasn't).
           - secretRef:
               name: jx-boot-job-env-vars
               optional: true
@@ -65,12 +60,6 @@ spec:
         - image: uses:jenkins-x/jx3-pipeline-catalog/tasks/git-clone/git-clone-pr.yaml@versionStream
           name: ""
           resources: {}
-        - image: ghcr.io/jenkins-x/jx-boot:3.16.59
-          name: jx-variables
-          resources: {}
-          script: |
-            #!/usr/bin/env sh
-            jx gitops variables
         # ADVISORY multi-model review via the OWNED gateway. Never fails the
         # build (exits 0). Posts a sticky PR comment scoring design quality a
         # linter can't judge, and feeds our Plan-quality model flywheel.
@@ -98,8 +87,6 @@ spec:
             # cp312, so no build toolchain is needed (~2s).
             pip install --quiet --no-input pyyaml >/dev/null 2>&1 \
               || echo "plan-ai-review: WARNING — pip install pyyaml failed; template catalog will be degraded"
-            . ./.jx/variables.sh 2>/dev/null || true
-            export REPO_NAME="${REPO_NAME:-$APP_NAME}"
             bash scripts/plan-ai-review.sh || true
   podTemplate:
     tolerations:

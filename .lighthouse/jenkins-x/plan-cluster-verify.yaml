@@ -14,11 +14,6 @@ spec:
           env:
           - name: HOME
             value: /tekton/home
-          # Boot/variables bookkeeping env (AZURE_* creds + JX_REPOSITORY_*) so
-          # `jx gitops variables` can allocate a unique per-context build number on
-          # AZ. Without it this sibling collided with plan-lint/plan-ai-review on
-          # PipelineActivity build 1 and its build-setup failed. Every buildpack
-          # stepTemplate carries this; the hand-written plan pipelines were missing it.
           envFrom:
           - secretRef:
               name: jx-boot-job-env-vars
