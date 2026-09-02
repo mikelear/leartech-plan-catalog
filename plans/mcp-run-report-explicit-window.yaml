@@ -1,0 +1,101 @@
+# run_report can only look back from now, so a finished run is unqueryable.
+#
+# THE EVIDENCE, from a record the recorder wrote on 2026-09-02
+#
+#   notes: ["mcp_run_report_failed: mcp run_report: tool reported error: structured query:
+#     query loki: Get \"http://loki.jx-observability.svc.cluster.local:3100/loki/api/v1/
+#     query_range?direction=forward&end=1788348929521380559&limit=1000&query=%7Bnamespace
+#     %3D%22jx-staging%22%7D+%7C+json+%7C+run_id%3D%22ba-6e002ff3...%22
+#     &start=1787744129521380559\": context deadline exceeded"]
+#
+# start and end are 604800s apart — exactly seven days. The run being reported on
+# finished at 2026-08-08T18:55:41Z and lasted minutes.
+#
+# WHY THE WINDOW IS SEVEN DAYS
+# internal/lokiserver/runreport.go:406 computes the window from now:
+#
+#   end := time.Now()
+#   start := end.Add(-resolveSince(in.SinceHours))
+#
+# SinceHours is the only control (default 6, max 168). It is anchored to NOW, so the
+# window for any finished run must stretch from the present back past that run. A
+# forty-minute run three weeks old is unqueryable at any setting: below 168 hours it
+# falls outside the window entirely, and at 168 the `| json` scan spans a week of the
+# whole namespace and Loki does not answer before the client timeout.
+#
+# CONSEQUENCE, MEASURED
+# Every historical record in the corpus reads UNAVAILABLE. One pass reported
+# past_retention 211 for runs older than the ceiling, and the runs inside it time out.
+# The recorder is correct for runs finishing in the last few hours and cannot record
+# anything else, so the corpus cannot be backfilled at all.
+#
+# THE CALLER ALREADY HOLDS THE RIGHT BOUNDS. Every record the recorder writes carries
+# start_time and completion_time read from the AgentRun. It knows the exact minutes to
+# query and has no way to say so.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mcp-run-report-explicit-window
+spec:
+  paused: true
+  steps:
+    - name: run-report-explicit-window
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: run-report-explicit-window
+        repo: mikelear/leartech-mcp-servers
+        branch: fix/run-report-explicit-window
+        goal: >-
+          Let run_report be told the window to query, so a finished run can be reported on
+          at all.
+
+          CONFIRM THE PREMISE FIRST. In internal/lokiserver/runreport.go read RunReportIn
+          (around line 239) and the window computation (around line 406). Confirm that
+          SinceHours is the only control and that the window is anchored to time.Now().
+          If an explicit window already exists, STOP and report that.
+
+          ADD AN EXPLICIT WINDOW, KEEP since_hours WORKING. Accept a start and an end on
+          the input and use them when supplied, falling back to the current
+          now-minus-since_hours behaviour when they are not. Every existing caller passes
+          since_hours and must keep working unchanged — the agent's prompts reference it and
+          the tool is called interactively.
+
+          DECIDE AND STATE THE FORMAT. Pick one representation for the two bounds and say
+          why in the PR description. The tool's own histogram already returns RFC3339
+          timestamps and the caller reads AgentRun.status timestamps in RFC3339, so a
+          different format here would be a third convention for the same concept. Whatever
+          you choose, the jsonschema description must state it, because the schema is what a
+          model reads at call time.
+
+          REJECT AN IMPOSSIBLE WINDOW RATHER THAN SILENTLY REPAIRING IT. An end before its
+          start, or a window of zero length, is a caller bug. Return an error naming what was
+          wrong. Do not clamp, swap or widen — a tool that repairs its input teaches the
+          caller nothing and hides the defect. Supplying start without end, or vice versa, is
+          the same class: decide the rule, state it in the schema, enforce it.
+
+          THE LINE LIMIT IS NOW REACHABLE, WHICH CHANGES WHAT A LIMIT HIT MEANS. Today the
+          hit-limit note advises "re-run with a smaller since_hours window or a larger
+          limit". With an explicit window that advice is wrong for the new path. Update it so
+          it names the control the caller actually used.
+
+          DO NOT WIDEN THE RETENTION CEILING BY ACCIDENT. since_hours is capped at 168 while
+          Loki retains 720h. An explicit window makes runs older than 168 hours queryable for
+          the first time. That is the point, but say so in the PR description and state what
+          bounds, if any, you enforce on an explicit window — an unbounded one is a caller
+          asking Loki for a month of the namespace.
+
+          THIS IS NOT A PERFORMANCE FIX, IT IS A CORRECTNESS ONE. The timeout is a symptom.
+          The defect is that the tool cannot express the question its caller has. Do not
+          address it by raising the client timeout, adding retries, or narrowing the LogQL —
+          those change how long a wrong query takes.
+
+          ISOLATE TESTING: table-driven Go tests, no cluster and no network, against the
+          existing fake querier in runreport_test.go. Cover: an explicit window is passed
+          through to the querier unchanged; since_hours still produces the now-anchored
+          window when no explicit window is given; end-before-start is an error; a
+          zero-length window is an error; a half-supplied window follows your stated rule;
+          and the hit-limit note names the control in use. Prove each is load-bearing by
+          breaking it. Non-negative coverage delta.
+
+          Done = PR merged (open via open_pr, drive gates green).
