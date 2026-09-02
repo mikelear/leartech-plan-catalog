@@ -82,13 +82,29 @@ spec:
           load-bearing invariant, and there is an envtest twin around line 274 of
           plan_envtest_test.go. Both must still pass unchanged for writers.
 
-          MAKE THE HOLD OBSERVABLE. When a candidate IS held — which after this change means
-          a genuine writer-on-writer hold — record it. Four steps were held for the whole of
-          a dev step with no log line and no decision entry, and the absence of any signal
-          sent the investigation at a nonexistent template-interpolation bug. Emit it so a
-          reader can tell a held step from a step whose dependencies are unmet, and name the
-          step that owns the slot. Follow the existing decision and phase_transition
-          conventions in this file rather than inventing a shape.
+          MAKE THE HOLD OBSERVABLE, AND MAKE IT JOINABLE. When a candidate IS held — which
+          after this change means a genuine writer-on-writer hold — record it. Four steps were
+          held for the whole of a dev step with no log line and no decision entry, and the
+          absence of any signal sent the investigation at a nonexistent
+          template-interpolation bug. Emit it so a reader can tell a held step from a step
+          whose dependencies are unmet, and name the step that owns the slot. Follow the
+          existing decision and phase_transition conventions in this file for the shape.
+
+          THE FIELD NAMES DECIDE WHETHER THE OBSERVER CAN SEE IT. Verified 2026-09-02 against
+          the leader pod: this controller's lines carry `run` and `ts`, where the estate
+          standard and every agent line carry `run_id` and `time`. The Loki reader that
+          reconstructs a run queries `{namespace} | json | run_id="<name>"`, so a controller
+          line is invisible to it — the 52 controller lines a run report attributed to this
+          service were matched by a broad substring query, not by the join key. The `run`
+          field already holds exactly the right value (the AgentRun name). So the new hold
+          record MUST carry run_id, and a time field in the estate's format, or it will be
+          emitted into Loki and still not be findable by the tool built to notice it.
+
+          DO NOT RENAME THE EXISTING FIELDS IN THIS CHANGE. Every other line in this file
+          uses `run`/`ts`, other tooling may key on them, and a sweeping rename is a separate
+          change with its own risk. Add the estate names on the new record only, and state in
+          the PR description that the mismatch exists more widely so it can be picked up
+          deliberately.
 
           DO NOT SOLVE THIS BY REMOVING repo FROM THE TEMPLATE. Dropping inputs.repo from
           verify-release-flow's steps would make them repoless and skip the serializer as a
