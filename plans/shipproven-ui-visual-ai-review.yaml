@@ -14,18 +14,24 @@
 # shape as the recorder work: do it by hand, prove it finds real defects, then automate what
 # reproduces the manual result.
 #
-# ⭐ THE ARCHITECTURAL DECISION THAT MAKES THIS BUILDABLE NOW
-# The review MUST run as a PIPELINE TASK (like `tasks/ai-review`), NOT as a spawned agent.
-#   · A pipeline task can read the bucket TODAY: `test-artifacts-gcs-key` is ESO-synced into
-#     jx-staging and jx, and the Observer + end2end-ui tasks already use it to UPLOAD
-#     artifacts via `gsutil -o "Credentials:gs_service_key_file=..."`. Same credential, read side.
-#   · A SPAWNED AGENT cannot: jobspawn.go projects secrets as named pairs per purpose
-#     (GitHub/Anthropic/AuthClient) and there is NO GCS pair, so the agent pod's `default` SA
-#     hits the unbound Workload Identity pool and gets HTTP 403. That is the open Plan
-#     plans/agent-gcs-artifact-read.yaml, and it is exactly what caused the 2026-08-10
-#     `shipproven-website-visual` failure (0-byte listing, silent give-up, invented brand ink).
-#   ⇒ Building this as a pipeline task SIDESTEPS that blocker entirely. Do not wait for it,
-#     and do not implement this as an agent step.
+# ⭐ HOW THE REVIEW GETS AT THE ARTIFACTS — use the artifacts MCP, not raw bucket access.
+# Artifacts are addressed by GUID through artifacts-api and read via the artifacts MCP. That
+# is a CAPABILITY, not a credential: artifacts-api holds the GCS access server-side and the
+# caller just invokes a tool. This is proven — artifacts have been created under a GUID and
+# referenced from a Plan as a live test, and artifact-create-durability landed.
+#   · Do NOT hand-roll `gsutil` bucket reads, and do NOT invent a path convention.
+#   · Do NOT cite plans/agent-gcs-artifact-read.yaml as a blocker here. That Plan concerns an
+#     agent pod reading a bucket DIRECTLY with its own credentials — a different mechanism,
+#     and not on this path.
+#   · Because access is a tool call, this review may run as a spawned agent OR a pipeline
+#     task. Choose on fit, not on credentials.
+#
+# ⚠️ AND DO NOT READ CAPABILITY OUT OF PLAN HISTORY. Plan implementations are actively being
+# re-worked; issues get fixed locally or by later Plans, so a recorded phase (Failed,
+# Succeeded, Paused) is a record of one attempt, NOT a statement about what the system can do
+# today. Verify against the running service, or ask. Two corollaries that have already caught
+# people out: `Paused: true` is R5's authored default for every catalog Plan, and `AgentType`
+# is cluster-scoped so a "not in that namespace" caveat is void.
 #
 # WHAT IT REVIEWS — three inputs, which is the whole point
 #   1. THE ARTIFACTS already in GCS from end2end-ui: screenshots, plus a NEW structured
@@ -111,8 +117,12 @@ spec:
           freeze animation before any capture (add a style setting animation/transition
           duration to 0, or seek to a fixed timestamp); never assert on a timing race.
 
-          4. EMIT THE EVIDENCE BUNDLE into the existing artifact directory that end2end-ui
-          already uploads to GCS — do NOT invent a new upload path, do not add credentials:
+          4. EMIT THE EVIDENCE BUNDLE AND REGISTER IT THROUGH artifacts-api so it becomes a
+          first-class artifact addressed by GUID, not a bucket path. Keep uploading alongside
+          the existing end2end-ui artifacts, but the bundle itself must be create -> PUT ->
+          finalize through artifacts-api, so the review step (and any agent, and a human) can
+          fetch it by GUID with a manifest instead of guessing a prefix. Record the resulting
+          GUID in the PR comment so it is traceable from the PR. Contents:
             · visual-evidence.json — a single structured file: { pr, sha, cloud, viewport,
               checks: [{id, status, selector, expected, actual}], consoleErrors[],
               failedRequests[], axeViolations[], contrastFailures[] }. This is the file the
@@ -140,18 +150,17 @@ spec:
           metering; this must route model calls through the gateway exactly as it does. Read
           docs/review-format.md first.
 
-          RUNS AS A PIPELINE TASK, NOT A SPAWNED AGENT — this is the load-bearing design
-          decision. It therefore reads the artifact bucket with the SAME credential the
-          Observer and end2end-ui tasks already use for upload
-          (`test-artifacts-gcs-key`, `gsutil -o "Credentials:gs_service_key_file=..."`).
-          Do not add a new GSA, do not touch Workload Identity, do not add terraform, and do
-          NOT wait on plans/agent-gcs-artifact-read.yaml — that Plan fixes secret projection
-          for spawned AGENT pods and is not on this path.
+          ARTIFACT ACCESS IS VIA THE ARTIFACTS MCP, BY GUID — artifacts-api holds the GCS
+          access, so this needs no bucket credential, no new GSA, no Workload Identity and no
+          terraform. Do not hand-roll `gsutil`. Because access is a tool call rather than a
+          mounted secret, implement this wherever it fits best (pipeline task alongside
+          tasks/ai-review, or a spawned agent) — the credential question does not constrain
+          the choice.
 
           INPUTS, in this order of authority:
-            1. visual-evidence.json from GCS for this PR and sha (contract in the website
-               repo's docs/WEBSITE-VISUAL-EVIDENCE.md). Deterministic results.
-            2. The selective screenshots from GCS.
+            1. visual-evidence.json, fetched BY GUID through the artifacts MCP (contract in
+               the website repo's docs/WEBSITE-VISUAL-EVIDENCE.md). Deterministic results.
+            2. The selective screenshots from the same artifact bundle.
             3. BOTH live preview namespaces for the PR:
                <repo>-pr<N>.jx.leartech.com and <repo>-pr<N>.az.leartech.com. Fetch each and
                DIFF THEM. Divergent rendered output between clouds is a finding in its own
