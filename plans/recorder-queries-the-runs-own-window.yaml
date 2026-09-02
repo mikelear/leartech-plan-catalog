@@ -1,0 +1,95 @@
+# The recorder holds each run's exact start and end, and asks Loki about the last week.
+#
+# DEPENDS ON mcp-run-report-explicit-window. That Plan gives run_report a start and an
+# end; this one makes the recorder supply them. Do not start this one first — without
+# the tool change there is nothing to pass and the brief cannot be satisfied.
+#
+# THE EVIDENCE, from a record the recorder wrote on 2026-09-02 for a run that finished
+# on 2026-08-08 and lasted minutes:
+#
+#   notes: ["mcp_run_report_failed: ... query_range?...&start=1787744129521380559
+#            &end=1788348929521380559 ...: context deadline exceeded"]
+#
+# Seven days apart, for a run whose own record says:
+#
+#   "start_time": "...", "completion_time": "2026-08-08T18:55:41Z"
+#
+# The recorder reads both from the AgentRun, writes both into every record, and then
+# asks a question bounded by neither.
+#
+# CONSEQUENCE
+# Every historical record reads UNAVAILABLE with a timeout note. The corpus cannot be
+# backfilled; only runs finishing within the last few hours record successfully, because
+# only for those is a now-anchored window narrow enough for Loki to answer.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: recorder-queries-the-runs-own-window
+spec:
+  paused: true
+  steps:
+    - name: recorder-own-window
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: recorder-own-window
+        repo: mikelear/leartech-agent-run-recorder
+        branch: fix/query-the-runs-own-window
+        goal: >-
+          Query Loki for the window the run actually occupied, not the week leading up to now.
+
+          CONFIRM THE PREMISE FIRST, AND CONFIRM THE DEPENDENCY. In app/mcp/mcp.go read
+          RunReportIn and confirm what window fields exist. Then read the same struct in
+          mikelear/leartech-mcp-servers internal/lokiserver/runreport.go on origin/main to get
+          the field names and the format the tool actually accepts. Do NOT infer either from
+          this brief. If the tool has no explicit window yet, STOP and report that the
+          dependency has not shipped — mcp-run-report-explicit-window must merge first.
+
+          PASS THE RUN'S OWN BOUNDS. app/discover already reads the AgentRun and app/record
+          already writes start_time and completion_time into every record, so the values are
+          in hand. Send those as the window.
+
+          PAD DELIBERATELY, AND SAY BY HOW MUCH. A run's structured lines can fall marginally
+          outside its AgentRun timestamps: the controller writes completionTime after the pod
+          exits, and the pod logs its own run_end before that. An exactly-bounded window can
+          therefore clip the very record every aggregate depends on — run_end carries turns
+          and cost_usd. Choose a margin, justify it in the PR description, and make it one
+          named constant rather than a number repeated at each call site.
+
+          A RUN WITH NO COMPLETION TIME MUST NOT SILENTLY WIDEN THE WINDOW. discover already
+          skips those with reason no_completion_time, and that skip must stay. Do not
+          substitute now, and do not fall back to a since_hours window — either would restore
+          exactly the behaviour this change removes. If any path can reach the MCP call
+          without both bounds, make it an explicit error rather than a default.
+
+          THE 168-HOUR CEILING WAS A PROPERTY OF THE OLD WINDOW, NOT OF LOKI. Loki retains
+          720h. past_retention is computed against the old ceiling and one pass skipped 211
+          runs on that basis. With a bounded window those runs become queryable. Re-derive
+          that boundary from Loki's actual retention, state the value you used and where it
+          came from in the PR description, and keep reporting the skip with its reason for
+          runs genuinely beyond retention — a run that cannot be recorded must still say why.
+
+          EXPECT THE CORPUS TO BACKFILL, AND SIZE THE PASS FOR IT. cmd/recorder bounds each
+          pass with a 20-minute context. Once historical runs become queryable a pass has
+          hundreds of candidates rather than a handful. Do not raise the deadline to fit them
+          all: a pass that runs longer than its schedule overlaps the next one, and both write
+          to the same corpus branch. Confirm what happens when the deadline is reached
+          mid-pass — that remaining runs are left for the next pass and reported, not dropped
+          silently — and say in the PR description how many passes a full backfill takes.
+
+          VERIFY AGAINST THE HAND-WRITTEN BASELINE, NOT AGAINST ITSELF. mikelear/
+          leartech-agent-run-reports holds baselines/ — analyses written by hand from Loki
+          before this tooling existed. For run agent-log-advertised-tools-log-advertised-tools
+          the expected values are 228 tool calls, 114 bash, 43 MCP, 4 tool errors, 9 fail-fast
+          and 1 full-terminal wait calls, 229 turns. That run finished 2026-08-29 and is
+          exactly the case that times out today. Put the resulting record's numbers against
+          those in the PR description. Matching is the deliverable; a record that renders
+          UNAVAILABLE for that run has not fixed anything.
+
+          ISOLATE TESTING: table-driven Go tests, offline, no cluster, against the existing
+          fakes. Cover: the window sent to the MCP is derived from the run's own timestamps
+          plus the stated margin; a run without a completion time never reaches the MCP call;
+          the margin is one constant; and a run beyond Loki retention is still skipped with
+          its reason. Prove each is load-bearing by breaking it. Non-negative coverage delta.
+
+          Done = PR merged (open via open_pr, drive gates green).
