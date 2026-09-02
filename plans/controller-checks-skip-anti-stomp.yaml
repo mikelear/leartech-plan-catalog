@@ -1,0 +1,107 @@
+# Read-only verification waits behind writers it cannot collide with.
+#
+# OBSERVED 2026-09-02 on shipproven-website-ml-story, the first Plan here with two dev
+# steps against one repo and therefore two injected verify-release-flow gates:
+#
+#   14:03:27Z  ml-story-content   pr 11 merged -> step terminal Succeeded
+#   14:03:28Z  ml-story-visuals   step-fired   (PR 12 opened, +952)
+#   ...        ml-story-content-verify-release-release-passed   Pending
+#              ml-story-content-verify-release-promote-merged   Pending
+#              ml-story-content-verify-release-bootjob-ran      Pending
+#              ml-story-content-verify-release-deploy-healthy   Pending
+#
+# Content's release, promote and boot job had all completed. The four checks that would
+# confirm it sat Pending for the whole of the next dev step, because
+# spawnEligibleSteps' same-repo anti-stomp gave the slot to ml-story-visuals — declared
+# earlier — and held everything else touching that repo.
+#
+# WHY THE CHECKS ARE IN SCOPE OF A WRITER-COLLISION RULE
+# verify-release-flow's four steps each carry `inputs.repo: ${repo}` (see the
+# PlanTemplate). stepRepo() reads the top-level Repo field and falls back to
+# inputs.repo, so every expanded check resolves to the service's repo and occupies a
+# slot in planInFlightRepos. The `use:` step looks repoless in spec — its repo is a
+# template param under `with` — so this is invisible until expansion.
+#
+# WHY THAT IS WRONG RATHER THAN MERELY SLOW
+# The four checks are thin relays to read-only Go MCP tools —
+# release_pipeline_status, promote_status, bootjob_for_commit, deploy_health. They clone
+# nothing, push nothing and open nothing. The serializer exists so two AGENTS do not
+# write one repo concurrently; holding a reader behind a writer protects nothing.
+#
+# THE COST COMPOUNDS. Once the writer frees the slot, all eight checks are eligible and
+# all eight share the repo, so they serialize against each other too: two chains of four
+# that could run in parallel instead run as eight sequential pods. A Plan with four dev
+# steps queues every verification chain behind every remaining writer.
+#
+# AND THE HOLD IS SILENT. The controller logged no line and recorded no decision for
+# four held steps. The only observable was Pending with no reason, which read as a
+# broken ${steps.X.pr} interpolation for several minutes of investigation.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: controller-checks-skip-anti-stomp
+spec:
+  paused: true
+  steps:
+    - name: checks-skip-anti-stomp
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: checks-skip-anti-stomp
+        repo: mikelear/leartech-orchestrator-controller
+        branch: fix/checks-skip-anti-stomp
+        goal: >-
+          Stop read-only check steps occupying a same-repo anti-stomp slot, and make the
+          hold visible when it does apply.
+
+          CONFIRM THE PREMISE FIRST. Read spawnEligibleSteps (around line 1054),
+          planInFlightRepos (around line 3184) and stepRepo (around line 3150) in
+          internal/controller/plan_controller.go. Confirm that a step's repo is resolved from
+          the top-level field or inputs.repo, that a spawned non-terminal step with a repo
+          occupies a slot, and that a candidate whose repo is occupied is held with its phase
+          left Pending. Then read the verify-release-flow PlanTemplate and confirm its four
+          steps carry inputs.repo. If checks already skip the serializer, STOP and report that.
+
+          EXEMPT kind:check SPECIFICALLY, NOT "NOT A PR STEP". kind:apply steps DO mutate —
+          the infra actions create repos, register source-config and scaffold. Exempting
+          anything that is not kind:pr would let two mutating steps race on one repo, which
+          is the collision this rule exists to prevent. The exemption must key on check and
+          nothing else.
+
+          A CHECK MUST NEITHER OCCUPY A SLOT NOR BE HELD BY ONE. Those are two separate
+          behaviours in two separate places — a step contributes to the in-flight repo set,
+          and a candidate is tested against it. Both need to change for a check to run
+          alongside a writer, and a change to only one leaves half the defect. Say in the PR
+          description which function you changed for each.
+
+          DO NOT CHANGE WHICH WRITER WINS A TIEBREAK. Determinism comes from iterating
+          plan.Spec.Steps in declared order, and the existing comment calls that out
+          explicitly. Removing checks from the contest must not reorder the remaining
+          candidates. TestPlan_SameRepo_SerializesEligibleSteps in
+          plan_same_repo_serialization_test.go is described in its own comment as the
+          load-bearing invariant, and there is an envtest twin around line 274 of
+          plan_envtest_test.go. Both must still pass unchanged for writers.
+
+          MAKE THE HOLD OBSERVABLE. When a candidate IS held — which after this change means
+          a genuine writer-on-writer hold — record it. Four steps were held for the whole of
+          a dev step with no log line and no decision entry, and the absence of any signal
+          sent the investigation at a nonexistent template-interpolation bug. Emit it so a
+          reader can tell a held step from a step whose dependencies are unmet, and name the
+          step that owns the slot. Follow the existing decision and phase_transition
+          conventions in this file rather than inventing a shape.
+
+          DO NOT SOLVE THIS BY REMOVING repo FROM THE TEMPLATE. Dropping inputs.repo from
+          verify-release-flow's steps would make them repoless and skip the serializer as a
+          side effect, and would break the checks themselves — they need the repo to resolve
+          the service. The defect is in what the serializer considers a collision, not in the
+          template.
+
+          ISOLATE TESTING: table-driven Go tests, no cluster, in the style of
+          plan_same_repo_serialization_test.go. Cover: a check and a pr step on one repo both
+          spawn in the same pass; two pr steps on one repo still serialize; two apply steps on
+          one repo still serialize; a pr and an apply on one repo still serialize; declared
+          order still decides which writer wins; two checks on one repo both spawn; and a
+          genuine hold emits its signal naming the occupying step. Prove each is load-bearing
+          by breaking it. Non-negative coverage delta.
+
+          Done = PR merged (open via open_pr, drive gates green).
