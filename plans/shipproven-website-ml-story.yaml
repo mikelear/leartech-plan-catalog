@@ -1,0 +1,190 @@
+# Sell the ML story on www.shipproven.com — the data moat, the compounding corpus, and
+# model ownership. This is SALES CONTENT, not a status report.
+#
+# WHY THIS PLAN EXISTS
+# The site sells the GATE well: agents open PRs, nothing merges until the pipeline is green
+# and a quorum of independent models approves. It says almost nothing about the part that is
+# hardest to copy — that owning the whole delivery loop produces training data nobody else
+# can assemble, and that we own the models it feeds. That is the moat. It is currently
+# invisible to a visitor.
+#
+# THE STORY TO TELL — the strategic argument, in order
+#   1. Everyone can generate code now. The bottleneck moved to verification.
+#   2. But to LEARN from verification you need OUTCOMES — did the change actually work in
+#      production. A reviewer tool sees a diff. An IDE sees keystrokes. An SI sees a ticket.
+#      Only a system that ships the code knows whether it worked.
+#   3. ShipProven owns generation, gating, delivery AND runtime — so every change produces a
+#      review decision, a run record and an outcome. That is a proprietary training signal
+#      that cannot be bought, scraped or licensed. It is structural, not a head start.
+#   4. And we own the model layer: our own gateway, our own GPUs, our own weights, running in
+#      the customer's cloud. The models get better at THEIR codebase, and their code never
+#      leaves their estate.
+#   5. The result compounds: every release makes the next one safer, and the advantage widens
+#      with usage rather than eroding when the next frontier model ships.
+#
+# THE PROOF POINTS (real, current, use them confidently)
+#   · 5,264 captured review decisions across ~50 repositories — +629 in the last two and a
+#     half weeks, ~35/day and accelerating (as at 2026-09-01).
+#   · Every review fans out to models from five providers with a quorum and an independent
+#     meta-judge — through our own gateway.
+#   · 152 Plans on the platform: proposed changes with known production outcomes.
+#   · Any autonomous run is reconstructable from logs after its pods are gone — tool mix,
+#     turns, errors, wall clock, cost. Demonstrated on a two-day-old run against a
+#     hand-written analysis, matching 9 of 10 fields.
+#   · Agent behaviour is attributable to a prompt version: one prompt change moved an agent's
+#     wait-to-tool ratio from 2:7 to 8:1.
+#   · A trained model runs in the pipeline today as an advisory pre-check, with a daily
+#     eval gate and weekly eval-gated retrain.
+#
+# TONE — IMPORTANT. Confident, present tense, architectural. This is a sales page, not a
+# maturity assessment. Describe what the system DOES and where it is GOING. Do not hedge
+# capability language, do not write "coming soon", and do not caveat individual mechanisms —
+# a visitor reads hedging as weakness, and the roadmap items land within weeks anyway.
+#
+# ONE ACCURACY LINE (the only hard constraint): do not claim we have a model fine-tuned on
+# our own review corpus in production. Fine-tuning on the corpus is the direction and should
+# be sold as the direction — confidently, as where the flywheel leads. The advisory trained
+# model in the pipeline is real and can be stated plainly.
+#
+# DESIGN SOURCE — INLINE. DELIBERATELY NOT A GCS BUNDLE. On 2026-08-10 plan
+# `shipproven-website-visual` pointed an agent at a design bundle in a private GCS bucket;
+# the agent wrote a 0-byte listing.json, gave up WITHOUT erroring, built from goal text alone
+# and INVENTED the primary brand ink (#0B1220 used 24 times where #0B1F3A was specified).
+# PR #7 was closed rather than merged. Until plans/agent-gcs-artifact-read.yaml lands, every
+# hex is written literally into the goal below. Do not fetch a bundle; do not infer a colour.
+#
+# OUT OF SCOPE: existing gate/agent copy stays untouched (this Plan is additive); DNS/infra
+# (R22 template-only); the recorder service itself (plans/agent-run-recorder-*.yaml) — this
+# Plan is CONTENT ONLY.
+#
+# VERIFICATION — auto-injected, NOT hand-authored (R23/R24): the platform auto-composes
+# verify-release-flow after every deployable PR step.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: shipproven-website-ml-story
+spec:
+  paused: true
+  steps:
+    - name: ml-story-content
+      kind: pr
+      agentType: leartech-agent-ng
+      inputs:
+        name: ml-story-content
+        repo: mikelear/leartech-ship-proven-website
+        branch: feat/ml-story-content
+        goal: >-
+          Add a new sales section to www.shipproven.com that sells the ML and data story, and
+          update docs/WEBSITE-CONTENT.md in the same PR. docs/WEBSITE-CONTENT.md is the source
+          of truth for wording and docs/WEBSITE-DESIGN.md for structure — read both first.
+
+          DO NOT WEAKEN CRAWLABILITY. .lighthouse/jenkins-x/seo-preview.yaml is a BLOCKING
+          presubmit that fetches raw HTML with no JS and asserts the hero h1, the meta set,
+          robots.txt and sitemap.xml. Keep prerender/SSG (outputMode: static). No JS-only
+          routes, no content behind interaction.
+
+          1. PLACEMENT. New anchored section after "How it works", before "Why different".
+          Nav label: "The data moat". Update nav in the template and docs/WEBSITE-DESIGN.md.
+
+          2. THE ARGUMENT — this is the section's spine, write it as a build:
+          Heading: "The advantage compounds." Sub: "Owning the whole pipeline means owning
+          the data nobody else can get."
+            - Open with the reframe: generating code is solved; the bottleneck moved to
+              verifying it. But to LEARN from verification you need to know outcomes — did
+              this change actually work in production.
+            - Then the structural point, stated plainly and confidently: a code-review tool
+              sees a diff. An IDE sees keystrokes. A consultancy sees a ticket. Only a system
+              that ships the code knows whether it worked. ShipProven owns generation,
+              gating, delivery and runtime — so every change yields a review decision, a run
+              record and an outcome.
+            - Then the consequence: that is a proprietary training signal that cannot be
+              bought, scraped or licensed. It is structural, not a head start.
+            - Close the loop: every release makes the next one safer. The advantage widens
+              with usage instead of eroding when the next frontier model ships.
+
+          3. PROOF BLOCKS — four, short, numbers forward:
+            - "A corpus that compounds." 5,264 review decisions across ~50 repositories,
+              growing ~35 a day. Every review fans out to models from five providers with a
+              quorum and an independent meta-judge, through our own gateway.
+            - "We own the model layer." Our own gateway, our own GPUs, our own weights —
+              deployable in the customer's cloud, so models improve on THEIR conventions and
+              their code never leaves their estate. Model-agnostic by design: when frontier
+              models get cheaper and better, we get cheaper and better.
+            - "Every run is measurable." Any autonomous run can be reconstructed from logs
+              after its pods are gone — tool mix, turns, errors, wall clock, cost — and agent
+              behaviour is attributable to a prompt version. One prompt change moved an
+              agent's wait-to-tool ratio from 2:7 to 8:1. We tune on measurement, not
+              intuition.
+            - "Already in the loop." A model we trained runs in the pipeline today as an
+              advisory pre-check, with a daily eval gate and a weekly eval-gated retrain.
+
+          4. WHERE IT LEADS — one confident forward-looking paragraph, no hedging and no
+          "coming soon": the corpus is the training signal for models fine-tuned on each
+          customer's own conventions, gated by the same evals before promotion. Frame as
+          the natural destination of the flywheel, which it is.
+
+          5. HARD ACCURACY LINE — the only one. Do not state that we have a model fine-tuned
+          on our review corpus running in production. Sell that as the direction (section 4),
+          not as today. The advisory trained model in section 3 is real; state it plainly.
+
+          6. VOCABULARY. Don't lead with "trust layer", "verification layer" or "control
+          layer" — competitors market all three. Use "merge authority", "the data moat" and
+          "evidence". Keep existing site copy elsewhere unchanged; this Plan is additive.
+          "leartech" must not appear in built output — attribution stays
+          "SHIPPROVEN · BY VERRIAN" / "a product of Verrian Ltd".
+
+    - name: ml-story-visuals
+      kind: pr
+      agentType: leartech-agent-ng
+      dependsOn:
+        - ml-story-content
+      inputs:
+        name: ml-story-visuals
+        repo: mikelear/leartech-ship-proven-website
+        branch: feat/ml-story-visuals
+        goal: >-
+          Build two static, prerender-safe figures for "The data moat" section as INLINE SVG
+          (no canvas, no chart library, no runtime fetch — the SEO presubmit fetches raw HTML
+          with no JS, so the figures must be in it). Respect prefers-reduced-motion.
+
+          EVERY COLOUR IS GIVEN LITERALLY. DO NOT INVENT, SAMPLE OR APPROXIMATE A HEX. If you
+          need one that isn't listed, use muted ink and say so in the PR description.
+          Brand ink #0B1F3A · accent green #16A34A · amber #B45309 · muted #5B6B7B ·
+          panel #F3F6F9 · hairline #E2E8F0 · surface #FFFFFF.
+          If a second data hue is needed: #2a78d6. Do NOT use the deck's muted teal/indigo/
+          plum (#0F766E/#4C5B8A/#7A5C86) for data — they read grey in a chart.
+
+          FIGURE 1 — THE FLYWHEEL. This is the hero of the section and the most important
+          asset in this Plan: it makes the moat visible in one glance. A closed cycle of five
+          nodes, arrows clockwise, drawn so the loop reads as self-reinforcing:
+            generate → gate (deterministic checks + model quorum) → ship → outcome (did it
+            work in production?) → corpus → back to generate, labelled "better models".
+          Nodes in #F3F6F9 with a 2px #16A34A top border and #0B1F3A label text; arrows
+          #5B6B7B, 2px, arrowheads ~8px. Put a short caption under the "outcome" node:
+          "the step only a system that ships the code can see" — that node is the whole
+          argument, so give it slightly more visual weight than the others (a filled
+          #16A34A accent bar or a heavier border). Keep it flat and diagrammatic, no
+          gradients, no drop shadows, no 3D.
+
+          FIGURE 2 — THE CORPUS, COMPOUNDING. A single-series cumulative line/area chart of
+          review decisions captured over time, one hue (#16A34A), area fill at ~12% opacity
+          beneath a 2px line. Monthly cumulative points: Mar 24 · Apr 704 · May 1,804 ·
+          Jun 2,711 · Jul 4,379 · Aug/Sep 5,264. Direct-label ONLY the final point —
+          "5,264 decisions" — plus a small "~35/day" annotation on the last segment; no
+          number on every point. Single series so NO legend (the title names it). Axis
+          labels and gridlines recessive: #5B6B7B text, #E2E8F0 hairlines, no chart border,
+          no y-axis to zero-padding tricks. Markers ≥8px only on the labelled endpoint.
+          If the corpus repo exposes fresher monthly counts, use those and update the doc.
+
+          ONE AXIS ONLY. Never plot decisions and a second measure on two y-scales in one
+          chart — if a second measure is wanted, it is a second figure.
+
+          ACCESSIBILITY. Each figure gets a visible caption and a text alternative carrying
+          the same numbers (a short table is ideal — it also satisfies the no-JS fetch).
+          Nothing carries meaning by colour alone; every labelled mark has a text label.
+          Target ≥4.5:1 for text against its background.
+
+          FINALLY, commit the spec as docs/WEBSITE-MOAT-FIGURES.md in the same PR — the
+          numbers, the hexes, and the two rules "one hue for a single series" and "one axis,
+          always" — so the next edit has a committed source of truth rather than re-deriving
+          it from the SVG.
