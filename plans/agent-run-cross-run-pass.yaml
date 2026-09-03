@@ -37,13 +37,22 @@ spec:
           many committed run records together and reports what is true ACROSS runs.
 
           CONFIRM THE PREMISE FIRST, AND STOP IF IT IS ABSENT. This depends on the per-run
-          pass already writing records to mikelear/leartech-agent-run-reports under
-          runs/<utc-date>/<run-id>.json. Confirm that path exists and contains records, and
-          read the actual JSON to learn the real field names. If the corpus is empty or the
-          per-run pass is not implemented yet, STOP and say so in the PR description — do
-          NOT invent a record format and do not build against a schema you designed
-          yourself. The whole value of this pass is that it reads what the other pass
-          actually wrote.
+          pass already writing records to mikelear/leartech-agent-run-reports. The corpus is
+          CLUSTER-SCOPED: runs/<cluster>/<utc-date>/<run-id>.json, where <cluster> is the
+          CLUSTER_ID (gcp|az). Do not assume runs/<utc-date>/ — that was the layout before
+          the paths were cluster-scoped, and reading it would find nothing. List runs/ and
+          then one level down to see the real shape for yourself, and read the actual JSON
+          to learn the real field names. If the corpus is empty or the per-run pass is not
+          implemented yet, STOP and say so in the PR description — do NOT invent a record
+          format and do not build against a schema you designed yourself. The whole value of
+          this pass is that it reads what the other pass actually wrote.
+
+          DECIDE AND STATE WHETHER YOU COMPARE WITHIN A CLUSTER OR ACROSS BOTH. Because the
+          corpus is cluster-scoped, "across runs" is ambiguous and the choice changes what a
+          finding means: the two clusters run different image streams and different MCP
+          server versions, so a metric shift between them can be a cluster difference rather
+          than a regression. At the time of writing only runs/gcp/ exists. Pick one, justify
+          it in the PR description, and make the report say which runs it covered.
 
           SAME BINARY, SECOND SUBCOMMAND, SECOND CRONJOB. Do not create a new service. Reuse
           this repo's existing structure — app/, charts/, .lighthouse. For the CronJob-in-its-
