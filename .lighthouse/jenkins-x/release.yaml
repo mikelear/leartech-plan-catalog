@@ -63,8 +63,7 @@ spec:
         # of the plan MCP's create_plan (same POST /plans; s2s token instead of a
         # forwarded user bearer). Runs on BOTH clusters; each self-submits to its
         # LOCAL plan-api, so both estates receive the proposal with no cross-cluster
-        # networking. Dormant until the plan-catalog-release s2s secret is
-        # provisioned (optional secret envs stay empty → the step self-skips).
+        # networking.
         #
         # SCOPED TO THE MERGE DIFF (HEAD^..HEAD), unlike the template sync above.
         # The template sync targets a git repo and is a reconciler — re-asserting
@@ -73,6 +72,22 @@ spec:
         # so re-asserting the whole directory would RESURRECT any Plan deleted
         # from a cluster on the next unrelated merge. Scoping keeps plans/ a
         # history of what was defined and reviewed, not a mirror of the cluster.
+        #
+        # The plan-catalog-internal-services client is provisioned on BOTH
+        # clusters by leartech-auth-service's setup-internal-clients.sh
+        # (INTERNAL_CLIENTS_DEFAULT entry
+        # `plan-catalog-internal-services|leartechapi.internal_services|leartech-plan-api`),
+        # and the client-secret is synced into the jx namespace by an
+        # ExternalSecret. A MISSING secret is therefore a real infra
+        # regression, not a normal dormant state: silently submitting no
+        # plans at all is the worst possible outcome of this pipeline.
+        # The step no longer self-skips on an empty secret env — the CLI's
+        # own "LEARTECH_PLAN_SUBMIT_CLIENT_SECRET must be set" error
+        # (main.go: fetchToken) fails the release step with a message that
+        # names the missing var. optional:true stays on the secretKeyRef
+        # itself so a cold-start ExternalSecret race surfaces as the
+        # CLI's clear error rather than a pod stuck in
+        # CreateContainerConfigError.
         - image: golang:1.24-alpine
           name: submit-plans
           resources:
@@ -93,8 +108,10 @@ spec:
             value: plan-catalog-internal-services
           # The client SECRET is the ONLY backend-sourced value — synced from the
           # leartech-secrets store by the plan-catalog-internal-services
-          # ExternalSecret (jx namespace). optional:true → the env stays empty and
-          # the step self-skips until that secret is provisioned.
+          # ExternalSecret (jx namespace). optional:true keeps a cold-start
+          # ExternalSecret race from wedging the pod in
+          # CreateContainerConfigError; the CLI's own "must be set" error
+          # then fails the step with a message that names the missing var.
           - name: LEARTECH_PLAN_SUBMIT_CLIENT_SECRET
             valueFrom:
               secretKeyRef:
@@ -103,11 +120,7 @@ spec:
                 optional: true
           script: |
             #!/bin/sh
-            set -u
-            if [ -z "${LEARTECH_PLAN_SUBMIT_CLIENT_SECRET:-}" ]; then
-              echo "submit-plans: plan-catalog-internal-services secret not provisioned — skipping (route dormant)."
-              exit 0
-            fi
+            set -eu
             apk add --no-cache git >/dev/null 2>&1
             go run ./cmd/plan-submit -dir plans
   podTemplate:

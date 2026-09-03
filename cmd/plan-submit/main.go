@@ -26,7 +26,20 @@
 // Auth: OAuth2 client_credentials (LEARTECH_PLAN_SUBMIT_CLIENT_ID/_SECRET against
 // LEARTECH_AUTH_TOKEN_URL) minting a token carrying the internal_services scope —
 // one of the three plan-api accepts for POST /plans (mcp:write | internal_services
-// | PlatformAdmin). Idempotent: an already-submitted plan (HTTP 409) is a success.
+// | PlatformAdmin).
+//
+// A 409 from plan-api is NOT unconditional success. plan-api's
+// respondResubmitConflict carries a `result` verdict on the body:
+// `identical` (spec matches — genuine SKIP), `differs` (the file changed but
+// plan-api DID NOT apply it — hard failure), `conflict_running` (a mid-flight
+// plan cannot be resubmitted — hard failure), or `unknown` (plan-api could not
+// compute a verdict — hard failure). An absent or unrecognised verdict is
+// also a failure: a reader that cannot determine the outcome must say so
+// rather than silently pass. The correct remediation for a `differs` is to
+// delete the on-cluster Plan CR and re-submit — plan-api deliberately never
+// mutates a plan on resubmit, and this tool must not either. Requires a
+// plan-api built from PR mikelear/leartech-plan-api#33 or later (both
+// clusters already run a version containing it).
 package main
 
 import (
@@ -150,8 +163,15 @@ func run(dir, planAPI string, dryRun, all bool, base string) error {
 		case status >= 200 && status < 300:
 			fmt.Printf("  OK   %s (%s) -> HTTP %d\n", j.req.Name, j.file, status)
 		case status == http.StatusConflict:
-			// Already submitted — the proposal exists. Idempotent success.
-			fmt.Printf("  SKIP %s (%s) -> HTTP 409 already exists\n", j.req.Name, j.file)
+			// The verdict decides whether this 409 is a legitimate SKIP or a
+			// hard failure. plan-api NEVER mutates the on-cluster plan on
+			// resubmit — a `differs` means the file changed and the change
+			// was NOT applied, so this tool must NOT paper over it.
+			ok, msg := classifyResubmit(j.req.Name, j.file, body)
+			fmt.Println(msg)
+			if !ok {
+				failed++
+			}
 		default:
 			fmt.Printf("  FAIL %s (%s) -> HTTP %d: %s\n", j.req.Name, j.file, status, truncate(body, 300))
 			failed++
