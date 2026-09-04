@@ -44,6 +44,21 @@
 #   3. THE DIFF, for context only — `ai-review` already owns code review; this must not
 #      duplicate it. Different job, different comment.
 #
+# ⭐ THE REVIEW HAS A SPECIFICATION TO REVIEW AGAINST (added 2026-09-04)
+# The design system is now published and sealed:
+#   artifact 781fbaf1-7d78-4ec1-a1e4-3f0a2496ed7a · label shipproven-web-design-system
+#   revision 1 · files DESIGN.md, motion-principles.html
+# That turns this review from TASTE into CONFORMANCE. Most design-system rules are
+# objectively checkable against a versioned contract, so they belong in Playwright, not in a
+# model prompt: is every rendered colour in DESIGN.md §1's token table, or did something
+# invent a hex? Is every diagram label at or above §2's type floors? Do motion timings match
+# §3? Are §4's four accessibility rules satisfied?
+# DESIGN.md sha256 74c9a05c915399dc2a16eb4174fd7cf7dd298acb39749528ea3596732b71743a — if a
+# read returns a different digest the spec has moved; re-read rather than trust a cache.
+# ⚠️ If the design artifact cannot be read, report that as a review finding and skip the
+# conformance checks — do NOT silently fall back to judging on taste and present it as
+# conformance. A review that quietly loses its baseline is worse than one that says so.
+#
 # ⚠️ DIVISION OF LABOUR — our own thesis, applied to our own pipeline.
 # Do NOT ask a model to do what a deterministic check can do.
 #   · PLAYWRIGHT ASSERTS the objectively checkable (step 1): overflow, computed opacity,
@@ -113,6 +128,18 @@ spec:
             e. CONTRAST. Computed contrast of every text node against its rendered
                background >= 4.5:1 (>= 3:1 for text over 18.66px bold / 24px regular).
             f. AXE. Run @axe-core/playwright and record violations.
+            g. DESIGN-SYSTEM CONFORMANCE — read DESIGN.md from artifact
+               781fbaf1-7d78-4ec1-a1e4-3f0a2496ed7a and assert against it, so these stop
+               being opinions: (i) every colour appearing in computed styles is present in
+               §1's token table or the validated data-series palette — an unlisted hex is a
+               FAILURE naming the selector and the offending value (this is the #0B1220
+               class of defect, caught mechanically); (ii) every diagram label meets §2's
+               type floors (node name >= 16px, qualifier >= 12px, nothing under 10px);
+               (iii) the deck's non-data hexes #0F766E / #4C5B8A / #7A5C86 appear NOWHERE as
+               a chart series colour; (iv) §4's rules hold — reduced motion resolves to the
+               END state, auto-play past 5s exposes a pause control, reveal degrades with JS
+               disabled. Record each as a check id in visual-evidence.json so a failure is a
+               fact with a measurement, not a prompt.
           FLAKE CONTROL IS PART OF THE SPEC: pin viewports to exactly 375, 768 and 1440;
           freeze animation before any capture (add a style setting animation/transition
           duration to 0, or seek to a fixed timestamp); never assert on a timing race.
@@ -167,7 +194,12 @@ spec:
                right and must be labelled as an ENVIRONMENT defect, not a code defect — the
                previous Plan's two staging environments returned byte-identical output, so
                divergence is a real signal.
-            4. The diff, for context only.
+            4. DESIGN.md from artifact 781fbaf1-7d78-4ec1-a1e4-3f0a2496ed7a — the
+               conformance baseline. Cite it by artifact id AND revision in the review, so a
+               finding is traceable to the exact spec version it was judged against.
+               motion-principles.html in the same artifact is the executable reference for
+               §3's primitives; prefer comparing behaviour to it over describing it.
+            5. The diff, for context only.
 
           HOW IT REVIEWS — respect the division of labour:
             · Deterministic failures from visual-evidence.json are reported AS FACTS, with
@@ -179,6 +211,11 @@ spec:
               reads as purposeful or decorative.
             · Do NOT re-review code quality. `ai-review` owns that. Post a SEPARATE comment
               so the two never collide.
+
+          PROVENANCE — every review must state what it judged and against what: the preview
+          URL(s) fetched, the evidence artifact id, and the design artifact id + revision.
+          DESIGN.md §5 requires "no number without provenance"; that rule applies to the
+          review enforcing it just as much as to the page being reviewed.
 
           OUTPUT: a `leartech.review/v1` comment per docs/review-format.md — a fenced json
           block with verdict + findings[{severity, fix, refs}] so it parses like every other
