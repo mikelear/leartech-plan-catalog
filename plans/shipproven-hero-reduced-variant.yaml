@@ -1,0 +1,90 @@
+# Fix the hero gate strip. It clips its own labels and the Agent node reads as a slab.
+#
+# WHY THIS PLAN EXISTS — and the spec, not the implementation, was at fault
+# shipproven-website-motion-and-numbers/motion-system built the hero strip faithfully to
+# DESIGN.md §3.1 revision 1 — five gates carrying a name AND a qualifier. The reference
+# implementation had ~1100px. The hero column has ~500px. Rendered into a third of the
+# space, on staging right now:
+#   · gate names clipped mid-word: `Buil`, `Dep`, `Sec`, `Con`
+#   · qualifiers clipped: `comp`, `previe env`, `5 provid`; `SAST · pen-test` wraps to 3 lines
+#   · the Agent node is a ~130x130px WHITE SLAB with no visible "Agent" label — the largest,
+#     brightest element in the hero, saying the least
+#   · the card fills ~510px of a ~700px column with dead space beneath it
+# Revision 1 never stated a width budget, so there was no reduced variant to render.
+# DESIGN.md v2 adds §2a to fix that permanently.
+#
+# ⭐ DESIGN SOURCE — READ IT BY GUID
+#   artifact 87e95fbd-784f-452d-b9d0-0c56c41174fc · label shipproven-web-design-system-v2
+#   revision 1 · sealed · files DESIGN.md, motion-principles.html
+#   DESIGN.md sha256 42f3ce03221fac5b64bdcd54ce72511a1822dccd083fe0f19c0f4f545b6ecbb5
+# ⚠️ SUPERSEDES artifact 781fbaf1-7d78-4ec1-a1e4-3f0a2496ed7a (v1). Do NOT read v1 — it is
+# the revision whose missing width budget caused this defect. (A true revision-2 was not
+# possible: create_revision on artifact-api returns 500, see plans/remediate-artifact-rest-and-mcp.yaml.)
+# ⚠️ IF YOU CANNOT READ THE ARTIFACT, STOP and say so in the PR description. Do NOT build
+# from this goal text alone — on 2026-08-10 an agent that could not read its design bundle
+# gave up without erroring and invented the brand ink 24 times. Fail loudly.
+#
+# ⚠️ SCOPE: THE HERO ONLY. Do not touch the scene stage, the data-moat section, the agent
+# grid, or the consensus diagram — those are correct and were verified on staging. Do not
+# change the motion primitives themselves; they conform. This is a variant + layout fix.
+#
+# VERIFICATION — auto-injected, NOT hand-authored (R23/R24).
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: shipproven-hero-reduced-variant
+spec:
+  paused: true
+  steps:
+    - name: hero-reduced-variant
+      kind: pr
+      agentType: leartech-agent-ng
+      inputs:
+        name: hero-reduced-variant
+        repo: mikelear/leartech-ship-proven-website
+        branch: fix/hero-reduced-variant
+        goal: >-
+          Fix the hero gate strip so nothing clips and the hero reads as a statement rather
+          than documentation. Implement DESIGN.md §2a (Width budgets and reduced variants)
+          from artifact 87e95fbd-784f-452d-b9d0-0c56c41174fc — read it first; it specifies
+          this exactly. Keep the §3 motion primitives unchanged, they already conform.
+
+          1. BUILD THE REDUCED VARIANT for the hero (§2a). Gate NAMES ONLY —
+          Build · Deploy · E2E+UI · Security · Consensus — and DELETE the qualifiers from the
+          hero markup (`compile`, `preview env`, `exercise`, `SAST · pen-test`, `5 providers`).
+          Those belong in the full-width "How it works" section; if they are not already
+          presented there, move them rather than dropping the information.
+
+          2. TYPE GOES UP, NOT DOWN. A narrower container means carry LESS, never shrink.
+          Gate names stay at or above §2's 16px semibold floor. If names-only still will not
+          fit at 1280px, wrap to two rows — do NOT reduce below the floor and do NOT
+          abbreviate a name.
+
+          3. THE AGENT IS A CHIP, NOT A SLAB. Same height as a gate, dark (ink-2) with a
+          hairline border like the gates, labelled `Agent → proposes` with the word "Agent"
+          VISIBLE. Remove the white fill. It must not be the largest or brightest element in
+          the hero — it is the thing outside the gate, not the focal point.
+
+          4. FILL THE CONTAINER. The card currently occupies ~510px of a ~700px column with
+          dead space beneath. Let the strip use the available width, or reflow to two rows.
+          No fixed-width boxes floating in a part-empty card.
+
+          5. ASSERT IT, DO NOT EYEBALL IT. Add to the existing end2end-ui motion spec, at
+          375, 768 and 1440: every element inside the hero strip satisfies
+          scrollWidth <= clientWidth + 1 AND scrollHeight <= clientHeight + 1; each of the
+          five gate names appears in full (assert the exact strings "Build", "Deploy",
+          "E2E + UI", "Security", "Consensus" are present and not truncated); the word
+          "Agent" is present; and no hero gate label computes below 16px. Clipping shipped
+          because a human looked at it instead of a test — close that.
+
+          6. KEEP WHAT WORKS. Do not regress: `data-s` state machine, the 760ms/700ms/2.4s
+          timings, the pause control, IntersectionObserver gating, the `html.js` reveal
+          guard, prerender/SSG, and the prerendered verdict resolving to the END state
+          ("ALL GATES GREEN — MERGE AUTHORISED"). `.lighthouse/jenkins-x/seo-preview.yaml` is
+          a BLOCKING presubmit — the five gate names must be present in raw HTML with no JS.
+
+          7. WHILE YOU ARE THERE — one live question worth answering in the PR description:
+          the static HTML paints the END state (all gates green), then JS resets to pending to
+          start the loop. Check whether that produces a visible flash of green-to-grey on
+          load. If it does, start the first cycle from the painted end state or hold until
+          after hydration; if it does not, say so and change nothing.
