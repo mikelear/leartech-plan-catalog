@@ -1,0 +1,144 @@
+# Four small, verified corrections to the landing page — three design, one positioning.
+#
+# WHY THIS PLAN EXISTS — all four were found by looking at the deployed page
+#   1. TWO GREENS IN SCENE 1. Rung 2 (Preview namespace) AND rung 4 (Production) are both
+#      accent-bordered, so neither reads as meaningful. My fault twice over: the spec said
+#      "rung 4 bordered in accent" (carried from a prototype where accent just marked the
+#      tallest step) AND "give rung 2 a visible emphasis the others lack". Green must mean
+#      ONE thing, and it must be rung 2 — the pre-merge preview is the argument of the scene
+#      and the rung that was missing from the site entirely.
+#   2. THE HERO HAS A PAUSE BUTTON. A chunky white "Pause loop" control on the hero is
+#      clutter — the hero is the statement, not the drill-into-detail component. But see the
+#      accessibility constraint below: it cannot simply be deleted.
+#   3. TWO PROSE CARDS WERE MISSED. `prose-and-numbers` restructured card 3.6 beautifully
+#      (green-wash lead, 01/02/03 points, pull-quote) but left 3.4 "The gateway moat" as a
+#      141-word wall — the card the previous Plan named specifically as the longest — and
+#      3.5 is still long too.
+#   4. "BUILT FOR REGULATED ENTERPRISES" IS A POSITIONING ERROR. It reads as "regulated
+#      enterprises are our only customers", which shrinks the market and puts the self-serve
+#      tier in apparent conflict with the enterprise price. Beachhead is not market.
+#
+# ⚠️ ACCESSIBILITY — THE PAUSE BUTTON CANNOT JUST BE DELETED
+# The hero loop runs ~6.5s per cycle and repeats indefinitely. WCAG 2.2.2 (Pause, Stop, Hide)
+# requires a mechanism for auto-playing motion lasting more than five seconds. Removing the
+# control while keeping a perpetual loop is a real accessibility failure and exactly what a
+# regulated buyer's procurement check catches.
+# THE FIX IS TO CHANGE THE MOTION, NOT HIDE THE CONTROL: play the sequence ONCE on viewport
+# entry, rest on green, and replay on hover or click. No ongoing motion means no control is
+# required — and a single decisive play on arrival reads better than something cycling in the
+# viewer's peripheral vision. The scene stage KEEPS its pause control: it auto-advances
+# through three scenes indefinitely, so it genuinely needs one.
+#
+# ⭐ DESIGN SOURCE — READ IT BY GUID
+#   artifact 87e95fbd-784f-452d-b9d0-0c56c41174fc · label shipproven-web-design-system-v2
+#   DESIGN.md sha256 42f3ce03221fac5b64bdcd54ce72511a1822dccd083fe0f19c0f4f545b6ecbb5
+# ⚠️ POSITIVE VERIFICATION REQUIRED — a lesson from the last run. Fetch DESIGN.md, compute
+# its sha256, and PRINT THAT DIGEST IN THE PR DESCRIPTION. If you cannot produce that line,
+# stop. Do NOT substitute docs/WEBSITE-MOTION-SYSTEM.md from the repo: it is derived from
+# revision 1 and is a stale fork of the spec. The previous run did exactly that — it never
+# read the artifact, never checked a sha, and the "stop if you cannot read it" guard never
+# fired because a plausible local copy was sitting there. "Show me the digest" is checkable;
+# "did you fail to read it?" is not.
+#
+# VERIFICATION — auto-injected, NOT hand-authored (R23/R24).
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: shipproven-landing-polish
+spec:
+  paused: true
+  steps:
+    - name: scene-and-hero-polish
+      kind: pr
+      agentType: leartech-agent-ng
+      inputs:
+        name: scene-and-hero-polish
+        repo: mikelear/leartech-ship-proven-website
+        branch: fix/scene-and-hero-polish
+        goal: >-
+          Three design corrections to the landing page. Read DESIGN.md from artifact
+          87e95fbd-784f-452d-b9d0-0c56c41174fc first and print its sha256 in the PR
+          description. Do not change anything not listed here.
+
+          1. ONE GREEN, NOT TWO (scene 1, "Four rungs, each stricter than the last").
+          Remove the accent border from RUNG 4 (Production). Keep the accent on RUNG 2
+          (Preview namespace) only — it is the pre-merge rung, it is the argument of the
+          scene, and it must be the single emphasised element. Rung 4 still needs to read as
+          the human-action step, so distinguish it WITHOUT the accent colour: its existing
+          qualifier "rollback is the same action reversed" plus a neutral treatment (a person
+          glyph, or a heavier neutral border) is enough. Do not introduce a second accent
+          hue, and do not use a status colour — see DESIGN.md §1.
+
+          2. THE HERO PLAYS ONCE (§3.2 becomes conditional on context). On viewport entry the
+          gate sequence plays through ONCE — 760ms stagger, 700ms run per gate, per §3.1 —
+          then RESTS on green with the verdict reading "ALL GATES GREEN — MERGE AUTHORISED".
+          It must NOT loop indefinitely. Replay on hover or click of the strip.
+          THEN REMOVE the "Pause loop" button from the hero: with no perpetual motion there
+          is nothing to pause, so WCAG 2.2.2 no longer applies. Under
+          prefers-reduced-motion, paint the end state immediately with no animation, as now.
+          ⚠️ DO NOT remove the pause control from the SCENE STAGE — it auto-advances through
+          three scenes indefinitely and is required there. Only the hero's goes.
+          Assert in end2end-ui: after the hero sequence settles the verdict shows the
+          authorised state; the hero contains no pause control; and the scene stage still
+          does.
+
+          3. FINISH THE PROSE RESTRUCTURE (§7) on the two cards the previous run missed:
+          card 3.4 "The gateway moat" (currently ~141 words of continuous prose — the longest
+          on the page) and card 3.5 "Self-directing & self-improving". Use the same pattern
+          already applied to card 3.6 and match it exactly: an 18-22px lead of at most two
+          lines with the load-bearing phrase carrying a green-wash underlay
+          (linear-gradient(transparent 62%, #DCFCE7 62%)), then THREE scannable rows each
+          with a hairline top border, a mono numeral 01/02/03 in accent, a bolded claim and a
+          short plain consequence, then ONE pull-quote with a 3px accent left border.
+          Total word count on those two cards must come DOWN — this is a rewrite, not a
+          reflow. Do not alter the substance of the claims.
+
+    - name: positioning-copy
+      kind: pr
+      agentType: leartech-agent-ng
+      dependsOn:
+        - scene-and-hero-polish
+      inputs:
+        name: positioning-copy
+        repo: mikelear/leartech-ship-proven-website
+        branch: fix/positioning-copy
+        goal: >-
+          One positioning correction, applied everywhere it appears on the site, and mirrored
+          into docs/WEBSITE-CONTENT.md in the same PR.
+
+          THE PROBLEM. "Built for regulated enterprises" reads as "regulated enterprises are
+          our only customers". That shrinks the addressable market, makes the go-to-market
+          look enterprise-only, and puts the self-serve tier in apparent conflict with the
+          enterprise price. Beachhead is not market.
+
+          THE CORRECT FRAMING — three parts, never collapsed into one:
+            · STANDARD  — regulated-grade, the bar a bank's auditor sets. This is the flex.
+            · BEACHHEAD — regulated enterprises, where trust is legally non-negotiable, so it
+                          is where we land first.
+            · MARKET    — every team that ships software.
+
+          1. THE HERO TRUST STRIP currently reads "Provider-agnostic · Multi-cloud · Built
+          for regulated enterprises." Change the third item to "Built to the standard
+          regulated enterprises demand". Keep it one line at 1280px and 1440px; if it will
+          not fit, shorten to "Regulated-grade, for every team" rather than wrapping.
+
+          2. THE COMPARISON ROW currently reads "Built for regulated enterprises:
+          multi-cloud, data residency, per-tenant audit and budgets". Replace with: "Built to
+          the standard regulated enterprises demand — for any team that ships software.
+          Multi-cloud, data residency, per-tenant audit and budgets, from self-serve to full
+          BYOC."
+
+          3. ANY SECTION HEADING or body copy that says "built for regulated enterprises" —
+          including the section currently titled that — is reworded to the standard/market
+          framing. Grep the built output for "for regulated enterprises" and confirm ZERO
+          remain. Keep every factual claim intact: multi-cloud, data residency, per-tenant
+          audit, budgets and BYOC are all real and stay.
+
+          4. DO NOT overcorrect. Regulated enterprises remain the beachhead and the
+          why-now: copy stating that banks, fintech and healthcare cannot adopt on trust
+          alone is ACCURATE and must stay. The change is that the bar is regulated-grade
+          while the market is everyone — not that regulated buyers stop mattering.
+
+          5. Add an end2end-ui assertion that the phrase "for regulated enterprises" does not
+          appear anywhere in the rendered page, so this cannot regress. Keep prerender/SSG —
+          .lighthouse/jenkins-x/seo-preview.yaml is a BLOCKING presubmit.
