@@ -39,12 +39,24 @@
 #      failing one to tell a real defect from an environment blip. Diversity is applied
 #      twice: across model providers (consensus quorum) and across clouds.
 #
-# DESIGN SOURCE — INLINE. NOT A GCS BUNDLE, NOT A CROSS-REPO PATH (R10).
-# Every token, hex, timing and type size is written literally into the goals below. Reason:
-# on 2026-08-10 plan `shipproven-website-visual` pointed an agent at a design bundle in a
-# private GCS bucket; it wrote a 0-byte listing, gave up WITHOUT erroring, built from goal
-# text alone and INVENTED the brand ink (#0B1220 for #0B1F3A). PR #7 was closed. The
-# previous Plan proved the inline approach works — zero invented hexes. Keep it.
+# ⭐ DESIGN SOURCE — A PUBLISHED ARTIFACT, READ IT BY GUID.
+#   artifact 781fbaf1-7d78-4ec1-a1e4-3f0a2496ed7a  ·  label shipproven-web-design-system
+#   kind design-doc  ·  revision 1  ·  sealed  ·  files: DESIGN.md, motion-principles.html
+# Fetch it with the artifacts MCP (get_artifact). DESIGN.md is the authoritative spec for
+# every token, hex, type floor, motion timing, accessibility rule, chart form and diagram
+# rule this Plan depends on. motion-principles.html is the executable reference — the three
+# primitives already working in a browser.
+#
+# ⚠️ IF YOU CANNOT READ THE ARTIFACT, STOP. Say so in the PR description and do not proceed.
+# DO NOT build from this goal text alone. On 2026-08-10 plan `shipproven-website-visual`
+# pointed an agent at a design bundle it could not read; the agent wrote a 0-byte listing,
+# gave up WITHOUT erroring, built from goal prose, and INVENTED the primary brand ink
+# (#0B1220 used 24 times where #0B1F3A was specified). PR #7 was closed rather than merged.
+# A silent partial build is far worse than a failed one. Fail loudly.
+#
+# Sanity check on read: DESIGN.md sha256 must be
+# 74c9a05c915399dc2a16eb4174fd7cf7dd298acb39749528ea3596732b71743a
+# If it differs, the spec has moved on — re-read rather than trusting a cached copy.
 #
 # ⚠️ MOTION ACCESSIBILITY IS A HARD REQUIREMENT, NOT A NICETY
 #   - `prefers-reduced-motion: reduce` MUST short-circuit every animation to its END state
@@ -88,17 +100,12 @@ spec:
           than re-deriving it. No page content changes in this step — primitives only, plus
           one reference application (the hero gate strip).
 
-          TOKENS (literal — do not invent or sample any colour):
-          ink #0B1F3A · ink-2 #12294A (raised surface on dark) · accent #16A34A ·
-          green-deep #12432A (passed fill on dark) · green-line #86E0A6 (passed text/border
-          on dark) · green-wash #DCFCE7 (highlight on light) · amber #B45309 ·
-          muted #5B6B7B · dark-muted-text #9FB0C4 · panel #F3F6F9 · hairline #E2E8F0 ·
-          surface #FFFFFF. Easing: cubic-bezier(.16,.84,.44,1).
-
-          TYPE FLOOR FOR DIAGRAMS (these assets get screen-recorded — 9-10px labels mush
-          under video compression): primary node name >= 16px semibold; qualifier >= 12px;
-          mono eyebrow/status >= 10px with >= .12em tracking. Nothing in a diagram below
-          10px. Fix any existing diagram label under these floors.
+          TOKENS, TYPE FLOORS AND MOTION TIMINGS: read them from DESIGN.md in artifact
+          781fbaf1-7d78-4ec1-a1e4-3f0a2496ed7a (§1 colour tokens, §2 type, §3 motion
+          primitives, §4 accessibility). Do not retype them here and do not infer any value
+          that is absent — §1 says to use muted ink and flag it in the PR description
+          instead. motion-principles.html in the same artifact is a working implementation
+          of all three primitives; prefer matching it to re-deriving from prose.
 
           PRIMITIVE 1 — GATE STATE MACHINE. A check has three states: pending, running,
           passed. Represent them as a `data-s` attribute, not ad-hoc classes.
