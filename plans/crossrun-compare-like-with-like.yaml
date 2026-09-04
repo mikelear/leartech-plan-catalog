@@ -1,0 +1,97 @@
+# The cross-run pass reports 39 findings and most of them are not real.
+#
+# OBSERVED 2026-09-04 in reports/gcp/2026-09-04/period-20260904T064701Z.md, the first
+# report the pass committed (100 records read, 0 skipped, 39 findings):
+#
+#   broad_line_count fell 92% at image change
+#     (ghcr.io/mikelear/leartech-agent-go:0.50.26 -> ghcr.io/mikelear/leartech-agent-infra-go:0.0.85)
+#   broad_line_count fell 91% at image change
+#     (ghcr.io/mikelear/leartech-agent-py:0.50.22 -> ghcr.io/mikelear/leartech-agent-infra-go:0.0.78)
+#   broad_line_count fell 77% at image change
+#     (ghcr.io/mikelear/leartech-agent-infra-go:0.0.78 -> ghcr.io/mikelear/leartech-agent-py:0.50.22)
+#
+# Those are not coverage regressions. They are a DEV step followed by its injected
+# verify-release CHECK steps. A dev agent runs a full LLM session and emits thousands of
+# lines; an infra-go check makes one deterministic tool call and emits tens. The cited
+# records show it plainly — agent-bash-failure-fields-bash-failure-fields (the dev step)
+# compared against agent-bash-failure-fields-bash-failure-fields-ve-2f22403a (its check).
+#
+# WHY THIS MATTERS MORE THAN THE COUNT
+# The rule exists to catch observability gaps nobody could enumerate in advance, on the
+# reasoning that any gap moves the coverage numbers. That reasoning holds only if the
+# numbers being compared come from comparable work. Right now the rule fires on the normal
+# difference between two kinds of run, which is the one thing it must never do: a signal
+# that cries regression every pass trains its reader to ignore it, and then the gap it was
+# built for goes past unnoticed. A false finding here is worse than no finding.
+#
+# ONLY TWO RULE KINDS FIRED AT ALL — coverage_regression and source_should_have_logged.
+# So this is not a tuning problem at the edges; it is most of the current output.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: crossrun-compare-like-with-like
+spec:
+  paused: true
+  steps:
+    - name: crossrun-like-with-like
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: crossrun-like-with-like
+        repo: mikelear/leartech-agent-run-recorder
+        branch: fix/crossrun-compare-like-with-like
+        goal: >-
+          Make the cross-run comparisons compare like with like, so a finding means a
+          regression rather than a change of workload.
+
+          CONFIRM THE PREMISE FIRST, AGAINST THE COMMITTED REPORT. Read
+          reports/gcp/2026-09-04/period-20260904T064701Z.md in
+          mikelear/leartech-agent-run-reports and count how many of its findings compare
+          records whose agent image REPOSITORY differs (leartech-agent-go or
+          leartech-agent-py against leartech-agent-infra-go). Then read
+          app/crossrun/rules.go and confirm which grouping key the comparison rules use.
+          Quote both in the PR description. If the rules already group by a comparability
+          key, STOP and report that — do not invent a fix for a bug that is not there.
+
+          THE DISTINCTION TO ENCODE. A change of image TAG within one image repository
+          (leartech-agent-go:0.50.22 -> :0.50.26) is a version change and is exactly what
+          the rule should trend. A change of image REPOSITORY
+          (leartech-agent-go -> leartech-agent-infra-go) is a different kind of run and must
+          never be reported as a regression. The per-run records carry the agent image and
+          the step's own identity; decide which field expresses "comparable population",
+          justify it in the PR description, and use the same key consistently across every
+          rule that compares one record to another — not just coverage_regression.
+
+          DO NOT SOLVE THIS BY FILTERING OUT CHECK STEPS. Records for infra-go check steps
+          are legitimate corpus members and their coverage is worth trending among
+          themselves — a check step that stops logging is exactly the kind of silent gap
+          this pass exists to catch. The fix is to compare within a population, not to
+          discard one.
+
+          SAY WHAT THE GROUPING EXCLUDED. If a comparison cannot be made because a group
+          has too few records, the report must say so per group rather than omitting it. A
+          report that silently compared less than it appears to reads as "nothing found"
+          when it means "did not look" — the same rule the existing ReportCoverage fields
+          already follow. Extend that accounting rather than adding a second mechanism.
+
+          MEASURE THE CHANGE ON THE REAL CORPUS. Re-run the pass against the committed
+          records and put the before/after finding count in the PR description, with one
+          example that correctly STOPS firing and one that correctly still fires. 39 findings
+          against 100 records is the baseline. A drop to zero is a suspicious result, not a
+          good one — if every finding disappears, say so and explain why rather than
+          shipping it.
+
+          NOT IN SCOPE, DO NOT TOUCH. AI_GATEWAY_URL and REPORTS_ISSUE_TOKEN are unset on
+          both clusters, so narrative and issue-raising are skipped — the pass already logs
+          both loudly and degrades correctly. That is a per-cluster GitOps values change and
+          belongs to whoever sets cluster config, not to this repo. Do not add defaults, do
+          not fall back to a hardcoded gateway, and do not widen this PR to cover it.
+
+          ISOLATE TESTING: table-driven Go tests, no network and no cluster, against the
+          existing fakes in app/crossrun. Cover: a tag change within one image repository
+          still fires; a repository change does not fire; a group with too few records is
+          reported rather than omitted; and the same key applies to every comparing rule,
+          not only coverage_regression. Prove each is load-bearing by breaking it.
+          Non-negative coverage delta.
+
+          Done = PR merged (open via open_pr, drive gates green).
