@@ -1,0 +1,263 @@
+# A second AI review that looks at the RENDERED PAGE, not the diff — fed by the Playwright
+# artifacts we already upload, plus the PR's own preview namespaces. ADVISORY ONLY.
+#
+# WHY THIS PLAN EXISTS
+# Today `ai-review` reviews the DIFF. A design review of the live site on 2026-09-02 found
+# five defects that a diff cannot show and that end2end-ui/07-shipproven-landing.spec.ts did
+# not catch, because it asserts the PRESENCE OF TEXT, not rendered geometry:
+#   · "METERED · VIRTUAL KEYS" clipped by the Gateway box edge (consensus diagram)
+#   · "providers must agree" overflowing the Quorum box; "rules on the set" overflowing Meta-judge
+#   · the arrow leaving Meta-judge running off the panel edge
+#   · "MORE" truncated to "MOR" on the tier-staircase arrows
+#   · the top nav wrapping raggedly at 1440px (three items break to two lines, uneven baselines)
+# All five were found by a human taking screenshots. That is the thing to automate — same
+# shape as the recorder work: do it by hand, prove it finds real defects, then automate what
+# reproduces the manual result.
+#
+# ⭐ HOW THE REVIEW GETS AT THE ARTIFACTS — use the artifacts MCP, not raw bucket access.
+# Artifacts are addressed by GUID through artifacts-api and read via the artifacts MCP. That
+# is a CAPABILITY, not a credential: artifacts-api holds the GCS access server-side and the
+# caller just invokes a tool. This is proven — artifacts have been created under a GUID and
+# referenced from a Plan as a live test, and artifact-create-durability landed.
+#   · Do NOT hand-roll `gsutil` bucket reads, and do NOT invent a path convention.
+#   · Do NOT cite plans/agent-gcs-artifact-read.yaml as a blocker here. That Plan concerns an
+#     agent pod reading a bucket DIRECTLY with its own credentials — a different mechanism,
+#     and not on this path.
+#   · Because access is a tool call, this review may run as a spawned agent OR a pipeline
+#     task. Choose on fit, not on credentials.
+#
+# ⚠️ AND DO NOT READ CAPABILITY OUT OF PLAN HISTORY. Plan implementations are actively being
+# re-worked; issues get fixed locally or by later Plans, so a recorded phase (Failed,
+# Succeeded, Paused) is a record of one attempt, NOT a statement about what the system can do
+# today. Verify against the running service, or ask. Two corollaries that have already caught
+# people out: `Paused: true` is R5's authored default for every catalog Plan, and `AgentType`
+# is cluster-scoped so a "not in that namespace" caveat is void.
+#
+# WHAT IT REVIEWS — three inputs, which is the whole point
+#   1. THE ARTIFACTS already in GCS from end2end-ui: screenshots, plus a NEW structured
+#      JSON summary that step 1 adds.
+#   2. THE LIVE PREVIEW NAMESPACES for this PR — and there are TWO, one per cloud:
+#      leartech-ship-proven-website-pr<N>.jx.leartech.com and ...pr<N>.az.leartech.com.
+#      Fetching both means the review can DIFF THE TWO CLOUDS: divergent rendered output is
+#      itself a finding (an environment defect, not a code defect). Multi-cloud used as a
+#      verification signal at the review layer.
+#   3. THE DIFF, for context only — `ai-review` already owns code review; this must not
+#      duplicate it. Different job, different comment.
+#
+# ⭐ THE REVIEW HAS A SPECIFICATION TO REVIEW AGAINST (added 2026-09-04)
+# The design system is now published and sealed:
+#   artifact 781fbaf1-7d78-4ec1-a1e4-3f0a2496ed7a · label shipproven-web-design-system
+#   revision 1 · files DESIGN.md, motion-principles.html
+# That turns this review from TASTE into CONFORMANCE. Most design-system rules are
+# objectively checkable against a versioned contract, so they belong in Playwright, not in a
+# model prompt: is every rendered colour in DESIGN.md §1's token table, or did something
+# invent a hex? Is every diagram label at or above §2's type floors? Do motion timings match
+# §3? Are §4's four accessibility rules satisfied?
+# DESIGN.md sha256 74c9a05c915399dc2a16eb4174fd7cf7dd298acb39749528ea3596732b71743a — if a
+# read returns a different digest the spec has moved; re-read rather than trust a cache.
+# ⚠️ If the design artifact cannot be read, report that as a review finding and skip the
+# conformance checks — do NOT silently fall back to judging on taste and present it as
+# conformance. A review that quietly loses its baseline is worse than one that says so.
+#
+# ⚠️ DIVISION OF LABOUR — our own thesis, applied to our own pipeline.
+# Do NOT ask a model to do what a deterministic check can do.
+#   · PLAYWRIGHT ASSERTS the objectively checkable (step 1): overflow, computed opacity,
+#     focusability, contrast ratios, axe violations, layout at fixed viewports.
+#   · THE MODEL JUDGES THE RESIDUE (step 2): hierarchy, legibility at video scale, whether a
+#     diagram earns its space, whether emphasis lands on the right element.
+# A deterministic failure should be reported as a fact, never as a model opinion.
+#
+# ⚠️ DO NOT FEED THE TRACE FILE TO A MODEL. A Playwright trace is a zip; a model cannot read
+# it usefully and it burns tokens for nothing. Traces stay in GCS for humans. The model gets
+# PNGs and the JSON summary, and the PNG set must be SELECTIVE (images are expensive).
+#
+# ⚠️ ADVISORY ONLY, AND THAT IS DELIBERATE. Visual input becomes a flake generator without
+# pinned viewports, frozen animation and thresholds. Exit 0 unconditionally. Prove the
+# false-positive rate before anyone proposes gating on it — the same discipline as the
+# classifier, which is still advisory with a documented TODO to gate at >=80% eval accuracy.
+#
+# VERIFICATION — auto-injected, NOT hand-authored (R23/R24).
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: shipproven-ui-visual-ai-review
+spec:
+  paused: true
+  steps:
+    - name: visual-evidence-specs
+      kind: pr
+      agentType: leartech-agent-ng
+      inputs:
+        name: visual-evidence-specs
+        repo: mikelear/leartech-ship-proven-website
+        branch: feat/visual-evidence-specs
+        goal: >-
+          Make end2end-ui produce evidence a reviewer can reason about, and fix the spec
+          hygiene while you are in there.
+
+          1. RETIRE THE INHERITED AUTH SPECS. This repo took the golden template's suite
+          verbatim and carries five specs for features a static marketing site does not
+          have: 02-login-flow, 03-fleet-status, 04-sign-out, 05-token-claims,
+          06-fleet-status-authenticated. Delete them. If any is currently passing, say so in
+          the PR description — a passing test for a feature that does not exist is worse than
+          no test, because it reads as coverage.
+
+          2. ADD THE TWO MISSING RESPONSIVE SPECS the golden template has and this repo
+          dropped: responsive-shell and responsive-nav. These are not optional hygiene — the
+          top nav currently WRAPS RAGGEDLY at 1440px ("How it works", "The data moat" and
+          "Why different" each break to two lines with uneven baselines), which is precisely
+          what responsive-nav exists to catch. Assert nav items do not wrap at 1280px and
+          1440px, and that the mobile nav is reachable at 375px.
+
+          3. ADD A NEW SPEC: end2end-ui/10-visual-evidence.spec.ts. It does the DETERMINISTIC
+          checks — every one of these is objectively true or false, so none of them needs a
+          model:
+            a. NO CLIPPED LABELS. For every element inside a diagram panel, assert
+               scrollWidth <= clientWidth + 1 and scrollHeight <= clientHeight + 1. This is
+               the check that catches all five overflow bugs above. Report the offending
+               selector and both measurements on failure.
+            b. REVEAL DEGRADES TO VISIBLE. Load the page with JavaScript DISABLED
+               (browser.newContext({ javaScriptEnabled: false })) and assert every element
+               carrying the reveal class has computed opacity 1. A blank card that still
+               passes a raw-HTML grep is the failure mode this exists to prevent.
+            c. MOTION CONTROLS. Any auto-playing element exposes a control that is present,
+               focusable and toggles it (WCAG 2.2.2).
+            d. REDUCED MOTION RESOLVES TO THE END STATE. With
+               { reducedMotion: 'reduce' } assert the gate strip paints ALL gates passed and
+               the verdict line reads authorised — never blank, never mid-sequence.
+            e. CONTRAST. Computed contrast of every text node against its rendered
+               background >= 4.5:1 (>= 3:1 for text over 18.66px bold / 24px regular).
+            f. AXE. Run @axe-core/playwright and record violations.
+            g. DESIGN-SYSTEM CONFORMANCE — read DESIGN.md from artifact
+               781fbaf1-7d78-4ec1-a1e4-3f0a2496ed7a and assert against it, so these stop
+               being opinions: (i) every colour appearing in computed styles is present in
+               §1's token table or the validated data-series palette — an unlisted hex is a
+               FAILURE naming the selector and the offending value (this is the #0B1220
+               class of defect, caught mechanically); (ii) every diagram label meets §2's
+               type floors (node name >= 16px, qualifier >= 12px, nothing under 10px);
+               (iii) the deck's non-data hexes #0F766E / #4C5B8A / #7A5C86 appear NOWHERE as
+               a chart series colour; (iv) §4's rules hold — reduced motion resolves to the
+               END state, auto-play past 5s exposes a pause control, reveal degrades with JS
+               disabled. Record each as a check id in visual-evidence.json so a failure is a
+               fact with a measurement, not a prompt.
+          FLAKE CONTROL IS PART OF THE SPEC: pin viewports to exactly 375, 768 and 1440;
+          freeze animation before any capture (add a style setting animation/transition
+          duration to 0, or seek to a fixed timestamp); never assert on a timing race.
+
+          4. EMIT THE EVIDENCE BUNDLE AND REGISTER IT THROUGH artifacts-api so it becomes a
+          first-class artifact addressed by GUID, not a bucket path. Keep uploading alongside
+          the existing end2end-ui artifacts, but the bundle itself must be create -> PUT ->
+          finalize through artifacts-api, so the review step (and any agent, and a human) can
+          fetch it by GUID with a manifest instead of guessing a prefix. Record the resulting
+          GUID in the PR comment so it is traceable from the PR. Contents:
+            · visual-evidence.json — a single structured file: { pr, sha, cloud, viewport,
+              checks: [{id, status, selector, expected, actual}], consoleErrors[],
+              failedRequests[], axeViolations[], contrastFailures[] }. This is the file the
+              reviewer parses.
+            · SELECTIVE screenshots only — full-page at 1440 and 375, plus one per diagram
+              panel. Deterministic filenames including the viewport. Do not screenshot every
+              step; images are expensive downstream.
+          Traces keep uploading as they do now, for humans. Commit
+          docs/WEBSITE-VISUAL-EVIDENCE.md describing the bundle contract, since step 2
+          depends on its shape.
+
+    - name: design-review-task
+      kind: pr
+      agentType: leartech-agent-go
+      dependsOn:
+        - visual-evidence-specs
+      inputs:
+        name: design-review-task
+        repo: mikelear/leartech-pipeline-catalog
+        branch: feat/design-review-task
+        goal: >-
+          Add a shared, ADVISORY pipeline task `tasks/design-review` that reviews the
+          RENDERED page — the counterpart to `tasks/ai-review`, which reviews the diff.
+          Pattern-match tasks/ai-review for structure, gateway usage, virtual keys and
+          metering; this must route model calls through the gateway exactly as it does. Read
+          docs/review-format.md first.
+
+          ARTIFACT ACCESS IS VIA THE ARTIFACTS MCP, BY GUID — artifacts-api holds the GCS
+          access, so this needs no bucket credential, no new GSA, no Workload Identity and no
+          terraform. Do not hand-roll `gsutil`. Because access is a tool call rather than a
+          mounted secret, implement this wherever it fits best (pipeline task alongside
+          tasks/ai-review, or a spawned agent) — the credential question does not constrain
+          the choice.
+
+          INPUTS, in this order of authority:
+            1. visual-evidence.json, fetched BY GUID through the artifacts MCP (contract in
+               the website repo's docs/WEBSITE-VISUAL-EVIDENCE.md). Deterministic results.
+            2. The selective screenshots from the same artifact bundle.
+            3. BOTH live preview namespaces for the PR:
+               <repo>-pr<N>.jx.leartech.com and <repo>-pr<N>.az.leartech.com. Fetch each and
+               DIFF THEM. Divergent rendered output between clouds is a finding in its own
+               right and must be labelled as an ENVIRONMENT defect, not a code defect — the
+               previous Plan's two staging environments returned byte-identical output, so
+               divergence is a real signal.
+            4. DESIGN.md from artifact 781fbaf1-7d78-4ec1-a1e4-3f0a2496ed7a — the
+               conformance baseline. Cite it by artifact id AND revision in the review, so a
+               finding is traceable to the exact spec version it was judged against.
+               motion-principles.html in the same artifact is the executable reference for
+               §3's primitives; prefer comparing behaviour to it over describing it.
+            5. The diff, for context only.
+
+          HOW IT REVIEWS — respect the division of labour:
+            · Deterministic failures from visual-evidence.json are reported AS FACTS, with
+              the selector and the measured values. Never soften one into a model opinion,
+              never re-litigate one with the model.
+            · The model is asked ONLY for the judgement calls a check cannot make: visual
+              hierarchy, legibility of diagram labels at video scale, whether a diagram earns
+              its space, whether emphasis lands on the intended element, and whether motion
+              reads as purposeful or decorative.
+            · Do NOT re-review code quality. `ai-review` owns that. Post a SEPARATE comment
+              so the two never collide.
+
+          PROVENANCE — every review must state what it judged and against what: the preview
+          URL(s) fetched, the evidence artifact id, and the design artifact id + revision.
+          DESIGN.md §5 requires "no number without provenance"; that rule applies to the
+          review enforcing it just as much as to the page being reviewed.
+
+          OUTPUT: a `leartech.review/v1` comment per docs/review-format.md — a fenced json
+          block with verdict + findings[{severity, fix, refs}] so it parses like every other
+          review in the estate, with the human-readable summary above it. Each finding cites
+          its evidence: a check id, a screenshot filename, or a preview URL.
+
+          ADVISORY: exit 0 UNCONDITIONALLY, whatever the verdict. It must be impossible for
+          this task to block a merge in this iteration. Log a line naming the run's
+          false-positive candidates so the rate can be measured before anyone proposes
+          gating. Include a `docs/` note stating the gating precondition explicitly, mirroring
+          the classifier's documented TODO.
+
+          COST DISCIPLINE: cap the number of images sent to the model, downscale to a
+          documented max dimension, and NEVER send a .zip trace — traces are for humans.
+          Record token spend for the run so cost per review is visible from day one.
+
+    - name: wire-design-review
+      kind: pr
+      agentType: leartech-agent-ng
+      dependsOn:
+        - design-review-task
+      inputs:
+        name: wire-design-review
+        repo: mikelear/leartech-ship-proven-website
+        branch: feat/wire-design-review
+        goal: >-
+          Wire the new shared task into this repo's pipeline as an advisory presubmit, the
+          same way the ai-review task is consumed — a `uses:` ref to
+          leartech-pipeline-catalog tasks/design-review under .lighthouse/jenkins-x/, running
+          AFTER end2end-ui so the artifacts and both preview namespaces exist.
+
+          It must be NON-BLOCKING: not a required status check, and its failure or absence
+          must never hold a merge. `plan-lint`-style blocking is explicitly out of scope for
+          this iteration.
+
+          Then verify the loop end to end on this PR itself and record it in the PR
+          description: the task ran, it found the artifacts in GCS, it fetched both preview
+          namespaces, and it posted a leartech.review/v1 comment. If it could not read the
+          bucket, say so plainly and do not paper over it with a partial review — a silent
+          give-up on unreadable artifacts is the exact failure that closed PR #7 on this repo
+          in August.
+
+          Finally, update docs/WEBSITE-DESIGN.md with a short section: what design-review
+          checks, what is deterministic versus model judgement, that it is advisory, and the
+          precondition for ever gating on it.
