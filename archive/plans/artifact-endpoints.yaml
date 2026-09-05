@@ -1,0 +1,217 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Cancelled, az=Paused
+# AgentRuns owned: gcp=1, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: artifact-endpoints
+  namespace: jx-staging
+spec:
+  command:
+    reason: rest-endpoints hand-rolled JWKS/JWT auth on a new go-jose dependency instead of leartech-go-common/pkg/auth,
+      after gcs-storage over-deleted internal/middleware/auth.go. Re-authoring the step goal to name the
+      shared auth library.
+    uid: cancel-auth-divergence-20260812
+    verb: cancel
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/gcs-storage
+      goal: "Add an internal/storage package implementing the artifact object layout on Google Cloud Storage\
+        \ using the official Go SDK (cloud.google.com/go/storage), authenticating via Application Default\
+        \ Credentials.\nSIGNING \u2014 key-based, on BOTH clusters. GOOGLE_APPLICATION_CREDENTIALS points\
+        \ at the mounted test-artifacts-gcs-key, which is a real service-account key carrying a private_key\
+        \ (verified on the live secret). storage.SignedURL therefore signs LOCALLY off that key: no GoogleAccessID\
+        \ to plumb, no SignBytes callback, no IAM signBlob round trip, and no Workload Identity involved.\
+        \ Let the SDK derive the signing identity from the credential \u2014 do NOT take a signer email\
+        \ from config, because a second source of truth can silently disagree with the mounted key.\n\
+        WHY THIS IS SPELLED OUT: a WI-federated token can read and write objects but CANNOT mint V4 signed\
+        \ URLs \u2014 signing needs a private key or signBlob. That was proved with a debug pod on the\
+        \ live cluster (WI reads succeeded, `sign-url` failed). So do NOT \"modernise\" this to keyless\
+        \ Workload Identity as a cleanup: it would break signing, and it is the exact trap this note exists\
+        \ to prevent. If a future initiative does go keyless, signing must move to the IAM signBlob API\
+        \ and the GSA needs roles/iam.serviceAccountTokenCreator on itself \u2014 out of scope here.\n\
+        Fail fast at startup if no usable credential is resolvable, rather than discovering it on the\
+        \ first presigned URL.\nCONFIG CONTRACT (fixed \u2014 the gitops overlay ALREADY sets these exact\
+        \ env vars, applied by hand before this Plan was promoted; read them by these exact names and\
+        \ do NOT add a step to write them): ARTIFACT_GCS_BUCKET and ARTIFACT_GCS_PROJECT. Fail fast at\
+        \ startup with a clear message if either is empty, rather than failing later on the first upload\
+        \ \u2014 that fail-fast IS the guard that the precondition was applied.\nLAYOUT (revisions are\
+        \ IMMUTABLE):\n  artifact/<guid>/<revision>/manifest.json\n  artifact/<guid>/<revision>/<files...>\n\
+        \  artifact/<guid>/latest              (mutable pointer only)\n\nMANIFEST fields: id (GUID), label,\
+        \ kind, target (optional), ttl, revision, producer (PER REVISION, not per artifact), publishedBy\
+        \ {client, subject}, files [{path, bytes, sha256}].\nREQUIRED BEHAVIOUR: - Allocate a GUID per\
+        \ artifact; `label` is the human-facing discovery key. - Writes create a NEW revision and MUST\
+        \ NEVER overwrite an existing one. If a\n  Plan consumed revision 3, the record of what it consumed\
+        \ has to survive \u2014\n  overwriting destroys the audit trail. Reject writes to a finalized\
+        \ revision.\n- Mint V4 signed URLs for upload (PUT) and download (GET). Bytes go direct to\n \
+        \ GCS and never through the service.\n- No public-readable path: artifacts are guidance consumed\
+        \ by Plans, never\n  published. Signed URLs only.\n- No database. The manifest IS the record;\
+        \ keep database.enabled false.\nISOLATE TESTING: unit tests against a fake/in-memory storage seam\
+        \ (interface + test double), covering GUID allocation, revision immutability (a write to a finalized\
+        \ revision is refused), multi-revision creation, manifest round-trip, and signed-URL generation.\
+        \ Runnable with `go test ./...` and NO real GCS bucket.\nCHART WORK IS PART OF THIS STEP \u2014\
+        \ without it the config contract is unreachable. Verified: charts/leartech-artifact-api has NO\
+        \ GCS values at all, and templates/deployment.yaml enumerates every env var explicitly (there\
+        \ is no generic extraEnv range), so an env var that the template does not name CANNOT appear no\
+        \ matter what the gitops overlay sets. The gitops overlay is applied by hand BEFORE this Plan\
+        \ runs (see PRECONDITION) and is INERT until this step lands the chart support, so match the pinned\
+        \ Helm value paths in the header EXACTLY \u2014 a mismatch leaves the service booting with empty\
+        \ config and crash-looping on the fail-fast. Specifically:\n  - values.yaml: add the gcs block\
+        \ from the header's pinned paths, defaults empty\n  - values.schema.json: add the matching properties,\
+        \ or Helm rejects the overlay\n  - templates/deployment.yaml: render ARTIFACT_GCS_BUCKET and\n\
+        \    ARTIFACT_GCS_PROJECT from those values; and when gcs.secretName is set,\n    mount that secret\
+        \ read-only and set GOOGLE_APPLICATION_CREDENTIALS to the\n    mounted path. Keep the mount CONDITIONAL\
+        \ on gcs.secretName rather than\n    always-on, so a preview/dev deployment with no GCS config\
+        \ still starts\n  - do NOT add an ExternalSecret for the GCS key. test-artifacts-gcs-key is\n\
+        \    ALREADY ESO-synced into jx-staging on the GCP cluster (present, 38d) and is\n    owned elsewhere\
+        \ \u2014 declaring a second ExternalSecret for the same secret\n    would create two writers of\
+        \ one object. Consume it, do not manage it.\n    Confirm it exists on the AKV cluster too before\
+        \ assuming parity; it was NOT\n    verifiable from the authoring session's kubeconfig\n\nLOGGING\
+        \ \u2014 follow the estate standard, do not invent a scheme. internal/logging already wires Hub/status/structured-logging-standard.md\
+        \ (zerolog, snake_case vocabulary, root logger stamping service/version/cluster). Add per-operation\
+        \ context via the zerolog fluent API: op, artifact_id, revision, label, request_id, tenant, outcome.\
+        \ Keep the chart at config.logFormat json \u2014 Promtail cannot parse ConsoleWriter. CARDINALITY\
+        \ IS THE TRAP: artifact_id is a GUID and revision is unbounded. These MUST stay JSON body fields\
+        \ and MUST NOT be promoted to Loki stream labels; stream labels stay service/namespace/cluster/env\
+        \ only. Promoting a GUID to a label is an unbounded-cardinality incident, not a style nit. Queries\
+        \ must work as `{app=\"leartech-artifact-api\"} | json | artifact_id=\"<guid>\"`.\nAlso remove\
+        \ the scaffold-inherited plan-api internals that artifacts do not need (internal/plans, internal/orcv1alpha1,\
+        \ internal/gates, internal/k8s) if nothing references them, so the repo stops implying CRD behaviour\
+        \ it has none of. Note /plans is currently MOUNTED and answering 401 on the live service, so this\
+        \ is a live surface being removed, not dead code. Done = PR merged (open via open_pr, drive gates\
+        \ green)."
+      name: gcs-storage
+      repo: mikelear/leartech-artifact-api
+    kind: pr
+    name: gcs-storage
+  - agentType: leartech-agent-go
+    dependsOn:
+    - gcs-storage
+    inputs:
+      branch: feat/rest-endpoints
+      goal: "Add the artifact REST endpoints on /api/v1, backed by internal/storage, and enforce scopes\
+        \ AT THE SERVICE.\nENDPOINTS:\n  POST   /api/v1/artifacts                 -> {id, revision, uploadURL,\
+        \ expiresAt}\n  POST   /api/v1/artifacts/{id}/revisions  -> new revision on an existing artifact\n\
+        \  POST   /api/v1/artifacts/{id}/finalize   -> validate + seal, returns manifest\n  GET    /api/v1/artifacts\
+        \                 -> list; filter by kind, label, target\n  GET    /api/v1/artifacts/{id}    \
+        \        -> manifest + signed download URLs\n                                              (accept\
+        \ a label as well as a GUID)\n\nAUTHZ \u2014 the load-bearing rule: enforce the caller's own audience\
+        \ and scope on EVERY request, regardless of caller. Never assume \"the MCP already checked\".\
+        \ leartechapi:artifact:read gates the GETs; leartechapi:artifact:write gates the POSTs. Derive\
+        \ tenant from the validated token claims and filter on it, so artifacts are isolated per tenant.\
+        \ There is deliberately NO publish scope.\nFINALIZE validates thinly and no more: manifest parses,\
+        \ every declared file exists in the object store, sizes are sane. Kind-specific validation is\
+        \ explicitly out of scope. A write to an ALREADY-FINALIZED revision returns 409.\nKeep api/openapi.yaml\
+        \ and the swaggo annotations in step so /openapi.json and /docs stay accurate, and the generated\
+        \ clients pick the endpoints up on release.\nISOLATE TESTING: handler unit tests with a fake storage\
+        \ seam and a fake token context, covering: 401 unauthenticated, 403 wrong scope, 403 wrong audience,\
+        \ 404 unknown id/label, 409 write to a finalized revision, second-revision creation via POST /{id}/revisions,\
+        \ and the happy paths. No real GCS, no real Hydra.\nLOGGING \u2014 the estate standard (Hub/status/structured-logging-standard.md),\
+        \ wired already by internal/logging: zerolog, snake_case, root logger stamping service/version/cluster.\
+        \ Per request add route, artifact_id, revision, scope_decision, tenant, request_id, outcome. The\
+        \ scope decision is the load-bearing one \u2014 an authz denial that logs nothing is undiagnosable,\
+        \ so log BOTH allow and deny with the scope that was required and the audience seen. NEVER log\
+        \ the token itself or any bearer value. CARDINALITY: artifact_id (GUID), revision and tenant stay\
+        \ JSON body fields and MUST NOT become Loki stream labels \u2014 labels stay service/namespace/cluster/env.\
+        \ Queries key off the body: `| json | artifact_id=\"<guid>\"`. Done = PR merged (open via open_pr,\
+        \ drive gates green)."
+      name: rest-endpoints
+      repo: mikelear/leartech-artifact-api
+    kind: pr
+    name: rest-endpoints
+  - agentType: leartech-agent-go
+    dependsOn:
+    - rest-endpoints
+    inputs:
+      branch: feat/mcp-tools
+      goal: "Wire internal/designserver's tools to the new artifact-api endpoints. The client, auth and\
+        \ audience plumbing already exist \u2014 do not reinvent them; the three-tier outbound behaviour\
+        \ (forward the caller's Bearer verbatim, RFC 8693 exchange when the audience differs, s2s only\
+        \ when there is no caller Bearer) must be preserved exactly as internal/planserver implements\
+        \ it, including the principle that the MCP NEVER widens authority beyond the caller's own.\nExisting\
+        \ tools to back: list_artifacts, get_artifact, create_artifact. Add finalize_artifact so a producer\
+        \ can seal a revision, since upload is a separate presigned PUT the MCP never proxies. Expose\
+        \ revision creation too, so a second revision can be added to an existing artifact.\ncreate_artifact\
+        \ must return the presigned uploadURL to the caller \u2014 bytes go direct to GCS over PUT and\
+        \ MUST NOT be proxied through MCP or the service.\nAlso register this server in the agent MCP\
+        \ catalog (leartech-automated-agent gate/agent/mcp_catalog.yaml is a SEPARATE repo \u2014 do not\
+        \ edit it here; note it in the PR description as a follow-up) so Plans can fetch artifacts referenced\
+        \ in a step goal.\nISOLATE TESTING: table tests using the existing fakes_test.go seam, asserting\
+        \ each tool maps to the right endpoint and that the forward/exchange/s2s tier selection is unchanged.\
+        \ Extend tokenexchange_test.go coverage to the artifact path. No real cluster, no real Hydra.\n\
+        LOGGING \u2014 use the existing mcplog seam (mcplog.ToolStart / call.Finish), which is what the\
+        \ current stubs already do; do not add a parallel logging path. Fields per tool call: tool, artifact_id,\
+        \ tier (forward | exchange | s2s), request_id, outcome. The TIER is the one that matters most\
+        \ \u2014 when a caller gets an unexpected 401/403 the first question is always which of the three\
+        \ outbound tiers was chosen, and that is invisible without it. CARDINALITY: artifact_id is a GUID\
+        \ \u2014 JSON body field only, never a Loki stream label. Never log the Bearer, exchanged or otherwise.\
+        \ Done = PR merged (open via open_pr, drive gates green)."
+      name: mcp-tools
+      repo: mikelear/leartech-mcp-servers
+    kind: pr
+    name: mcp-tools
+  - agentType: leartech-agent-go
+    dependsOn:
+    - rest-endpoints
+    - mcp-tools
+    inputs:
+      branch: feat/verify-roundtrip
+      goal: "WAIT FOR BOTH SERVICES, NOT JUST THIS REPO. Release verification is AUTO-INJECTED after each\
+        \ PR step (R23) rather than hand-authored, so this step depends on the PR steps directly and must\
+        \ wait for the rollouts itself. It spans TWO repos: rest-endpoints lands in leartech-artifact-api\
+        \ and mcp-tools lands in leartech-mcp-servers, and this step's own `repo` names only the former.\
+        \ Before ANY assertion below, poll until the released version of BOTH leartech-artifact-api AND\
+        \ leartech-mcp-servers is live on the target cluster(s), with a deadline, and FAIL (exit non-zero)\
+        \ if either is not. Waiting on artifact-api alone is the trap: the round trip is driven THROUGH\
+        \ the design MCP, so a stale leartech-mcp-servers would be exercised against new endpoints and\
+        \ fail for the wrong reason \u2014 a rollout race misreported as a broken artifact path. Verifying\
+        \ at merge time races both rollouts equally.\nDeterministically confirm the artifact path works\
+        \ end to end on jx-staging, on BOTH clusters. This is a verification step only \u2014 do NOT open\
+        \ a PR and do NOT modify the repo. FAIL (exit non-zero) if ANY assertion below fails; the verdict\
+        \ is this step's exit code, so reporting a failure while exiting 0 would wrongly pass the Plan.\n\
+        Assertions: - leartech-artifact-api /openapi.json returns 200 probed from INSIDE the\n  namespace\
+        \ (the service has no ingress by design).\n- An unauthenticated request to /api/v1/artifacts returns\
+        \ 401, and a token\n  carrying the wrong audience is rejected.\n- Via the design MCP: create_artifact\
+        \ returns a GUID plus a presigned upload\n  URL; a PUT of a small tokens.json to that URL succeeds;\
+        \ finalize_artifact\n  returns a manifest listing the file with a matching sha256.\n- get_artifact\
+        \ resolves the same artifact BY LABEL and returns a working signed\n  download URL whose bytes\
+        \ match what was uploaded.\n- A second revision is created via POST /api/v1/artifacts/{id}/revisions,\n\
+        \  uploaded and finalized; get_artifact can still retrieve revision 1 unchanged,\n  proving revisions\
+        \ are additive not destructive.\n- A write to an already-finalized revision returns 409, so immutability\
+        \ holds on\n  the revision path and not only on the initial revision.\n- Structured logs for the\
+        \ above appear in Loki with the request ids."
+      name: verify-roundtrip
+      repo: mikelear/leartech-artifact-api
+    kind: check
+    name: verify-roundtrip
+  - dependsOn:
+    - gcs-storage
+    kind: check
+    name: gcs-storage-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.gcs-storage.pr}
+      repo: mikelear/leartech-artifact-api
+      service: leartech-artifact-api
+  - dependsOn:
+    - rest-endpoints
+    kind: check
+    name: rest-endpoints-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.rest-endpoints.pr}
+      repo: mikelear/leartech-artifact-api
+      service: leartech-artifact-api
+  - dependsOn:
+    - mcp-tools
+    kind: check
+    name: mcp-tools-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.mcp-tools.pr}
+      repo: mikelear/leartech-mcp-servers
+      service: leartech-mcp-servers
+  triggeredBy: plan-catalog-internal-services

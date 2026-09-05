@@ -1,0 +1,73 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=3
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: go-converge-3
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/go-tasks-call-mk
+      goal: "Wire the Tekton Go tasks to the golden go/leartech-go.mk (already merged as #63) so CI and\n\
+        local `make` run the SAME lint/coverage code. Refactor tasks/go-lint/pullrequest.yaml and\ntasks/go-test/pullrequest.yaml\
+        \ to be SELF-CONTAINED: curl go/leartech-go.mk to /tmp and\nrun `make -f /tmp/leartech-go.mk lint`\
+        \ (go-lint) / `make -f /tmp/leartech-go.mk\ntest-coverage` (go-test), keeping the existing per-cluster\
+        \ PR-coverage sticky-comment in\ngo-test. SINGLE-SOURCE the golangci version: set ONE canonical\
+        \ version and use it for BOTH\nthe go-lint task step image tag AND (matched by the image step)\
+        \ the agent-go ARG \u2014 the\ncurrent mismatch (task golangci/golangci-lint:v2.11.4 vs agent-go\
+        \ 2.12.2) is the drift;\npick v2.12.2 and bump the task to it (or whichever the golden mk pins)\
+        \ so they agree.\nThe produced linter set must be IDENTICAL to today (no surprise new findings).\
+        \ Lean diff.\nIMPORTANT: the leartech-pipeline-catalog repo has NO PR CI pipelines \u2014 do NOT\
+        \ wait for\ngates. Open the PR, make sure the diff is correct + minimal, then STOP (it will be\n\
+        admin-merged). Do NOT poll for CI or the merge.\n"
+      name: go-converge-3-tasks
+      repo: leartech-pipeline-catalog
+    name: tasks
+    repo: mikelear/leartech-pipeline-catalog
+  - agentType: leartech-agent-go
+    dependsOn:
+    - tasks
+    inputs:
+      branch: feat/agent-go-lint-parity
+      goal: "Update leartech-agent-go/Dockerfile so the Go agent image matches CI lint exactly (this is\n\
+        the missing image fix \u2014 Angular got its chromium image #113, Go never got this). Set\nGOLANGCI_LINT_VERSION\
+        \ to the SAME canonical version the go-lint task now uses (the `tasks`\nstep; keep 2.12.2 if that's\
+        \ canonical) so agent-local lint == CI. Bake the golden\ngo/leartech-go.mk into the image (/usr/local/share/leartech-go.mk)\
+        \ so the agent can run\n`make -f /usr/local/share/leartech-go.mk lint|test-coverage` (merged config)\
+        \ offline.\nAdd a Renovate/comment link so the agent ARG + catalog task version bump together.\
+        \ Ensure\nyq + git + go + golangci-lint present. Lean diff. Open the PR and get BOTH clusters'\
+        \ gates\nGREEN, then STOP at AwaitingReview (do NOT chase the merge) \u2014 it releases a new\
+        \ agent-go so\nfuture Go agents reproduce CI lint locally.\n"
+      name: go-converge-3-image
+      repo: leartech-dockerfiles
+    name: image
+    repo: mikelear/leartech-dockerfiles
+  - agentType: leartech-agent-go
+    dependsOn:
+    - tasks
+    inputs:
+      branch: chore/adopt-golden-go-mk
+      goal: 'Adopt the golden go/leartech-go.mk in leartech-mcp-servers so LOCAL `make` reproduces CI
+
+        byte-for-byte. Replace the Makefile''s bare `lint:` (golangci-lint run ./...) + plain
+
+        pre-push `test` with targets that include/delegate to leartech-go.mk (curl/vendor from
+
+        catalog): `make lint` = merged config, `make test-coverage` = coverpkg+floor+delta. Verify
+
+        `make lint` + `make test-coverage` pass locally. Lean diff, no service behaviour change.
+
+        Open the PR + get BOTH clusters green, then STOP (do NOT chase the merge).
+
+        '
+      name: go-converge-3-adopt-mcp
+      repo: leartech-mcp-servers
+    name: adopt-mcp
+    repo: mikelear/leartech-mcp-servers
+  tenant: leartech
+  triggeredBy: human

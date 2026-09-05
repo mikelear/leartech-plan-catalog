@@ -1,0 +1,54 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: az
+# Phase: az=Paused
+# AgentRuns owned: az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: decom-orchestrator-cli-coupling
+  namespace: jx-staging
+spec:
+  paused: true
+  steps:
+  - agentType: leartech-agent-py
+    inputs:
+      branch: chore/drop-orch-cli-client
+      goal: "Remove this repo's client-side coupling to the leartech-orchestrator service, which is being\
+        \ decommissioned. Do this BEFORE the service is removed, so the CLI never ships a command pointing\
+        \ at a dead host.\nSCOPE IS EXACTLY ONE COMMAND. Confirm before you start: `grep -l orch_url app/agent_cli/commands/*.py`\
+        \ should return only chat.py and config_cmd.py. Every other CLI command (fire, runs, lessons,\
+        \ mcps, ops, roles, topology, health) targets the agent API and MUST keep working unchanged. If\
+        \ your grep disagrees with this goal, trust the grep and say so in the PR description.\nREMOVE:\
+        \ the `chat` command (app/agent_cli/commands/chat.py) and its registration; the `orch_url` field\
+        \ from ClusterConfig in app/agent_cli/config.py, including the hardcoded gcp-staging / az-staging\
+        \ defaults and the LEARTECH_ORCH_URL env branch; the orch_url handling in config_cmd.py; and the\
+        \ corresponding tests (test_agent_cli_chat.py, and the orch_url cases in test_agent_cli_config.py).\n\
+        MIND THE SCHEMA. ClusterConfig currently REQUIRES both orch_url and agent_url and raises if either\
+        \ is missing \u2014 this is a required-field removal, not a string delete. An existing user config\
+        \ file on disk that still carries orch_url must not start failing validation: make the loader\
+        \ tolerate and ignore a legacy orch_url key rather than rejecting it, and cover that with a test.\n\
+        DO NOT DELETE THE REPL SHAPE SILENTLY. chat.py is the closest working prior art for a terminal-shaped\
+        \ agent tool in this estate \u2014 prompt_toolkit history, rich markdown panels, resumable conversation_id,\
+        \ :save/:new/:cost slash commands, and the deliberate choice to print a one-line transport error\
+        \ rather than exit the session. In the PR description, record the commit sha at which it can be\
+        \ read, so a future session can `git show <sha>:app/agent_cli/commands/chat.py` rather than hunting\
+        \ through history for it.\nISOLATE TESTING: `uv run ruff format --check app gate tests`, `uv run\
+        \ ruff check app gate tests`, `uv run mypy app gate`, and `uv run pytest` must all pass. Assert\
+        \ specifically that the remaining CLI commands still resolve their URLs, and that a config file\
+        \ containing a legacy orch_url key loads without error.\nDone = PR merged (open via open_pr, drive\
+        \ gates green)."
+      name: drop-orch-cli-client
+      repo: mikelear/leartech-automated-agent
+    kind: pr
+    name: drop-orch-cli-client
+  - dependsOn:
+    - drop-orch-cli-client
+    kind: check
+    name: drop-orch-cli-client-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.drop-orch-cli-client.pr}
+      repo: mikelear/leartech-automated-agent
+      service: leartech-automated-agent
+  triggeredBy: plan-catalog-internal-services

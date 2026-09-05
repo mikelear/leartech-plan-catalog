@@ -1,0 +1,99 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=3
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: job-observation-proper
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    budgetIter: 14
+    inputs:
+      base: main
+      branch: agent/capture-pr-at-create-and-publish
+      description: "Capture the PR number authoritatively at creation (from `gh pr create`'s\nreturned\
+        \ URL \u2014 the source-of-truth moment) and PUBLISH it once, instead\nof re-deriving it post-hoc.\
+        \ Publish = AgentRun.status.targetPR (CRD, the\nexisting patch_pr_number) + a Maestro run.pr_opened\
+        \ event (push, for the\nInfra Agent / reactive consumers).\n"
+      goal: "CONTEXT: today the harness re-derives the PR number at end-of-run via\n`_resolve_pr_number`\
+        \ (gh pr list --head <branch>) \u2192 patch_pr_number \u2192\nAgentRun.status.targetPR. That's\
+        \ branch-scoped + correct, but it's a\nsecond call, not the birth-moment return. The clean design:\
+        \ capture the\nnumber FROM the `gh pr create` return (the pattern already exists in\ngate/tools/pr_back.py,\
+        \ which parses gh-pr-create stdout for the number)\nand publish it as the single source of truth,\
+        \ then FAN OUT.\n\n1. Capture-at-create: when the agent opens the PR, capture the PR number\n\
+        \   from the `gh pr create` return (reuse/extract pr_back.py's stdout\n   parse \u2014 a branch-scoped,\
+        \ authoritative capture; NOT a prose scrape).\n   Wire it so run_initiative learns the number\
+        \ at creation, not only via\n   the end-of-run `_resolve_pr_number`. KEEP `_resolve_pr_number`\
+        \ as a\n   FALLBACK (for resume pods + when the create-return isn't available).\n2. Publish once,\
+        \ authoritatively:\n   - AgentRun.status.targetPR via the existing `patch_pr_number` (CRD =\n\
+        \     source of truth; controller/reconciler read this).\n   - Emit a Maestro `run.pr_opened`\
+        \ event (push) carrying {run, tenant,\n     repo, pr_number, head_branch} so reactive consumers\
+        \ (Infra Agent,\n     chat) react without polling. Use the bus-common maestro client the\n   \
+        \  way the controller's maestro_producer does; gate on the maestro\n     config being present\
+        \ (no-op when unset, like the controller); NEVER\n     fail the run if the announce fails (best-effort,\
+        \ log + continue).\n3. Do NOT re-introduce any log/prose scrape (the deleted\n   _extract_pr_from_tool_result).\
+        \ The number comes from the create-return\n   or the branch-scoped _resolve_pr_number \u2014 nothing\
+        \ else.\nTests: create-return capture yields the right number; publish writes\ntargetPR + attempts\
+        \ the maestro announce; announce failure doesn't fail\nthe run; resume path still uses the fallback.\
+        \ All PR gates green incl\nreal ai-review. Open a PR.\n"
+      name: agent-capture-and-publish
+      repo: leartech-automated-agent
+    name: agent-capture-and-publish
+    repo: leartech-automated-agent
+  - agentType: leartech-agent-py
+    budgetIter: 12
+    inputs:
+      base: main
+      branch: agent/verify-pr-head-branch
+      description: "Defence-in-depth: refuse to resolve a step on a PR unless that PR's head\nbranch matches\
+        \ the AgentRun's headBranch \u2014 so a mis-captured targetPR\n(e.g. the #42 wrong-PR bug) can\
+        \ never false-resolve a step on an\nunrelated PR. get_pr_metadata now returns head_ref (mcp #24,\
+        \ deployed).\n"
+      goal: "CONTEXT: an AgentRun once captured targetPR=42 (a merged UNRELATED PR);\nthe fetcher would\
+        \ have false-resolved the step on #42. get_pr_metadata now\nreturns `head_ref` (the PR head branch\
+        \ name). Add the verify.\n1. internal/controller/pr_context_mcp.go: add `HeadRef string\n   json:\"\
+        head_ref\"` to the prMetadata struct; decodePRMetadata already\n   maps the content JSON, so head_ref\
+        \ flows through.\n2. FetchOutcome (or observeOutcome/deriveStepPhase caller): pass the\n   expected\
+        \ head branch = AgentRun.status.headBranch (available on the\n   PlanStepStatus as st.HeadBranch).\
+        \ Before accepting merged->Succeeded or\n   closed->Failed, if BOTH the expected headBranch AND\
+        \ the fetched\n   head_ref are non-empty AND they differ \u2192 do NOT resolve: return\n   PROutcomeOpened\
+        \ (step stays AwaitingReview) and log a clear WARNING\n   (\"pr_context head_ref %q != AgentRun\
+        \ headBranch %q \u2014 refusing to\n   resolve targetPR %s; possible mis-captured PR\"). Empty\
+        \ either side \u2192\n   current behaviour (backward compatible).\n3. Tests: matching branch \u2192\
+        \ resolves as before; mismatched \u2192 stays\n   AwaitingReview + warns; empty head_ref or empty\
+        \ headBranch \u2192 unchanged.\nDo NOT change depsReady/rollUp/AwaitingApproval semantics otherwise.\
+        \ All\nPR gates green incl real ai-review. Open a PR.\n"
+      name: controller-verify-pr-branch
+      repo: leartech-orchestrator-controller
+    name: controller-verify-pr-branch
+    repo: leartech-orchestrator-controller
+  - agentType: leartech-agent-py
+    budgetIter: 12
+    inputs:
+      base: main
+      branch: agent/platform-state-reconcile-query
+      description: "Give the Infra Agent a \"find drift\" surface: a platform_state MCP query\nthat surfaces\
+        \ reconcile candidates \u2014 mis-captured PRs, stuck steps, and\nnon-rolling-up plans \u2014\
+        \ so anomalies like the #42 mis-capture are\nQUERYABLE post-hoc, not just fixable.\n"
+      goal: "In the leartech-mcp-servers platform_state MCP server (the one exposing\nlist_plans/get_plan_state/list_runs/get_run_state),\
+        \ add a read-only\nreconcile query tool (e.g. `list_reconcile_candidates`) that returns, from\n\
+        the live Plan + AgentRun CRDs:\n1. PR-branch mismatches: AgentRuns whose status.targetPR's PR\
+        \ head branch\n   (via the pr_context get_pr_metadata head_ref) != the run's\n   status.headBranch\
+        \ \u2014 the #42 mis-capture signature. (If cross-calling\n   pr_context is too heavy, at minimum\
+        \ surface targetPR + headBranch per\n   run so a caller can cross-check.)\n2. Stuck steps: plan\
+        \ steps in AwaitingReview or AwaitingApproval whose\n   lastTransitionTime is older than a threshold\
+        \ (parameterise, default\n   ~2h).\n3. Non-rolling-up plans: plans in Running where all steps\
+        \ are terminal\n   (Succeeded/Failed) \u2014 i.e. should have rolled up but didn't.\nReturn a\
+        \ structured list {kind, plan, run/step, detail} per candidate.\nRead-only (no mutations). Follow\
+        \ the existing platform_state tool +\nauth (aud=leartech-mcp) patterns; register it in the server's\
+        \ tool list.\nTests + (if present) end2end. All PR gates green incl real ai-review.\nOpen a PR.\n"
+      name: platform-state-reconcile-query
+      repo: leartech-mcp-servers
+    name: platform-state-reconcile-query
+    repo: leartech-mcp-servers
+  tenant: platform
+  triggeredBy: job-observation-proper

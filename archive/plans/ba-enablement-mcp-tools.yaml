@@ -1,0 +1,62 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=2
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: ba-enablement-mcp-tools
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/deploy-health-tool
+      goal: "Add a `deploy_health` MCP tool to the k8sserver in leartech-mcp-servers.\n\nPURPOSE: let\
+        \ release-monitor and the future BA agent observe a\nDeployment's real health WITHOUT needing\
+        \ kubectl inside the agent Job.\nThe repo-factory hello-go7 release-monitor failed BLIND \u2014\
+        \ it had no\nkubectl, could not observe the Deployment, and fail-closed on \"could\nnot confirm\"\
+        \ instead of reporting the real cause. This tool closes\nthat gap (the MCP server has the cluster\
+        \ RBAC; the agent does not).\n\nCONTRACT:\n- Input: { service (string), namespace (string), cluster\
+        \ (optional) }\n- Output (structured): deploymentExists, desiredReplicas,\n  availableReplicas,\
+        \ readyReplicas, pods: [{name, phase,\n  waitingReason, waitingMessage}], healthy (bool), summary\
+        \ (string).\n- It MUST surface the CreateContainerConfigError / \"secret <name> not\n  found\"\
+        \ case as structured output (that is the exact hello-go7\n  failure this exists to make visible)\
+        \ \u2014 not swallow it.\n\nACCEPTANCE \u2014 ISOLATE TESTING: unit tests using a fake k8s clientset\n\
+        covering at least: healthy (>=1 available replica), unhealthy\n(CreateContainerConfigError / missing\
+        \ secret), and deployment\nnot-found. Runnable via `go test ./internal/k8sserver/...` and the\n\
+        mini MCP test client with NO real cluster.\n\nACCEPTANCE \u2014 LOGGING TO VERIFY: emit structured\
+        \ logs (tool name,\nargs, request/run id, outcome) consistent with the other tools, so a\ncall\
+        \ can be traced in Loki after the fact.\n\nOwn the PR end-to-end: take all Tekton gates green\
+        \ and merge.\n"
+      name: platform-state-deploy-health
+      repo: leartech-mcp-servers
+    name: deploy-health-tool
+    repo: mikelear/leartech-mcp-servers
+  - agentType: leartech-agent-go
+    dependsOn:
+    - deploy-health-tool
+    inputs:
+      branch: feat/plan-authoring-tools
+      goal: "Add `create_plan` and `amend_plan` MCP tools to the agentapiserver\n(agent_api) in leartech-mcp-servers.\
+        \ These are the BA agent's OUTPUT\nsurface \u2014 how an agent authors/modifies Plan CRDs (agent.leartech.io\n\
+        /v1alpha1 Plan).\n\nCONTRACT:\n- create_plan input: { name, namespace, tenant, steps: [ {name,\n\
+        \  agentType, repo, inputs{name,goal,...}, dependsOn?} ], hold?\n  (default TRUE) }. Creates a\
+        \ Plan CRD. Default hold=true PLUS a\n  `draft` annotation so an authored plan does NOT auto-execute\
+        \ \u2014 this\n  is essential so BA prove-it runs never trigger heavy downstream\n  work. Output:\
+        \ { planName, created }.\n- amend_plan input: { name, namespace, addSteps? / modifySteps? }.\n\
+        \  Modifies an existing Plan.\n- SCOPE NOTE: `remediates`/`resolves`/`Resolved` are a SEPARATE\n\
+        \  controller CRD change (the later BA slice) \u2014 do NOT add them here.\n  Use existing fields\
+        \ + the `draft` annotation only.\n\nACCEPTANCE \u2014 ISOLATE TESTING: unit tests using a fake\n\
+        controller-runtime client covering: create (lands with hold=true by\ndefault), amend, and validation\
+        \ errors (missing name/steps rejected).\nRunnable via `go test ./internal/agentapiserver/...`\
+        \ and the mini MCP\ntest client with NO real cluster.\n\nACCEPTANCE \u2014 LOGGING TO VERIFY:\
+        \ structured logs per call (tool, args,\nrequest/run id, outcome) queryable in Loki.\n\nOwn the\
+        \ PR end-to-end: take all Tekton gates green and merge.\n"
+      name: control-plane-plan-authoring
+      repo: leartech-mcp-servers
+    name: plan-authoring-tools
+    repo: mikelear/leartech-mcp-servers
+  tenant: leartech
+  triggeredBy: agent

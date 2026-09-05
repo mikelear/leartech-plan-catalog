@@ -1,0 +1,29 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=8
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: setup-mcp-design
+  namespace: jx-staging
+spec:
+  steps:
+  - name: artifact-api
+    use: bootstrap-authed-service
+    with:
+      name: leartech-artifact-api
+      namespace: jx-staging
+      templateRepo: mikelear/leartech-plan-api
+  - dependsOn:
+    - artifact-api
+    name: design-mcp
+    use: bootstrap-mcp-forwarder
+    with:
+      backendAudience: leartech-artifact-api
+      backendService: leartech-artifact-api
+      mcpName: design
+      scopes: leartechapi:artifact:read,leartechapi:artifact:write
+  tenant: leartech
+  triggeredBy: human

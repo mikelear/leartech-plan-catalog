@@ -1,0 +1,60 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: build-release-check-individual-actions
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    inputs:
+      branch: feat/release-check-individual-actions
+      goal: "Add FIVE individual, single-stage release-check actions to the leartech-agent-infra agent,\n\
+        alongside (NOT replacing) the existing composed `release-health-check` action. Each new action\n\
+        performs ONE stage's MCP check and returns a DETERMINISTIC Pass/Fail, so a release-check can be\n\
+        authored as a multi-step Plan (dependsOn chain) where each step passes/fails on its own MCP\n\
+        call \u2014 and a FAILED step hands the spawned BA Agent stage-specific \"where + how to remediate\"\
+        \ncontext (the composed verdict can't localize the failure).\n\nTHE FIVE ACTIONS (reuse the per-stage\
+        \ MCP logic already in gate/agent/release_health.py; the\nMCPs are already in the infra mcp_catalog\
+        \ \u2014 leartech-jx-release, leartech-tekton, leartech-k8s):\n1. `release-status`   \u2014 jx_release.release_status(repo)\
+        \ + leartech-tekton release PipelineRun\n                         outcome cross-check \u2192 PASS\
+        \ iff the release pipeline fired AND succeeded\n                         (requirePipelineSuccess).\
+        \ Inputs: repo.\n2. `promote-status`   \u2014 jx_release.promote_status(service, clusters) \u2192\
+        \ PASS iff jx-promote opened\n                         promote PRs on ALL requested clusters.\
+        \ Inputs: service, clusters.\n3. `verify-gate`      \u2014 the promote PRs' verify + qa-gate green\
+        \ + merged (jx_release promote_status\n                         detail / retest_promote for a\
+        \ single flake). PASS iff merged green.\n                         Inputs: service, clusters.\n\
+        4. `boot-status`      \u2014 leartech-k8s get_job_state / list_jobs_by_label \u2192 PASS iff the\
+        \ jx-boot Job\n                         for this release ran + succeeded per cluster. Inputs:\
+        \ service, clusters.\n5. `deploy-health`    \u2014 leartech-k8s deploy_health(service, namespace,\
+        \ cluster) \u2192 PASS iff >=1\n                         available replica per cluster (NO httpx,\
+        \ NO kubectl). Inputs: service, clusters.\n\nREQUIREMENTS:\n- DETERMINISTIC verdict per action\
+        \ (Python aggregates the MCP result \u2192 PASS/FAIL, same pattern as\n  release_health.py compute_release_health\
+        \ / STAGE_STATUS parsing). No LLM improvisation, no httpx.\n- Each action, ON FAIL, emits STRUCTURED\
+        \ stage-specific failure context \u2014 {stage, cluster, mcp,\n  what-was-expected, what-the-MCP-returned,\
+        \ remediation-hint} \u2014 that the escalation carries to the\n  BA Agent so the BA knows WHERE\
+        \ (which stage/area) and HOW to start. Wire the per-stage BA guidance\n  (extend the existing\
+        \ Maestro\u2192BA escalation the composed action already does, but scoped per stage).\n- KEEP\
+        \ the composed `release-health-check` action working exactly as-is (it stays the single-step\n\
+        \  option). Factor shared per-stage helpers so both the composed action and the 5 individual actions\n\
+        \  call the SAME MCP-check code (no divergence).\n- Update the ACTIONS section of the infra agent\
+        \ system prompt (infra_agent.py) to document the 5 new\n  actions + their inputs, mirroring the\
+        \ release-health-check entry.\n- Update the `release-shepherd` template (examples/templates/release-shepherd.yaml)\
+        \ so its 5 steps\n  use these now-real actions (release-status/promote-status/verify-gate/boot-status/deploy-health)\n\
+        \  in a dependsOn chain \u2014 it currently references them but they didn't exist; now they will.\n\
+        HEAVY LOCAL TESTS (this is agent-py \u2014 tests/test_infra_agent.py + tests/test_release_health.py):\n\
+        unit-test each action's PASS and FAIL paths with mocked MCP responses (release_status released/not,\n\
+        promote_status opened/missing, gate green/red, boot succeeded/failed, deploy_health healthy/unhealthy),\n\
+        assert the deterministic verdict + the structured BA failure context, and that the composed action\n\
+        still passes. Run the full suite locally (uv/pytest) before pushing. Open the PR, drive both clusters'\n\
+        gates green, STOP at AwaitingReview.\n"
+      name: build-release-check-individual-actions
+      repo: leartech-automated-agent
+    name: build-actions
+    repo: mikelear/leartech-automated-agent
+  tenant: leartech
+  triggeredBy: human

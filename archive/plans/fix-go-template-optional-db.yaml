@@ -1,0 +1,49 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-go-template-optional-db
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/optional-db-dependency
+      goal: "Make a freshly-scaffolded service from leartech-go-service-template deploy\nHEALTHY with\
+        \ NO secret provisioned \u2014 mirror leartech-angular-service-template,\nwhose chart has ZERO\
+        \ secretKeyRefs so `scaffold-pr` \u2192 deploy just works. Today\nthe Go template's chart hardcodes\
+        \ a MANDATORY database dependency:\n  env DATABASE_URL <- secretKeyRef {name: <svc>-db, key: DATABASE_URL},\n\
+        \  optional: false\nplus a DB migrations Job/init that needs the same secret. A brand-new service\n\
+        therefore lands in CreateContainerConfigError (0 ready, /health 503) until a DB\nsecret is created\
+        \ out-of-band. Verified on leartech-plan-api 2026-07-30.\n\nFIX \u2014 make the database OPT-IN\
+        \ via a values flag, default OFF:\n1. Add `database.enabled: false` (default) to values.yaml.\
+        \ Gate ALL DB wiring\n   behind it in the chart templates:\n   - the DATABASE_URL env block (only\
+        \ rendered when database.enabled),\n   - the migrations Job / init-container (only when database.enabled),\n\
+        \   - any DB-related configmap/secret plumbing.\n   When database.enabled is false, the rendered\
+        \ Deployment has NO secretKeyRef\n   at all (or, if a ref must remain for some reason, optional:\
+        \ true \u2014 never a\n   mandatory ref, per the preview-safety rule).\n2. Code side (cmd/server\
+        \ + internal/db + config): the service MUST start and\n   serve /health = 200 with NO database\
+        \ configured. Guard the pgx/db init so it\n   only connects when DATABASE_URL is set (or a `DATABASE_ENABLED`\
+        \ flag is on);\n   when absent, skip DB setup cleanly, do NOT crash, and keep /health green.\n\
+        \   A DB-backed service opts in by setting database.enabled: true + providing the\n   secret \u2014\
+        \ that path must still work exactly as before.\n3. Keep the migrations tooling available for services\
+        \ that DO use a DB (gated),\n   so this is purely making the dependency optional, not removing\
+        \ DB support.\n\nVERIFY (make this a real check, not a claim):\n- `helm template charts/leartech-go-service-template`\
+        \ with DEFAULT values must\n  render NO secretKeyRef with optional:false and NO migrations Job\
+        \ \u2014 add a\n  chart unit test asserting this (grep the rendered YAML), so the \"no mandatory\n\
+        \  secret\" property can't silently regress. Mirror how the angular template stays\n  secret-free.\n\
+        - `helm template` with `--set database.enabled=true` DOES render the DATABASE_URL\n  env + migrations\
+        \ Job (the opt-in path still works) \u2014 assert that too.\n- Add/extend a Go test that the server\
+        \ boots + /health returns 200 with no\n  DATABASE_URL set.\n\nDo not change unrelated template\
+        \ conventions (gin, swaggo, Dockerfile, JX3\npipeline). Own the PR + drive BOTH clusters' gates\
+        \ green THROUGH TO MERGE so the\nnext `scaffold-pr` inherits a secret-free, deployable default.\n"
+      name: fix-go-template-optional-db
+      repo: leartech-go-service-template
+    name: optional-db
+    repo: mikelear/leartech-go-service-template
+  tenant: leartech
+  triggeredBy: human

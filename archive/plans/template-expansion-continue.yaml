@@ -1,0 +1,31 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: template-expansion-continue
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/plan-template-expansion
+      goal: "CONTINUE existing work on branch feat/plan-template-expansion \u2014 PR #73 is ALREADY OPEN\n\
+        (the PlanTemplate CRD + use/with + expand() + tests). Do NOT redo it and do NOT open a new\nPR;\
+        \ push commits to THIS branch to update #73. The previous agent finished but left\naz/lint FAILING\
+        \ (and some checks pending).\nYOUR JOB: get PR #73 GREEN on both clusters.\n1. Read the az/lint\
+        \ failure (gh pr checks 73 / the tekton lint log) and FIX it \u2014 run the\n   golden go lint\
+        \ locally (make -f the golden go.mk lint) and match it exactly; also run\n   go test + go build\
+        \ + the new expand() unit/golden tests locally until green.\n2. Do NOT weaken the template-expansion\
+        \ logic or its tests to pass lint \u2014 fix the lint\n   issues properly (formatting/imports/lint\
+        \ rules).\n3. Commit + push to feat/plan-template-expansion (updates #73). Re-check until BOTH\
+        \ clusters'\n   gates are green. STOP at AwaitingReview. Do NOT merge.\n"
+      name: template-expansion-continue
+      repo: leartech-orchestrator-controller
+    name: continue
+    repo: mikelear/leartech-orchestrator-controller
+  tenant: leartech
+  triggeredBy: human

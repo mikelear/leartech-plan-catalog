@@ -1,0 +1,64 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Succeeded, az=Paused
+# AgentRuns owned: gcp=5, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: controller-spawn-conflict-handling
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/spawn-conflict-handling
+      goal: "Stop a single AgentRun spawn from producing two phase-transition audit lines and a reconcile\
+        \ error, without losing the evidence a failed write is meant to leave.\nCONFIRM THE PREMISE FIRST.\
+        \ In internal/controller/agentrun_controller.go compare spawn() with finish(). Confirm that finish()\
+        \ returns `ctrl.Result{Requeue: true}, nil` on `apierrors.IsConflict` and announces to Maestro\
+        \ only AFTER a successful `r.Status().Update`, while spawn() returns the conflict as an error\
+        \ and announces before its write. Confirm plan_controller.go has further IsConflict sites, so\
+        \ this discipline is the house pattern rather than a new idea. If spawn() has since been changed,\
+        \ STOP and report that in the PR description.\nMIRROR FINISH, DO NOT INVENT. In spawn(): treat\
+        \ a conflict on `r.Status().Update` as a clean requeue exactly as finish() does, and move the\
+        \ `announceRunStarted` call to after the successful write. Use finish() as the reference for both\
+        \ \u2014 same helper, same shape, same ordering \u2014 so the two paths read identically to someone\
+        \ comparing them.\nKEEP THE PRE-WRITE INTENT, AND MAKE THE LOG COUNTABLE. finish() documents why\
+        \ the audit line fires before the Update: it carries the intent even when the write errors. Preserve\
+        \ that. What must change is that a reader can tell an ATTEMPTED transition from a PERSISTED one\
+        \ \u2014 today they are byte-identical, so counting phase_transition lines in Loki double-counts\
+        \ every spawn. Choose the mechanism yourself and justify it in the PR description; a field on\
+        \ the record distinguishing the two, or a distinct line when the write conflicts, are both reasonable.\
+        \ The bar is that a LogQL query can count real transitions and get the true number, and that a\
+        \ failed write still leaves a trace.\nDO NOT PAPER OVER THE RE-ENTRY. A requeued reconcile currently\
+        \ re-enters spawn because it reads a stale AgentRun from the informer cache, and after a terminal\
+        \ finish it re-entered spawn on a COMPLETED run four times in one observed run. You are NOT being\
+        \ asked to fix the cache read \u2014 no APIReader re-read, no Pod informer, no new consistency\
+        \ layer. But say plainly in the PR description whether your change makes that re-entry harmless\
+        \ or merely quieter, because a future reader will otherwise assume the underlying race is gone.\n\
+        ISOLATE TESTING: table-driven unit tests with the controller-runtime fake client, in the style\
+        \ of agentrun_controller_test.go and phase_transition_logging_test.go. Cover: a conflict on the\
+        \ spawn status write produces a requeue and NOT a returned error; a conflicted spawn does not\
+        \ announce to Maestro; a successful spawn announces exactly once; and a conflicted-then-retried\
+        \ spawn yields exactly one countable persisted transition. Assert on emitted fields rather than\
+        \ on formatted message substrings. Non-negative coverage delta. No cluster required.\nLOGGING\
+        \ TO VERIFY: after this lands, one spawn produces one countable phase_transition record, a conflicting\
+        \ write leaves a distinguishable trace rather than a bare duplicate, and \"Reconciler error\"\
+        \ no longer fires for an ordinary optimistic-concurrency conflict. Include in the PR description\
+        \ the LogQL you would run to count transitions for a single run_id and confirm it now matches\
+        \ reality.\nDone = PR merged (open via open_pr, drive gates green)."
+      name: spawn-conflict-handling
+      repo: mikelear/leartech-orchestrator-controller
+    kind: pr
+    name: spawn-conflict-handling
+  - dependsOn:
+    - spawn-conflict-handling
+    kind: check
+    name: spawn-conflict-handling-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.spawn-conflict-handling.pr}
+      repo: mikelear/leartech-orchestrator-controller
+      service: leartech-orchestrator-controller
+  triggeredBy: plan-catalog-internal-services

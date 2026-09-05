@@ -1,0 +1,50 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: plan-4-orch-decommission
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    budgetIter: 10
+    inputs:
+      base: main
+      branch: agent/decommission-python-plan-runner
+      description: 'Finish the Python->Go migration decommission: remove the LEGACY pre-Go-controller
+        Python plan-runner/reconcile loops from leartech-orchestrator (the Go orchestrator-controller
+        now reconciles Plan CRDs; these Python loops are dead weight), confirm the plan DB is fully gone,
+        and tidy the list_plans upstream_shape_error. Orch is now the thin auth + LLM-chat layer that
+        reads plan/run state via the platform_state MCP; it should NOT run its own plan-runner or reconcile
+        loops.'
+      goal: "Decommission orch's legacy Python plan-runner + reconcile machinery. All PR gates green incl\
+        \ a real\nai-review verdict (az ollama PARSE_ERROR while gcp passes = admin-merge per the standing\
+        \ rule).\n\n## Remove (they predate the Go orchestrator-controller which now owns Plan reconciliation)\n\
+        - app.main: the \"dead plan-runner detector\" startup + any plan-runner Job spawning.\n- gate/orch/job_reconciler.py\
+        \ (reconciles component=plan-runner Jobs the Go controller never creates).\n- gate/orch/dead_runner_detector.py.\n\
+        - gate/orch/plan_reconcile.py (churns the old DB-plan / GH-PR reconcile).\n- Any wiring/imports/startup\
+        \ tasks + their tests. Remove the plan-runner chart bits if orch no longer\n  spawns plan-runner\
+        \ Jobs. Be precise: remove ONLY the legacy plan-runner/reconcile path.\n\n## Confirm the plan\
+        \ DB is gone\n- plan_reconcile still reads plan/PR data \u2192 verify whether the plan DB (plan_store\
+        \ / OrchestrationPlan\n  model / plan migrations / postgres plan tables) is actually removed.\
+        \ If residual, remove it now.\n- KEEP chat_store (conversations) + its migrations \u2014 that\
+        \ is NOT plan data.\n\n## Tidy list_plans shape-error\n- app/platform_state_client.py list_plans\
+        \ logs an `upstream_shape_error` (data comes through but the\n  response-wrapper parse fails).\
+        \ Fix the wrapper/shape handling so list_plans parses cleanly (match\n  the platform_state MCP\
+        \ list_plans payload shape).\n\n## Tests\n- No imports of the removed modules remain; orch boots\
+        \ without the plan-runner/reconcile loops (no\n  \"starting dead plan-runner detector\" / job_reconciler\
+        \ / plan_reconcile log lines). chat_store tests\n  pass. list_plans parses without upstream_shape_error.\
+        \ Coverage-delta within tolerance; pytest set -e.\n\n## Acceptance\n- Legacy Python plan-runner/reconcile\
+        \ loops GONE; plan DB confirmed removed (chat_store kept);\n  list_plans shape-error fixed; orch\
+        \ is thin (auth + chat + MCP reads only). All PR gates green\n  (gcp+az) incl real ai-review.\
+        \ Open a PR. Hold it (do not merge).\n"
+      name: orch-decommission-python-runner
+      repo: leartech-orchestrator
+    name: orch-decommission-python-runner
+    repo: mikelear/leartech-orchestrator
+  tenant: platform
+  triggeredBy: session-plan-4-orch-decommission-2026-07-19

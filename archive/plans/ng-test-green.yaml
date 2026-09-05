@@ -1,0 +1,59 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=2
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: ng-test-green
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: feat/agent-ng-headless-chromium
+      goal: "Add a headless browser to leartech-agent-ng/Dockerfile so the Angular agent can run the\n\
+        unit test suite locally (Karma needs Chromium; confirmed live the image has NONE \u2014\nchromium/chrome\
+        \ MISSING, CHROME_BIN unset \u2014 so `ng test` is impossible and unit-test bugs\nescape to CI,\
+        \ e.g. portal PR #2). Mirror what the CI ng-test task provides\n(tasks/ng-test/pullrequest.yaml:\
+        \ chromium + nss + freetype + harfbuzz + fonts,\nCHROME_BIN, --no-sandbox --disable-gpu --disable-dev-shm-usage).\n\
+        - The base is DEBIAN slim (not alpine), so install via apt: `chromium` (Debian path is\n  /usr/bin/chromium),\
+        \ plus `libnss3`, `fonts-freefont-ttf` (and any libs chromium-headless\n  needs: libgbm1, libasound2,\
+        \ etc. \u2014 install the minimal set that makes headless run).\n  Keep the DL3008 per-line hadolint\
+        \ suppression style already used in the repo; clean apt\n  lists.\n- Set `ENV CHROME_BIN=/usr/bin/chromium`\
+        \ and\n  `ENV CHROMIUM_FLAGS=\"--no-sandbox --disable-gpu --disable-dev-shm-usage\"` (Angular/Karma\n\
+        \  ChromeHeadlessNoSandbox launcher reads CHROME_BIN; the --no-sandbox flag is required in\n \
+        \ the unprivileged agent container).\n- VERIFY in a RUN layer: `chromium --version` succeeds.\
+        \ Note the image runs as USER agent \u2014\n  ensure the browser works non-root headless with\
+        \ --no-sandbox.\nKeep the diff lean (browser only; do not change node/CLI versions). Own the PR,\
+        \ drive BOTH\nclusters green THROUGH TO MERGE so a new leartech-agent-ng image releases (pullPolicy=Always\n\
+        \u2192 next ng Job picks it up). Note the released version in the PR.\n"
+      name: ng-test-green-browser
+      repo: leartech-dockerfiles
+    name: browser
+    repo: mikelear/leartech-dockerfiles
+  - agentType: leartech-agent-py
+    inputs:
+      branch: feat/ng-prepush-run-unit-tests
+      goal: "Update gate/agent/lessons/catalog/pre-push-validation.md so Angular agents reproduce the\n\
+        CI unit `test` gate locally (now that leartech-agent-ng will ship Chromium). Today the\nAngular\
+        \ quick-ref lists `ng test --watch=false` but the agent had no browser so it never\nran \u2014\
+        \ unit-test bugs shipped to CI. Change the Angular guidance to:\n- Run `npm ci --legacy-peer-deps`\
+        \ (fallback `npm install --legacy-peer-deps`) then\n  `npm test` (the repo's test script already\
+        \ targets `--watch=false --code-coverage\n  --browsers=ChromeHeadlessNoSandbox`). CHROME_BIN is\
+        \ now set in the image.\n- After tests pass, enforce the SAME 60% floor CI does: parse the emitted\n\
+        \  coverage/**/lcov.info (sum LF/LH) and require total \u2265 COVERAGE_THRESHOLD (default 60.0);\n\
+        \  do NOT push if unit tests fail OR coverage is below the floor.\n- Prefer the repo's npm scripts\
+        \ / project-local Angular CLI (via npm/npx) over the image's\n  GLOBAL `ng` (global CLI 18.x may\
+        \ not match an ng20 app) for lint/build/test.\n- IMPORTANT SCOPE: this is the DETERMINISTIC unit\
+        \ `test` gate only. Keep end2end-ui\n  (Playwright) as an ITERATIVE, skip-pre-push check \u2014\
+        \ it is the preview look-and-feel\n  feedback loop where multiple PR pushes are expected and wanted;\
+        \ do NOT tell the agent to\n  gate pushes on end2end-ui locally.\nCross-reference the Go single-source\
+        \ note if useful. Lean diff. Own the PR, drive BOTH\nclusters green THROUGH TO MERGE.\n"
+      name: ng-test-green-lesson
+      repo: leartech-automated-agent
+    name: lesson
+    repo: mikelear/leartech-automated-agent
+  tenant: leartech
+  triggeredBy: human

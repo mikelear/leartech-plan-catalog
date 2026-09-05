@@ -1,0 +1,37 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-mcpfwd-failclosed
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/plan-forwarder-write-authz
+      goal: "Continue on the EXISTING branch feat/plan-forwarder-write-authz (PR #47). ai-review\nflagged\
+        \ a CRITICAL fail-open security issue \u2014 fix it fail-CLOSED, plus the yellow nits:\n\n1. CRITICAL\
+        \ (internal/planserver/tools.go:~310): authorizeRead/authorizeWrite currently\n   FAIL OPEN when\
+        \ auth claims are absent from context (a documented dev/test bypass).\n   This is a fail-open\
+        \ posture \u2014 if auth middleware is misconfigured/skipped, plan tools\n   (incl create_plan)\
+        \ become unauthorized-accessible. Make them FAIL-CLOSED: when claims\n   are absent \u2192 DENY\
+        \ (return the auth error / 401-equiv), never allow. If a local-dev\n   bypass is genuinely needed,\
+        \ gate it behind an EXPLICIT env flag (e.g.\n   MCP_AUTH_DEV_BYPASS) that defaults to OFF/false,\
+        \ and fail-closed in every other case\n   (never bypass silently on missing claims). This mirrors\
+        \ the estate's fail-closed\n   auth standard (go-common Middleware). \n2. YELLOW (tools.go:~312\
+        \ and ~115): wrap returned errors with context using\n   fmt.Errorf(\"...: %w\", err) per Go standards\
+        \ instead of returning bare/APIError\n   directly where flagged.\n\nAdd/extend a unit test proving\
+        \ authorizeWrite + authorizeRead DENY when claims are\nabsent (fail-closed), and ALLOW with a\
+        \ valid claim carrying the write scope / role.\nKeep the diff minimal, do NOT change the audience/scope/role\
+        \ names (match auth-foundation:\nleartechapi:mcp:write, platform_admin). Own PR #47, drive BOTH\
+        \ clusters' gates GREEN\n(ai-review PASS this time) THROUGH TO MERGE.\n"
+      name: fix-mcpfwd-failclosed
+      repo: leartech-mcp-servers
+    name: failclosed
+    repo: mikelear/leartech-mcp-servers
+  tenant: leartech
+  triggeredBy: human

@@ -1,0 +1,56 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Failed, az=Paused
+# AgentRuns owned: gcp=2, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: controller-ba-agent-default-sa
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/ba-agent-default-sa
+      goal: "Stop the BA AgentType depending on a ServiceAccount that belonged to the decommissioned Python\
+        \ agent chart, so that orphaned object can be deleted.\nCONFIRM THE PREMISE FIRST. In charts/leartech-orchestrator-controller/values.yaml\
+        \ find the `leartech-agent-ba` entry under `agentTypes.defaults` and confirm it sets `serviceAccountName:\
+        \ leartech-automated-agent-job-runner`. Confirm templates/agenttypes.yaml renders serviceAccountName\
+        \ with `| default $.Values.agent.serviceAccount`, and that `agent.serviceAccount` is `default`.\
+        \ If any of that has changed, STOP and report it in the PR description rather than building on\
+        \ a stale premise.\nTHE CHANGE IS A DELETION. Remove the `serviceAccountName` line from the leartech-agent-ba\
+        \ entry so it falls through to the chart default, exactly as leartech-agent-go, -py, -ng and -rust\
+        \ already do. Do NOT add a replacement ServiceAccount, do NOT add RBAC, and do NOT set `serviceAccountName:\
+        \ default` explicitly \u2014 the fallback already produces that, and an explicit value would make\
+        \ BA look deliberately different from its four siblings when it is not.\nLEAVE THE OTHERS ALONE.\
+        \ leartech-agent-infra-go has its own dedicated SA (templates/agent-infra-go-rbac.yaml) because\
+        \ it makes read-only Kubernetes calls in-process; that is a real requirement and must not be swept\
+        \ up here. Do not change `agent.serviceAccount`, and do not touch any other AgentType entry.\n\
+        WHY NOT A DEDICATED SA \u2014 SAY IT IN THE PR. The BA agent is currently a proof that the path\
+        \ exists and works, not a workload with distinct access needs. If later work gives it real requirements,\
+        \ that work can introduce the SA with a stated justification. Write one line to that effect so\
+        \ a future reader does not \"restore\" a dedicated SA believing something was lost.\nISOLATE TESTING:\
+        \ a chart-render test in the style of the existing chart_agenttype_*_test.go files, asserting\
+        \ that the rendered leartech-agent-ba AgentType has serviceAccountName \"default\", and that leartech-agent-infra-go\
+        \ still has its own. Assert on the rendered value rather than on the absence of a line in values.yaml,\
+        \ so the test covers the behaviour and not the spelling. Non-negative coverage delta. No cluster\
+        \ required.\nVERIFY IN LOKI AFTER MERGE: nothing changes at runtime until the chart is promoted\
+        \ and boot applies it, so do not expect a signal from this run. State in the PR description what\
+        \ an operator should check once it lands \u2014 that the rendered AgentType shows the default\
+        \ SA \u2014 and note that deleting serviceaccount/leartech-automated-agent-job-runner is an operator\
+        \ step AFTER that, not part of this PR.\nDone = PR merged (open via open_pr, drive gates green)."
+      name: ba-agent-default-sa
+      repo: mikelear/leartech-orchestrator-controller
+    kind: pr
+    name: ba-agent-default-sa
+  - dependsOn:
+    - ba-agent-default-sa
+    kind: check
+    name: ba-agent-default-sa-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.ba-agent-default-sa.pr}
+      repo: mikelear/leartech-orchestrator-controller
+      service: leartech-orchestrator-controller
+  triggeredBy: plan-catalog-internal-services

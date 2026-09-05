@@ -1,0 +1,38 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: agent-port-pipeline-to-mcp
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    budgetIter: 10
+    inputs:
+      base: main
+      branch: agent/port-pipeline-to-mcp
+      goal: "Migrate the agent's in-process pipeline shim (gate/mcp_servers/pipeline_server.py) to the\
+        \ real remote MCP. The Go leartech-mcp-servers `jx3_flow` server (mounted at /mcp/jx3_flow) now\
+        \ exposes the equivalent PR-check tools: list_pr_checks, wait_for_terminal, wait_for_first_failure_or_all_pass\
+        \ (VERIFIED live on the deployed MCP 0.0.28). Do the port, mirroring how tekton was ported in\
+        \ the just-merged agent/port-tekton-to-mcp (PR #150): (1) In gate/mcp_servers/remote.py, add to\
+        \ REMOTE_MCPS: 'leartech-jx3-flow' -> '/mcp/jx3_flow' (so build_remote_mcp_servers registers it\
+        \ as an authed remote MCP alongside leartech-pr-context and leartech-tekton). (2) In gate/agent/main.py\
+        \ AND gate/agent/initiative.py, update MCP_ALLOWED_TOOLS: replace the mcp__leartech-pipeline__*\
+        \ entries (list_pr_checks, wait_for_terminal, wait_for_first_failure_or_all_pass) with mcp__leartech-jx3-flow__*\
+        \ names, and REMOVE the in-process build_pipeline_server() entry from the mcp_servers dict (+\
+        \ its import). Note pipeline_server.py has a mock-swap (build_pipeline_server returns the mock\
+        \ when LEARTECH_MOCK_PIPELINE_SCENARIO is set) \u2014 check gate/mcp_servers/__init__.py; preserve\
+        \ the mock path ONLY if tests depend on it, otherwise remove it too and update those tests. (3)\
+        \ DELETE gate/mcp_servers/pipeline_server.py and its tests. Do NOT touch criteria_server.py, artifacts_server.py,\
+        \ tekton (already ported), or agent_local.py. (4) Run the full test suite green (uv run pytest).\
+        \ Ruff + mypy clean. Open the PR via the open_pr MCP tool (namespace=$AGENT_RUN_NAMESPACE).\n"
+      name: port-pipeline-shim-to-remote-mcp
+      repo: leartech-automated-agent
+    name: port-pipeline-shim-to-remote-mcp
+    repo: mikelear/leartech-automated-agent
+  triggeredBy: mcp-shim-migration-phase-2b-pipeline

@@ -1,0 +1,97 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Cancelled, az=Paused
+# AgentRuns owned: gcp=1, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: agent-run-recorder-core
+  namespace: jx-staging
+spec:
+  command:
+    reason: 'step targetPR=1300 belongs to jx-build-cluster-akv and 404s in this step repo; PR #1 merged
+      and reviewed manually'
+    uid: 0af56056-ef1f-47fe-8286-ead6817f5d13
+    verb: cancel
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/recorder-core
+      goal: "Build the per-run recorder's deterministic half: find finished Dev Agent runs, build a record\
+        \ for each, and commit it to the corpus. No model call and no PR writes in this change.\nCONFIRM\
+        \ THE PREMISE FIRST. This repo currently holds only a README; read it, it states the intended\
+        \ shape. Then read mikelear/leartech-code-audit, which is this estate's existing scheduled-analysis\
+        \ service, and follow its structure \u2014 app/, Dockerfile, charts/, .lighthouse, with the CronJob\
+        \ deployed from this repo's own chart rather than from GitOps. Confirm mikelear/leartech-agent-run-reports\
+        \ exists and is empty. If any of that is not as described, STOP and report it.\nDISCOVERY, WITHOUT\
+        \ LOKI. A finished AgentRun already carries most of what is needed: spec.agentType, spec.repo,\
+        \ spec.inputs, spec.budgetIter, and status.phase / iteration / jobName / startTime / completionTime,\
+        \ plus the labels agent.leartech.io/plan and agent-leartech-io/plan-step. Read them from the cluster.\
+        \ Note that status.iteration against spec.budgetIter is how you tell a run needed respawns \u2014\
+        \ record it.\nA RUN CAN HAVE MORE THAN ONE POD. ENUMERATE THEM ALL. The Job retries on failure,\
+        \ so one AgentRun can have several pods, and taking the first one silently analyses a single attempt\
+        \ as though it were the run. That happened while writing these briefs: a run was recorded as 240\
+        \ calls / 241 turns / $29.24 from `-l job-name=... {.items[0]}`, when a second pod had run for\
+        \ a further 21 minutes.\nRead every pod for the job, label each attempt, and report the attempt\
+        \ count. And keep it SEPARATE from AgentRun.status.iteration: a Job backoff retry and a controller\
+        \ respawn are different mechanisms, and only the respawn moves that counter. In the observed run,\
+        \ iteration stayed at 1 across two pods \u2014 accurate and deeply misleading.\nCOST MAY BE GENUINELY\
+        \ UNKNOWABLE, AND MUST SAY SO. cost_usd and turns appear only in the run_end record, which a killed\
+        \ attempt never writes. In the observed run attempt 2 was terminated by stop-on-merge and emitted\
+        \ no run_end, so the total is above the recorded figure by an unmeasured amount. Report the per-attempt\
+        \ figures you have, the attempts that produced none, and DO NOT sum them into a total that looks\
+        \ complete. A confident subtotal is worse than an explicit gap.\nTHE AGENT'S EXIT CODE IS NOT\
+        \ THE RUN'S OUTCOME. In the observed run the agent reported exit_code=1 and verdict blocked_or_unfinished\
+        \ while the AgentRun phase was Succeeded and the PR had merged \u2014 the controller stopped an\
+        \ overrun agent that could not see its own PR merge. Record both, and take the AgentRun phase\
+        \ plus the controller's message as authoritative. A record keying on the agent's self-verdict\
+        \ would have called that run a failure.\nIDEMPOTENT WITHOUT A STATE STORE. One record per run\
+        \ at runs/<utc-date>/<run-id>.json in the corpus; if it exists, skip. Do not add a watermark file\
+        \ or a database. Bound discovery by Loki's 720h retention, since an older run cannot be reconstructed\
+        \ \u2014 and SAY in the run's own log how many runs were skipped as too old, rather than silently\
+        \ ignoring them.\nTHE AGGREGATES COME FROM run_report OVER MCP. Do not reimplement the arithmetic\
+        \ here and do not try to import internal/lokiserver \u2014 Go's internal/ rule forbids it from\
+        \ another module. If run_report is not yet available, STOP and report that; do not write a private\
+        \ copy of it that will then diverge.\nPROVENANCE IS THE POINT OF THE RECORD. Derive the prompt\
+        \ that actually ran: agentType to AgentType.spec.image to the tag, to the git tag v<tag>-{az,gcp},\
+        \ to the commit, to a permalink for docs/agent-system-prompt.md at that commit, plus its sha256.\
+        \ Without that link a behaviour change cannot be attributed to a prompt change, which is the entire\
+        \ reason the corpus exists.\nRECORD HOW MUCH OF THE RUN WAS ACTUALLY READ. run_report reports\
+        \ both a broad line count for the run's pod and the count its structured query parsed; carry both\
+        \ into the record along with the difference. For the baseline run those numbers are 980 and 461\
+        \ \u2014 more than half the output is invisible to a `| json` query, and a record that quietly\
+        \ asserts 461 is the run is worse than one that says it read 461 of 980. Coverage of its own input\
+        \ is part of the record, not a footnote.\nABSENT IS NOT ZERO. Every field that can be genuinely\
+        \ unavailable must render differently from one that is genuinely zero \u2014 a prompt permalink\
+        \ that could not be derived, a source that logged nothing, a run past retention. An empty value\
+        \ that reads as a fact is worse than a missing one.\nJSON AND MARKDOWN FROM ONE SOURCE. Write\
+        \ runs/<utc-date>/<run-id>.json and .md. The JSON is authoritative and the markdown is a rendering\
+        \ of it \u2014 generate both from the same in-memory value so they cannot disagree. Commit to\
+        \ main of the corpus repo; never push to any PR branch, which jx deletes after merge.\nNEVER FAIL\
+        \ A PLAN, BUT NEVER BE SILENT. Exit zero whatever happens. Log every failure at ERROR, and if\
+        \ there were runs to record and none were recorded, say so explicitly \u2014 a recorder that writes\
+        \ nothing and exits zero is the same defect as the release step that swallowed a missing CronJob\
+        \ for months.\nRBAC EXPLICITLY IN THE CHART. It reads agentruns, plans and agenttypes. Declare\
+        \ exactly that and no more. A forbidden read in this estate has previously produced a 500 for\
+        \ an entire webhook rather than a clean failure, so do not rely on a not-found path.\nISOLATE\
+        \ TESTING: table-driven Go tests, no cluster and no network \u2014 fake the cluster reads and\
+        \ the MCP call the way the repo's dependencies allow. Cover: discovery skipping an already-recorded\
+        \ run; a run past retention being reported as skipped rather than dropped; absent versus zero\
+        \ for every field that can be absent; the JSON and markdown agreeing because they share a source;\
+        \ and a failure in every external call still exiting zero WITH an error log. Non-negative coverage\
+        \ delta.\nDone = PR merged (open via open_pr, drive gates green)."
+      name: recorder-core
+      repo: mikelear/leartech-agent-run-recorder
+    kind: pr
+    name: recorder-core
+  - dependsOn:
+    - recorder-core
+    kind: check
+    name: recorder-core-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.recorder-core.pr}
+      repo: mikelear/leartech-agent-run-recorder
+      service: leartech-agent-run-recorder
+  triggeredBy: plan-catalog-internal-services

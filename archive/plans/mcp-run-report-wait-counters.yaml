@@ -1,0 +1,89 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Succeeded, az=Paused
+# AgentRuns owned: gcp=5, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mcp-run-report-wait-counters
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/run-report-wait-counters
+      goal: "Make run_report's wait-tool counters count the wait calls the agent actually makes, so the\
+        \ wait ratio stops reading zero.\nCONFIRM THE PREMISE FIRST. In internal/lokiserver/runreport.go\
+        \ read waitFailFastTool and waitFullTerminalTool and the `case` that matches them, then find a\
+        \ real emitted tool_call record for run agent-log-advertised-tools-log-advertised-tools and compare\
+        \ the tool name. The constants are short; the agent emits the prefixed form. If the code already\
+        \ matches the prefixed form, STOP and report that.\nTHE REAL TASK IS TO MAKE THIS CLASS OF FAILURE\
+        \ LOUD, NOT TO FIX TWO STRINGS. Every defect found in this tool so far is the same species: the\
+        \ reader INFERS meaning from strings the emitter never promised. isError() guessed at `level`.\
+        \ isMCP() guessed at a `server` field. isTurn() guessed at event names its own comment admitted\
+        \ were undocumented. The wait counters guessed at a name form. Attempts guessed pods by substring.\
+        \ Six symptoms, one missing contract \u2014 and every one returned a plausible number rather than\
+        \ an error.\nSo fix the strings, and then make the next drift impossible to miss:\nCOUNT WHAT\
+        \ YOU COULD NOT CLASSIFY, AND PUT IT IN THE REPORT. Every classification in this tool is a decision\
+        \ that can silently fail to match. Track the residual and surface it: tool_call records whose\
+        \ tool matched no known wait tool; records whose error state could not be determined; structured\
+        \ lines that parsed but carried no recognised event. A field reading \"9 fail-fast, 1 full-terminal,\
+        \ 0 unclassified\" is verifiable; \"0 fail-fast, 0 full-terminal\" is not, and is what shipped.\
+        \ Had this existed, all six earlier defects would have announced themselves on their first run.\n\
+        CENTRALISE THE VOCABULARY IN ONE PLACE. The tool-name forms, event names, error signals and field\
+        \ names it depends on are a contract with leartech-automated-agent's obslog/tool_logging. Put\
+        \ them in one declared set with the emitter named alongside each, so the next reader does not\
+        \ rediscover them by grepping, and so a mismatch is one edit in one place rather than a hunt.\
+        \ State in the PR description where that lives and what it covers.\nPREFER READING A FACT THE\
+        \ EMITTER STATES OVER DERIVING IT. Where the agent already emits the answer, use it: `ok:false`\
+        \ is the error signal, `run_end.turns` is the turn count, the full prefixed name is the tool identity.\
+        \ Do NOT re-derive any of those from level strings, event-name guesses or prefixes when the emitter\
+        \ says it outright. If a needed fact is genuinely not emitted, say so in the PR description \u2014\
+        \ that is a change for the emitter's repo, not a heuristic here.\nTHREE WAIT TOOLS EXIST AND TWO\
+        \ OF THEM ARE NOT THE SAME THING. Do not reach for a substring match on \"wait\". At least these\
+        \ exist:\n\n    mcp__leartech-jx3-flow__wait_for_first_failure_or_all_pass   fail-fast\n    mcp__leartech-jx3-flow__wait_for_terminal\
+        \                    full-terminal\n    mcp__leartech-tekton__wait_first_failure             \
+        \        a DIFFERENT server's tool\n\nThe third is a separate tool on a separate server with a\
+        \ confusingly similar name. Decide deliberately whether it counts toward the fail-fast total,\
+        \ say which and why in the PR description, and make the code express that decision explicitly\
+        \ rather than by accident of string matching.\nDO NOT RESTORE THE OLD SOURCE OF THE NUMBERS. The\
+        \ counters previously worked by reading the mcp-servers HOST's records, which #81 correctly stopped\
+        \ counting because they double-counted the agent's own calls (tool_call_count 240 against a true\
+        \ 228). Counting host records again would regress that. The agent's own tool_call records are\
+        \ the source.\nAN UNCOUNTABLE RATIO MUST NOT RENDER AS ZERO OR EMPTY. Today the ratio renders\
+        \ as an empty string with both counters at 0, which reads as \"no wait calls were made\" \u2014\
+        \ a false statement about a run that made ten. This tool already has an Availability vocabulary\
+        \ for exactly this (advertised_tools returns unavailable with a reason); a run that genuinely\
+        \ made no wait calls and a run whose wait calls could not be identified must be distinguishable.\n\
+        RE-RUN THE FULL TWELVE-ROW RECONCILIATION, NOT JUST THE WAIT ROWS. This regression exists because\
+        \ #81 predicted \"9:1 unchanged\" from reading the code and did not re-measure. Run the tool against\
+        \ agent-log-advertised-tools-log-advertised-tools with and without the `pods` argument, and put\
+        \ every row in the PR description against the baseline. A change that fixes the wait ratio and\
+        \ moves any other row has not succeeded.\nSECOND, SEPARATE ITEM \u2014 the 485 vs 461 gap. The\
+        \ reconciliation records an unexplained difference: structured_line_count reports 485 where the\
+        \ baseline hand-counted 461 JSON lines in the same pod. A `| json | run_id=` filter should be\
+        \ a SUBSET of parseable lines, so 485 is the wrong direction and the filter does not explain it.\
+        \ Establish which is right. The baseline may well be the mistaken side \u2014 it has been corrected\
+        \ twice \u2014 so evidence decides, not deference. If you cannot resolve it, say so plainly and\
+        \ leave the reconciliation's \"unexplained\" note standing rather than adjusting either number\
+        \ to agree.\nISOLATE TESTING: table-driven Go tests, no cluster, no network, extending runreport_test.go\
+        \ and runreport_http_test.go. Cover: each wait tool counted under its prefixed name; the tekton\
+        \ look-alike handled per your stated decision; a run with genuinely no wait calls rendering differently\
+        \ from one where they could not be identified; and a host-record fixture proving tool_call_count\
+        \ does not regress to double-counting. Non-negative coverage delta.\nDone = PR merged (open via\
+        \ open_pr, drive gates green)."
+      name: run-report-wait-counters
+      repo: mikelear/leartech-mcp-servers
+    kind: pr
+    name: run-report-wait-counters
+  - dependsOn:
+    - run-report-wait-counters
+    kind: check
+    name: run-report-wait-counters-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.run-report-wait-counters.pr}
+      repo: mikelear/leartech-mcp-servers
+      service: leartech-mcp-servers
+  triggeredBy: plan-catalog-internal-services

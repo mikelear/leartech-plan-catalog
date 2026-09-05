@@ -1,0 +1,83 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=3
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: python-deadcode-shrink
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    budgetIter: 10
+    inputs:
+      base: main
+      branch: agent/delete-deprecated-pr-context-server
+      description: "Delete the deprecated in-repo Python pr_context MCP server\n(gate/mcp_servers/pr_context_server.py)\
+        \ \u2014 it is self-marked deprecated\nand fully superseded by the Go pr_context server in leartech-mcp-servers.\n"
+      goal: "Remove gate/mcp_servers/pr_context_server.py and all of its wiring:\n1. Delete the file.\n\
+        2. Remove its registration/import from the MCP catalog/registry wiring\n   (grep for pr_context_server\
+        \ / the module import across gate/ and\n   mcp_catalog.py) and any references in tests.\n3. FIRST\
+        \ confirm there is NO live consumer of the in-repo server (the\n   controller + agents use the\
+        \ Go pr_context in leartech-mcp-servers via\n   MCP URL, not this Python module). If any live\
+        \ import remains that\n   isn't trivially removable, STOP and leave it \u2014 do not break a caller.\n\
+        4. Run the test suite; keep it green (delete/adjust only the tests that\n   exercised the removed\
+        \ module).\nPure deletion \u2014 no behaviour change. Open a PR; do NOT hold it (let the\ngates\
+        \ + Tide merge it). All PR gates green incl real ai-review.\n"
+      name: delete-deprecated-pr-context-server
+      repo: leartech-automated-agent
+    name: delete-deprecated-pr-context-server
+    repo: leartech-automated-agent
+  - agentType: leartech-agent-py
+    budgetIter: 10
+    inputs:
+      base: main
+      branch: agent/delete-dead-log-markers
+      description: "Remove residual dead stdout log-marker emission (`--- pr_open ...`,\n`--- turns=...`)\
+        \ and producer-only helpers left in the agent after the\nscrape-delete (#141). These markers have\
+        \ NO consumer \u2014 job_reconciler\nreads AgentRun.status, not logs.\n"
+      goal: "In gate/agent/initiative.py (and main.py) remove the remaining dead\nlog-marker EMISSION\
+        \ and any producer-only helpers that only existed to\nfeed it \u2014 the `--- pr_open ...` and\
+        \ `--- turns=...` stdout markers and\ntheir formatting helpers.\n1. FIRST verify no consumer greps\
+        \ these markers: they are read by\n   nothing in-repo (job_reconciler + the controller read\n\
+        \   AgentRun.status.targetPR, not stdout). If you find ANY live consumer\n   (an operator CLI,\
+        \ a test asserting the marker), STOP and keep that\n   path \u2014 only remove genuinely dead\
+        \ emission.\n2. Keep the authoritative PR-number path intact (_resolve_pr_number \u2192\n   patch_pr_number\
+        \ \u2192 AgentRun.status.targetPR); this task only removes\n   the dead stdout markers, NOT the\
+        \ report-back.\n3. Run the test suite; keep it green (remove only tests that asserted\n   the\
+        \ deleted markers).\nPure cleanup \u2014 no behaviour change. Open a PR; do NOT hold it. All PR\n\
+        gates green incl real ai-review.\n"
+      name: delete-dead-log-markers
+      repo: leartech-automated-agent
+    name: delete-dead-log-markers
+    repo: leartech-automated-agent
+  - agentType: leartech-agent-go
+    budgetIter: 12
+    inputs:
+      base: main
+      branch: agent/guard-no-pr-repo-step-fails
+      description: "Close a plan-roll-up trust gap: a repo-backed step whose AgentRun\nSucceeded but opened\
+        \ NO PR currently resolves to StepPhaseSucceeded \u2014 so\nan agent that did nothing (e.g. a\
+        \ mis-rendered placeholder entrypoint,\nor a crash that still exits 0) can false-succeed a plan.\
+        \ A repo-backed\nstep with no deliverable must NOT roll up green.\n"
+      goal: "In internal/controller/plan_controller.go, in deriveStepPhase, the\n`case PhaseSucceeded:`\
+        \ branch currently returns StepPhaseSucceeded when\n`st.PR == \"\"`. Split that on the step's\
+        \ repo (the `repo` arg already\npassed in):\n1. repo == \"\" (smoke / repo-less run) \u2192 keep\
+        \ StepPhaseSucceeded (a\n   deliverable-less run legitimately has no PR).\n2. repo != \"\" (a\
+        \ real code step) AND st.PR == \"\" \u2192 return\n   StepPhaseFailed, and set a clear st.Message\
+        \ like\n   \"AgentRun succeeded but opened no PR for a repo-backed step\" so it's\n   diagnosable.\
+        \ This surfaces a no-deliverable run loudly + blocks\n   dependents instead of false-greening\
+        \ the plan.\nUpdate the decision-table doc comment above deriveStepPhase (the\n\"AgentRun Succeeded\
+        \ | no PR reported\" cell now depends on repo). Do NOT\nchange any other cell (PR merged/open/closed,\
+        \ Failed, Cancelled,\nstickiness). Add/extend unit tests in the controller test suite: a\nrepo-backed\
+        \ Succeeded-no-PR step \u2192 Failed; a repo-less (repo==\"\")\nSucceeded-no-PR step \u2192 Succeeded\
+        \ (unchanged). Keep all existing tests\ngreen. All PR gates green incl real ai-review. Open a\
+        \ PR; do NOT hold it.\n"
+      name: controller-guard-no-pr-repo-step
+      repo: leartech-orchestrator-controller
+    name: controller-guard-no-pr-repo-step
+    repo: leartech-orchestrator-controller
+  tenant: platform
+  triggeredBy: python-deadcode-shrink

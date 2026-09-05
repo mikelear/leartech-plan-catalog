@@ -1,0 +1,38 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=2
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: plan-model-fidelity
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: feat/portal-plan-client
+      goal: "Regenerate the Portal's plan-api client from the now-updated OpenAPI so the generated DTOs\
+        \ re-exported in src/app/plan/plan.models.ts (Plan=DtoPlan, Step=DtoStep) gain `kind`, status\
+        \ `verdict`, and `use`/`with` (paused/hold/ fanIn/dependsOn already present). Refresh plan-api\
+        \ URL/audience only if not wired. Typed model only \u2014 no UI rendering yet. Update plan-mock.fixture\
+        \ + specs to the new shape. Done = PR merged, gates green."
+      name: portal-plan-client
+      repo: mikelear/leartech-ship-proven-portal
+    kind: pr
+    name: portal-client
+  - agentType: leartech-agent-ng
+    dependsOn:
+    - portal-client
+    inputs:
+      branch: feat/portal-plan-views
+      goal: 'Update the EXISTING plan surface (plans-list, plan-detail, create-plan, DAG) to render the
+        new model: a `kind` badge per step; for a kind:check step its `verdict` as a PASS/FAIL pill; the
+        use/with template ref in detail; colour DAG nodes by kind/verdict; let create-plan set kind +
+        pick a template via use/with. Update end2end-ui (real-auth) specs for the kind badge + verdict
+        pill. Done = PR merged, gates green.'
+      name: portal-plan-views
+      repo: mikelear/leartech-ship-proven-portal
+    kind: pr
+    name: portal-views

@@ -1,0 +1,54 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=2
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: update-ship-proven-website
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: feat/composable-principle
+      goal: "The ShipProven marketing site is ALREADY built + live in this repo (Angular).\nThe approved\
+        \ copy has gained ONE new principle under the \"How it works\"\nsection (section 3) \u2014 add\
+        \ it, matching the existing site's structure/style\nfor the other 3.x mechanism cards (3.1 Pipeline-as-judge\
+        \ \u2026 3.4 Gateway moat).\nInsert it AFTER 3.4 as the closing principle of the section. British\
+        \ English,\nconfident + precise, NO hype, verbatim where the copy gives headline/body.\n\nNEW\
+        \ CONTENT (add verbatim):\n\u2014 Section: \"One principle underneath it all: composable, not\
+        \ monolithic\"\n\u2014 Headline: \"The best tool for every job \u2014 swappable, for good.\"\n\
+        \u2014 Body: \"The industry is betting that ever-larger monolithic models will do\n  everything.\
+        \ Production delivery demands something more disciplined.\n  ShipProven composes the best tool\
+        \ for each job: deterministic, non-model\n  tools where independence matters most \u2014 security\
+        \ and policy checks, for\n  example \u2014 and models plugged into every aspect where judgment\
+        \ matters.\n  Every piece is swappable, and every model call routes through our gateway.\n  That\
+        \ buys three things a single-model architecture can't: resilience (no\n  model or provider is\
+        \ a single point of failure \u2014 if one suffers an outage\n  or incident, we route around it),\
+        \ best-in-class quality per task, and\n  future-proofing as models change month to month. Security\
+        \ is the clearest\n  case: you should never rely only on a model to tell you code is safe \u2014\
+        \ you\n  want independent, deterministic checks and a diversity of providers that no\n  single\
+        \ vendor failure can take down.\"\n\nRender it consistently with the existing 3.x cards (emphasise\
+        \ the three\nbenefits \u2014 resilience, best-in-class quality, future-proofing \u2014 as the\
+        \ copy\ndoes). Do a light reconcile pass so the How-it-works section reads cleanly\nwith the new\
+        \ closing principle. Keep the app buildable + the /health +\napi.conf.json wiring intact. Update/extend\
+        \ the e2e-ui (Playwright) so the new\nsection renders. Open the PR (open_pr), OWN it, drive BOTH\
+        \ clusters' gates\ngreen (incl. end2end-ui) THROUGH TO MERGE.\n"
+      name: ship-proven-website-content-update
+      repo: leartech-ship-proven-website
+    name: content-update
+    repo: mikelear/leartech-ship-proven-website
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - content-update
+    inputs:
+      action: release-health-check
+      budgetMinutes: 60
+      healthPath: /health
+      namespace: jx-staging
+      service: leartech-ship-proven-website
+    name: release-check
+  tenant: leartech
+  triggeredBy: human

@@ -1,0 +1,127 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Failed, az=Paused
+# AgentRuns owned: gcp=5, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: nextgenlending-website-rebuild
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: feat/nextgen-public-site
+      goal: "Rebuild the public www.nextgenlending.co.uk as a standard, AI-discoverable, server-prerendered\
+        \ (SSG) Angular site. The content direction is in this goal; build to it. The chain-specific values\
+        \ below are CONFIRMED (blockchain session, 2026-08-11, live on verrian-prod) \u2014 use them;\
+        \ do NOT invent chain facts. Keep a graceful fallback anyway (never hard-fail the page on an unreachable\
+        \ endpoint).\nVERIFY CURRENT STATE FIRST. The repo is currently a Webpack Module-Federation SHELL\
+        \ (ngx-build-plus + @angular-architects/module-federation, loading MFEs at runtime). Inspect what\
+        \ exists (routes, build config, chart, Dockerfile, nginx) before changing. Report the starting\
+        \ state in the PR.\nRE-SCAFFOLD TO THE GOLDEN TEMPLATE. Convert this to a STANDARD golden @angular/build\
+        \ Angular app \u2014 the same shape as leartech-mortgagesourcing-web / the angular service template:\
+        \ @angular/build (esbuild) with outputMode: static (prerender), ng lint (angular-eslint), a test\
+        \ setup with coverage, and playwright end2end/end2end-ui. DROP Module Federation entirely (remove\
+        \ ngx-build-plus, @angular-architects/module- federation, the custom webpack configs, mfe.conf.json\
+        \ + the MFE loading utils). This re-scaffold is deliberate: it clears the old webpack toolchain's\
+        \ npm-audit advisories and wires the lint/test/e2e the golden gates need. PRESERVE the deployment\
+        \ plumbing: the Helm chart (keep fullnameOverride: ngl-website \u2014 DNS label length limit),\
+        \ the nginx static-serve Dockerfile, the domain nextgenlending.co.uk, and the existing ingress/cert\
+        \ wiring. The site must build to static HTML served by nginx (no Node runtime), same as mortgagesourcing-web.\n\
+        WHAT THE SITE IS (positioning). NextGen Lending is a NEW LENDER running its OWN public, EVM-compatible\
+        \ blockchain that behaves like a core-banking platform on-chain. The differentiators to lead with:\
+        \ - Its own public chain that MIRRORS a core banking platform; bridges to ANY EVM-\n  compatible\
+        \ public chain; works with ANY token and stablecoin.\n- An ORACLE that runs real financial contracts\
+        \ \u2014 Mortgage Contracts and Savings\n  Contracts today, and can support ANY Ethereum smart\
+        \ contract \u2014 and triggers real-\n  world rails through core events: fiat payments, normal\
+        \ servicing systems, and core\n  banking systems.\n- SHIPPROVEN APIs: you write and deploy any\
+        \ DeFi product through them, so a \"ShipProven\n  Plan\" auto-builds and deploys any contract\
+        \ as standard.\n- It is LIVE and verifiable \u2014 a block ticker on the site links through to\
+        \ the public\n  explorer. Audience is everyone: borrowers/savers, developers, and institutions.\n\
+        \nPAGES (Angular routes, all prerendered): 1. Home (/) \u2014 hero (new lender + its own programmable\
+        \ core-banking chain) + the LIVE\n   BLOCK TICKER (signature, see below) + four pillars (own chain\
+        \ / core-banking mirror \xB7\n   bridge + any token/stablecoin \xB7 Oracle \u2192 real contracts\
+        \ + fiat/servicing/core-banking \xB7\n   ShipProven auto-build) + primary CTAs to the Explorer\
+        \ (live) and ShipProven (see links).\n2. /technology \u2014 how it works: chain-as-core-banking,\
+        \ the Oracle \u2192 fiat/servicing/core-\n   banking event flow, EVM bridge, EVM compatibility.\
+        \ Include ONE signature diagram of the\n   Oracle/event flow as INLINE SVG (prerender-safe, themeable,\
+        \ crawlable) with alt/aria text;\n   honour prefers-reduced-motion.\n3. /contracts \u2014 Mortgage\
+        \ Contracts, Savings Contracts, \"any Ethereum smart contract\", and\n   DeFi products deployable\
+        \ via ShipProven.\n4. /build \u2014 the ShipProven developer story: write + deploy DeFi products\
+        \ via the ShipProven\n   APIs; Plans auto-build contracts. Link to ShipProven.com (assume it is\
+        \ live).\nKeep a clear header nav + footer across all pages; link out to the Explorer prominently.\n\
+        THE SIGNATURE \u2014 LIVE BLOCK TICKER (progressive enhancement, must not break crawlability).\
+        \ Prerender a STATIC, crawlable line (\"Block #<n> as of <UTC time>\") into the HTML at build;\
+        \ then client-side JS polls the chain to animate the number ticking up live. Poll the public EVM\
+        \ JSON-RPC at https://rpc.nextgenlending.co.uk (POST {\"jsonrpc\":\"2.0\",\"method\": \"eth_blockNumber\"\
+        ,\"params\":[],\"id\":1}, parse the hex height) every ~12s (the chain's block time). CORS is Access-Control-Allow-Origin:\
+        \ * \u2014 safe to poll directly from the browser. For a richer ticker (height + hash + txn count)\
+        \ you MAY instead GET https://blockscout-api.nextgenlending.co.uk/api/v2/blocks?type=block (also\
+        \ CORS *). There is NO public WebSocket \u2014 HTTP-poll, do NOT use wss. Make the poll URL overridable\
+        \ via the runtime ConfigMap /api.conf.json, defaulting to the RPC above. Keep a graceful fallback:\
+        \ if unreachable, keep the static prerendered value + a \"View live on the Explorer\" link rather\
+        \ than erroring \u2014 never hard-fail the page. The explorer (Blockscout v9, https://explorer.nextgenlending.co.uk/,\
+        \ REST API https://blockscout-api.nextgenlending.co.uk) is the source of truth \u2014 link to\
+        \ it prominently rather than rebuilding it; you MAY include a couple of tasteful static screenshots\
+        \ of the explorer as illustrative visuals (label them), but keep on-site chain data light.\nCHAIN\
+        \ FACTS (confirmed, live on verrian-prod \u2014 use, do not invent): chain id 3151909 (0x301825);\
+        \ block time ~12s; native/gas token is ETH (devnet default \u2014 NOT custom-branded, so do not\
+        \ invent a native ticker); a real example ERC-20 \"NextGen Lending Token\" (NGL) is on-chain at\
+        \ 0xEC199A352DBEF2935Ab353e8430171d76E751Cae. Current headline stats (~1,159 blocks, 200+ txns,\
+        \ ~53 token holders, ~12s avg block time) are CLIMBING \u2014 either fetch them live from https://blockscout-api.nextgenlending.co.uk/api/v2/stats\
+        \ or present as clearly- labelled \"approx / illustrative\"; do NOT hard-code a number as if it\
+        \ were static. (The Blockscout stats-charts API is currently CORS-scoped to the explorer origin,\
+        \ so for charts prefer linking to the Explorer rather than embedding.)\nBRAND / VISUAL \u2014\
+        \ propose a clean \"institutional fintech \xD7 blockchain\" identity and express it as design\
+        \ tokens (CSS custom properties / Angular theme). Starting direction (refine with taste; [confirm:\
+        \ blockchain session] may adjust): a trust-forward DARK ink base for the hero and footer \u2014\
+        \ deep midnight navy ~#0B1020 \u2014 with light content sections (~#F6F8FC) and white cards; ONE\
+        \ electric accent for on-chain/live/CTAs \u2014 electric indigo ~#5B6CFF \u2014 with a cyan ~#22D3EE\
+        \ reserved ONLY for the live-block pulse animation; JetBrains Mono for block numbers / hashes\
+        \ / addresses; a modern grotesk for headings (e.g. Space Grotesk) and Inter for body/UI; generous\
+        \ whitespace, ~1160px content max-width, subtle rounded cards. One accent only \u2014 do not introduce\
+        \ colours beyond the token set. Deliberately distinct from the mortgagesourcing site (navy + emerald).\n\
+        AI-DISCOVERABILITY LAYER (this site is a reference impl of the AI-discoverable stack). Keep SSG\
+        \ prerender (outputMode: static) \u2014 no JS-only routes, no content behind interaction; all\
+        \ content prerenders. Emit JSON-LD (Organization / FinancialService for the lender; describe the\
+        \ products/contracts with appropriate schema.org types on /contracts). Emit llms.txt, sitemap.xml\
+        \ with <lastmod>, robots.txt with a Sitemap: line, and a visible trust line. On /build, advertise\
+        \ the public machine/dev endpoint for AI agents + developers: the EVM JSON-RPC https://rpc.nextgenlending.co.uk\
+        \ (chain id 3151909) \u2014 show copy-paste RPC + chain-id config. There is no MCP endpoint yet\
+        \ \u2014 present MCP as \"coming soon\".\nLINKS: Explorer = https://explorer.nextgenlending.co.uk/\
+        \ (live \u2014 link prominently, and the block ticker links through to it). ShipProven = https://shipproven.com\
+        \ (assume live \u2014 plain link). NO regulatory/FCA disclaimers are required for this site \u2014\
+        \ do not add them.\nDATA \u2014 read-only. The block number is the only genuinely-live datum (best-effort\
+        \ as above); everything else is marketing content + illustrative examples clearly labelled. Do\
+        \ not build heavy on-site data tables \u2014 the Explorer owns chain data; link to it.\nACCESSIBILITY:\
+        \ WCAG 2.2 AA. Verify contrast of the electric accent on both the dark hero and the light sections.\
+        \ Keep a skip-link, visible focus, keyboard nav, prefers-reduced-motion (the ticker animation\
+        \ must respect it).\nDO NOT REGRESS CRAWLABILITY. The golden .lighthouse includes gates that assert\
+        \ this; keep prerender/SSG. If a raw-HTML (no-JS) SEO presubmit is not already wired, ADD one\
+        \ that fetches RAW HTML with no JS and asserts prerendering, the hero h1 verbatim, the full meta\
+        \ set, robots.txt with a Sitemap: line and a well-formed sitemap.xml.\nREPORT IN THE PR DESCRIPTION:\
+        \ the starting state, that you dropped Module Federation and re- scaffolded to @angular/build,\
+        \ every brand/design choice you made, exactly which data is live (the block ticker) vs illustrative,\
+        \ and every value you left for the blockchain session to confirm. Latitude is granted on condition\
+        \ it is recorded.\nISOLATE TESTING: extend end2end-ui to assert the rebuild landed \u2014 brand\
+        \ colours resolve on the rendered page, all routes prerender, the home page carries the (static,\
+        \ prerendered) block line and the ticker element, JSON-LD is present, llms.txt / sitemap.xml /\
+        \ robots.txt return 200, and the Explorer + ShipProven links are present. Runnable against the\
+        \ PR preview; no new infra.\nDone = PR merged (open via open_pr, drive ALL golden gates green\
+        \ \u2014 lint, test, npm-audit, end2end, end2end-ui, security-scan, ai-review, SEO presubmit included)."
+      name: rebuild-public-site
+      repo: mikelear/next-generation-lending-website
+    kind: pr
+    name: rebuild-public-site
+  - dependsOn:
+    - rebuild-public-site
+    kind: check
+    name: rebuild-public-site-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.rebuild-public-site.pr}
+      repo: mikelear/next-generation-lending-website
+      service: next-generation-lending-website
+  triggeredBy: plan-catalog-internal-services

@@ -1,0 +1,35 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: authfound-fix-nits
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/mcp-portal-plan-auth
+      goal: "Continue on the EXISTING branch feat/mcp-portal-plan-auth (PR #149). CI is RED on two\nsmall\
+        \ items \u2014 fix BOTH, change nothing else, do NOT undo the audience/scope/role work:\n\n1.\
+        \ ai-review CRITICAL (gcp, deepseek): internal/config/config.go around line 158 has a\n   HARDCODED\
+        \ cluster URL in a comment (`https://leartech-mcp-servers-public-gcp.jx.leartech.com`).\n   leartech\
+        \ convention: NO cluster-specific URLs in source (even in comments). Genericize\n   the comment\
+        \ to a placeholder like `<mcp-public-host>` / \"the per-cluster MCP public\n   host\" \u2014 keep\
+        \ the explanatory intent, drop the concrete gcp/az URL. Grep the whole diff\n   for any other\
+        \ hardcoded *.jx.leartech.com cluster URLs and genericize those too.\n2. govulncheck FAILURE (az):\
+        \ GO-2026-6061 in google.golang.org/grpc@v1.80.0 (fixed in\n   v1.82.1). Bump: `go get google.golang.org/grpc@v1.82.1\
+        \ && go mod tidy` (update go.mod +\n   go.sum). It's a transitive/required-but-not-called vuln,\
+        \ but the gate blocks \u2014 clear it.\n   Verify build + tests still pass after the bump.\n\n\
+        Also OK to tidy the yellow (values.yaml defaultAudiences comment) if trivial, but the two\nabove\
+        \ are the blockers. Keep the diff minimal. Own PR #149, drive BOTH clusters' gates\nGREEN (ai-review\
+        \ PASS, govulncheck, dynamic-scan, pr, test, lint, scans) THROUGH TO MERGE.\n"
+      name: authfound-fix-nits
+      repo: leartech-auth-service
+    name: fix-nits
+    repo: mikelear/leartech-auth-service
+  tenant: leartech
+  triggeredBy: human

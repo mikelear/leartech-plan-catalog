@@ -1,0 +1,64 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Succeeded, az=Paused
+# AgentRuns owned: gcp=5, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mcp-create-plan-resubmit-verdict
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/create-plan-resubmit-verdict
+      goal: "Make create_plan tell its caller whether the Plan was applied, not just that a conflict happened.\n\
+        CONFIRM THE PREMISE FIRST. Read internal/planserver/tools.go CreatePlan and internal/planserver/client.go\
+        \ APIError, and confirm a 409 reaches the caller as a status code without the verdict. Then read\
+        \ leartech-plan-api's internal/plans/handler.go and respondResubmitConflict on origin/main for\
+        \ the exact wire contract \u2014 the field name and the exact verdict values. Do NOT infer the\
+        \ shape from this brief: read the producer and quote it in the PR description. If the verdict\
+        \ is already surfaced, STOP and report that.\nSURFACE THE VERDICT AS DATA, NOT AS PROSE IN AN\
+        \ ERROR STRING. The caller is a model deciding what to do next. A verdict it must regex out of\
+        \ a message is a contract restated rather than shared \u2014 the exact failure this estate keeps\
+        \ finding. Put it on the structured result the tool returns, alongside the status code, and keep\
+        \ APIError's existing status-code discrimination intact.\nTHE TOOL DESCRIPTION MUST STATE WHAT\
+        \ differs MEANS. Today the description says 409 is returned \"when a Plan already exists\". That\
+        \ is true and useless: it does not say the submission had no effect. Say plainly that differs\
+        \ means the caller's Plan was NOT applied and the on-cluster Plan still holds its previous content,\
+        \ that identical means there was nothing to apply, and that conflict_running means the Plan is\
+        \ mid-flight. The schema is what the model reads at call time, so this belongs there.\nDO NOT\
+        \ RETRY, AND DO NOT REPLACE. Do not add automatic retry on 409, and do not add any delete-then-recreate\
+        \ or force path. plan-api deliberately never mutates the on-cluster Plan and a running Plan's\
+        \ history must not be destroyed to force an amendment through. The tool's job is to report accurately.\n\
+        AN ABSENT OR UNRECOGNISED VERDICT MUST BE REPORTED AS UNKNOWN, NOT AS BENIGN. If a 409 body carries\
+        \ no verdict, or one this code does not recognise, say so explicitly rather than falling back\
+        \ to a bare 409. The reader must never present a value it could not determine as a determined\
+        \ one.\nLOG IT WHERE IT CAN BE FOUND. CreatePlan already finishes its call with outcomes like\
+        \ created / api_error / decode_error. A resubmit conflict must finish with an outcome that names\
+        \ the verdict, so a run can be reconstructed from Loki by outcome rather than by message text.\
+        \ Follow the estate logging standard and the surrounding call.Finish pattern rather than inventing\
+        \ fields.\nDO NOT DOCUMENT THE NEW BEHAVIOUR IN A COMMENT. The class of defect here is a contract\
+        \ asserted in a comment and enforced nowhere. Put it in tests and in the tool schema, which are\
+        \ the two things a caller actually reads.\nISOLATE TESTING: table-driven Go tests, offline, against\
+        \ a fake plan-api in the style of the existing planserver suite. Cover: each of the three verdicts\
+        \ reaching the caller as structured data; the tool description stating what differs means; a 409\
+        \ with no verdict reported as unknown; a 409 with an unrecognised verdict reported as unknown;\
+        \ no automatic retry on any of them; 201 unchanged; and the call outcome naming the verdict. Prove\
+        \ each is load-bearing by breaking it. Non-negative coverage delta.\nDone = PR merged (open via\
+        \ open_pr, drive gates green)."
+      name: create-plan-verdict
+      repo: mikelear/leartech-mcp-servers
+    kind: pr
+    name: create-plan-verdict
+  - dependsOn:
+    - create-plan-verdict
+    kind: check
+    name: create-plan-verdict-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.create-plan-verdict.pr}
+      repo: mikelear/leartech-mcp-servers
+      service: leartech-mcp-servers
+  triggeredBy: plan-catalog-internal-services

@@ -1,0 +1,43 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-aireview-large-diff
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    inputs:
+      branch: fix/ai-review-large-diff-fallback
+      goal: "The ai-review worker's fetch_diff.py raises on GitHub's 406 \"too_large\" when a PR\ndiff\
+        \ exceeds the 300-file cap, so ai-review ERRORS (rather than reviews) on large\nPRs. Real incident:\
+        \ leartech-plan-api PR #2 (4,956 files) \u2192\n`httpx.HTTPStatusError: Client error '406 Not\
+        \ Acceptable'` at fetch_diff.py, body\n`{\"code\":\"too_large\",\"message\":\"Sorry, the diff\
+        \ exceeded the maximum number of files\n(300). Consider using 'List pull requests files' API or\
+        \ locally cloning...\"}`.\n\nFIND fetch_diff.py in the ai-review worker (search this repo \u2014\
+        \ it's the ai-review /\nai-review-worker image build context; the container path is /app/fetch_diff.py).\n\
+        \nFIX \u2014 handle the 406 too_large path gracefully instead of raising:\n1. Attempt the diff\
+        \ media type as today (application/vnd.github.v3.diff).\n2. On HTTP 406 (or a body with code==\"\
+        too_large\"), FALL BACK to the paginated\n   List Pull Request Files API: GET /repos/{owner}/{repo}/pulls/{n}/files\n\
+        \   ?per_page=100&page=\u2026 \u2014 iterate all pages, and assemble a unified diff from each\n\
+        \   file's `patch` field (skip files with no patch, e.g. binary/too-large-single-file;\n   note\
+        \ them). This yields a usable diff for review even for >300-file PRs.\n3. Keep the tenacity retry\
+        \ for transient errors, but 406 too_large must NOT retry\n   (it's deterministic) \u2014 go straight\
+        \ to the fallback.\n4. If the assembled diff is still enormous, cap/scope it sensibly (e.g. skip\n\
+        \   vendor/ , generated dirs, lockfiles) and LOG what was skipped \u2014 but never crash\n   the\
+        \ gate; ai-review should still produce a verdict on the reviewable subset.\n\nAdd a unit test:\
+        \ given a stubbed 406 too_large on the diff endpoint + a stubbed\npaginated files response, fetch_diff\
+        \ assembles a diff from the patches and does NOT\nraise. Keep behaviour identical for normal-size\
+        \ PRs (diff endpoint path unchanged).\nNote: leartech-dockerfiles has weak PR gates \u2014 be\
+        \ careful, self-review, and make\nthe change minimal + well-tested. Own the PR + drive gates green\
+        \ THROUGH TO MERGE.\n"
+      name: fix-aireview-large-diff
+      repo: leartech-dockerfiles
+    name: diff-fallback
+    repo: mikelear/leartech-dockerfiles
+  tenant: leartech
+  triggeredBy: human

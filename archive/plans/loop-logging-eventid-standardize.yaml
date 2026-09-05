@@ -1,0 +1,60 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=2
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: loop-logging-eventid-standardize
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/loop-hop-eventid-to-event-id
+      goal: "Standardize the event\u2192BA loop-hop structured-log CORRELATION FIELD on\n`event_id` (snake_case)\
+        \ so the whole loop is correlatable by one key in\nLoki. Today the controller's loop_hop log lines\
+        \ carry the Maestro event id\nunder `eventID` (camelCase \u2014 the repo's existing convention),\
+        \ but the\nlogging contract + Maestro + scripts/loop-forensics.sh all use `event_id`.\nA `| json\
+        \ | event_id=\"X\"` query therefore misses these hops (verified live:\nloop_hop lines exist but\
+        \ forensics shows NO-LOG).\n\nSCOPE \u2014 only the loop-hop log lines added for the loop-hop\
+        \ contract\n(grep the repo for `loop_hop`). At each such line, emit the id under the\nkey `event_id`\
+        \ (NOT eventID). The hops the controller owns + their sites:\n  - loop_hop=\"emit\"      \u2014\
+        \ internal/controller/maestro_producer.go +\n                           plan_controller.go (release.deploy_failed\
+        \ announce)\n  - loop_hop=\"consume\"   \u2014 internal/controller/ba_event_adapter.go\n     \
+        \                      (HandleReleaseDeployFailed entry)\n  - loop_hop=\"ba_spawn\"  \u2014 ba_event_adapter.go\
+        \ (the \"spawned BA AgentRun\" log)\n  - loop_hop=\"resolved\"  \u2014 internal/controller/plan_remediation.go\n\
+        \                           (processRemediationResolution \u2192 target Resolved)\nEach loop_hop\
+        \ line MUST carry: `loop_hop`, `event_id`, `plan`, and `run_id`\nwhere applicable \u2014 all snake_case.\
+        \ Do NOT mass-rename the codebase's other\n(non-loop_hop) eventID usages \u2014 ONLY the loop_hop\
+        \ contract lines. If a\nloop_hop line already logs `plan`/`run_id`, keep them; just fix the id\
+        \ key.\nUpdate the unit tests that assert the loop_hop fields to expect `event_id`.\nLogging only\
+        \ \u2014 no behaviour change. Own the PR + take gates green.\n"
+      name: controller-eventid
+      repo: leartech-orchestrator-controller
+    name: controller-eventid
+    repo: mikelear/leartech-orchestrator-controller
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/loop-hop-eventid-to-event-id
+      goal: "Companion to the controller change: make Maestro's event\u2192BA loop-hop log\nlines use\
+        \ the SAME snake_case correlation key `event_id` so the whole loop\ncorrelates on one key in Loki\
+        \ (contract: Hub/status/event-loop-logging-proposal.md).\nGrep the repo for `loop_hop` \u2014\
+        \ the hops Maestro owns:\n  - loop_hop=\"maestro_receive\"  \u2014 internal/eventprocessor/usecase.go\
+        \ (ProcessEvent)\n  - loop_hop=\"maestro_dispatch\" \u2014 internal/consumption (SendEventsToConsumers\
+        \ /\n                                  delivery result, incl. the non-2xx/failure path)\nEnsure\
+        \ EACH loop_hop line emits the id as `event_id` (snake_case), plus\n`plan` (from the event annotations)\
+        \ and, where relevant, the consumer name +\ndelivery status. If Maestro already uses `event_id`\
+        \ on these lines, this is a\nno-op verification + a test to pin it; if any use `eventID`/`eventId`,\
+        \ fix to\n`event_id`. Do NOT change Maestro's other event logging \u2014 only the loop_hop\ncontract\
+        \ lines. Update/pin the tests. Logging only \u2014 no behaviour change.\nOwn the PR + gates green.\
+        \ NOTE: the maestro repo has pre-existing lint/\ngovulncheck/security-scan reds unrelated to this\
+        \ change (they fail on main\ntoo) \u2014 get the REAL gates (test/ai-review/end2end) green + your\
+        \ own code\nlint-clean; the pre-existing class is a known separate issue.\n"
+      name: maestro-eventid
+      repo: leartech-maestro-service
+    name: maestro-eventid
+    repo: mikelear/leartech-maestro-service
+  tenant: leartech
+  triggeredBy: human

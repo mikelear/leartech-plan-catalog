@@ -1,0 +1,62 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: orch-deadcode-decommission
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    budgetIter: 12
+    inputs:
+      base: main
+      branch: agent/orch-deadcode-decommission
+      description: 'Delete the orchestrator''s dead legacy Python plan-execution modules
+
+        (superseded by the Go controller + platform_state MCP; PR #169 removed the
+
+        loops but left these behind). Their authoritative-sounding names mislead
+
+        future sessions about what runs where. Keep the diff to deletions + one
+
+        constant relocation + an ownership note.
+
+        '
+      goal: "Phase-2A dead-code decommission of leartech-orchestrator. Python's target\nrole is the LLM\
+        \ chat loop + Maestro pub/sub; plan/agent EXECUTION is owned\nby the Go controller (leartech-orchestrator-controller)\
+        \ via\nagent.leartech.io CRDs; plan reads come from the platform_state MCP.\n\nA reachability\
+        \ audit (import graph from live entrypoints app/main.py,\napp/routers/{chat,plans,drafts}.py,\
+        \ app/cli.py, gate/orch/maestro.py) found\nthese DEAD. DELETE each module AND its tests:\n\nClean-dead\
+        \ leaf modules (nothing imports them):\n  gate/orch/event_bus.py, gate/orch/iteration_spawn.py,\n\
+        \  gate/orch/iteration_body.py, gate/orch/plan_decisions.py,\n  gate/orch/plan_status_guard.py,\
+        \ gate/orch/stale_progress.py,\n  gate/orch/step_retry.py\n\nDead cluster held alive ONLY by one\
+        \ constant import:\n  gate/orch/plan_runner.py is imported by app/routers/plans.py (~line 1714)\n\
+        \  ONLY for the constant DEFAULT_PLAN_AGENT_MAX_TURNS. First relocate that\n  constant to app/settings.py\
+        \ and update the import in app/routers/plans.py,\n  THEN delete: gate/orch/plan_runner.py, gate/orch/plan_commands.py,\n\
+        \  gate/orch/plan_snapshots.py (PLURAL), gate/orch/pr_watcher.py \u2014 plus their\n  tests (tests/test_plan_runner*.py\
+        \ and tests of those four modules).\n\nDO NOT delete (LIVE \u2014 keep): app/plan_store.py, app/db.py,\n\
+        app/plan_loader.py, app/plan_validator.py, app/chat_store.py,\napp/initiative_drafts_store.py,\
+        \ app/routers/*, gate/orch/plan_snapshot.py\n(SINGULAR build_plan_snapshot), gate/orch/plan_view.py,\n\
+        gate/orch/plan_retrospect.py, gate/orch/plan_verify.py,\ngate/orch/plan_summarise.py, gate/orch/plan_preflight.py,\n\
+        gate/orch/stage_graph.py, gate/orch/version_state.py,\ngate/orch/job_runner.py, gate/orch/chat_*,\
+        \ gate/orch/maestro.py,\ngate/orch/validation/*, gate/orch/mcp_servers/*.\n\nAdd an OWNERSHIP\
+        \ note at the top of README.md AND as the app/main.py module\ndocstring: \"leartech-orchestrator\
+        \ = authenticated LLM chat + MCP client +\nchat/drafts/audit store. Plan/agent EXECUTION is owned\
+        \ by the Go controller\n(leartech-orchestrator-controller) via agent.leartech.io CRDs; plan reads\n\
+        come from the platform_state MCP. The Postgres DB backs chat history /\ninitiative drafts / audit\
+        \ only (ownership slated to move Python->Go).\nPython's target role is the LLM loop + Maestro\
+        \ pub/sub.\"\n\nBefore opening the PR verify: grep shows NO remaining imports of any deleted\n\
+        module in app/ gate/ tests/; `python -c \"import app.main\"` succeeds; pytest\npasses; app/routers/plans.py\
+        \ references the relocated constant correctly. Do\nNOT refactor the surviving chat/drafts/audit/plan-read\
+        \ code (that layer is\nslated to move to Go separately). Open a PR with all gates green including\n\
+        real ai-review.\n"
+      name: remove-dead-plan-python
+      repo: leartech-orchestrator
+    name: remove-dead-plan-python
+    repo: leartech-orchestrator
+  tenant: platform
+  triggeredBy: phase-2a-orch-deadcode

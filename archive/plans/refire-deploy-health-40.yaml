@@ -1,0 +1,38 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: refire-deploy-health-40
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/deploy-health-tool
+      goal: "PR #40 is ALREADY OPEN on branch `feat/deploy-health-tool` of\nleartech-mcp-servers (the\
+        \ deploy_health MCP tool). It was left stranded\nAwaitingReview. ADOPT it \u2014 the harness checks\
+        \ the branch out; CALL the\n`open_pr` MCP tool (IDEMPOTENT \u2014 it adopts the existing PR #40\
+        \ and\nrecords targetPR onto this run). Do NOT open a new PR or redo the work.\n\nCURRENT STATE:\
+        \ gcp is fully green (gcp/test + gcp/ai-review 100/100).\nThe blocker is `az/test`, which has\
+        \ FAILED repeatedly (~4x) \u2014 the prior\nagent fixed gcp but az never went green. Your job:\n\
+        - DIAGNOSE the az/test failure properly (read the az taskrun / test\n  output): is it a genuine\
+        \ az-specific bug in the new code/test, or a\n  genuinely flaky (timing-sensitive) test? Do NOT\
+        \ just blind-`/retest` \u2014\n  it has already failed 4x, so treat it as real until proven otherwise.\n\
+        - FIX it for real (make the test robust / correct on BOTH clusters).\n- If `az/ai-review` shows\
+        \ the qwen \"critical\" about\n  deploy_health_test.go CCCE error-path coverage, that is a KNOWN\n\
+        \  FALSE POSITIVE (the claude judge ruled it so; the CCCE test +\n  integration round-trip cover\
+        \ it). Clear it with `/ai-feedback approve`\n  (Category: false-positive) \u2014 do NOT rework\
+        \ the tests to appease it.\n\nDRIVE IT THROUGH TO MERGE \u2014 stay until BOTH gcp AND az gates\
+        \ are green\nAND PR #40 is merged. Do not exit at one-cluster-green (that is exactly\nthe failure\
+        \ mode that stranded this PR). Preserve the existing\nacceptance criteria (fake-clientset unit\
+        \ tests incl. the CCCE case +\nstructured logging).\n"
+      name: adopt-deploy-health-pr40
+      repo: leartech-mcp-servers
+    name: adopt-and-merge-40
+    repo: mikelear/leartech-mcp-servers
+  tenant: leartech
+  triggeredBy: agent

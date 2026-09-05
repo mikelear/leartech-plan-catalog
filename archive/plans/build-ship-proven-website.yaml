@@ -1,0 +1,219 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=9
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: build-ship-proven-website
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: create-repo
+      newRepo: mikelear/leartech-ship-proven-website
+    name: create
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - create
+    inputs:
+      action: register-source-config
+      cluster: gcp
+      service: leartech-ship-proven-website
+    name: register-gcp
+    repo: mikelear/jx-build-cluster-gsm
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - create
+    inputs:
+      action: register-source-config
+      cluster: az
+      service: leartech-ship-proven-website
+    name: register-az
+    repo: mikelear/jx-build-cluster-akv
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - register-gcp
+    - register-az
+    inputs:
+      action: scaffold-pr
+      name: leartech-ship-proven-website
+      template: angular
+    name: scaffold
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - scaffold
+    inputs:
+      action: smoke-pr
+      name: leartech-ship-proven-website
+    name: smoke
+  - agentType: leartech-agent-ng
+    dependsOn:
+    - smoke
+    inputs:
+      branch: smoke-leartech-ship-proven-website
+      goal: "A smoke PR is already OPEN on branch `smoke-leartech-ship-proven-website`\nof this repo (opened\
+        \ by the Infra scaffold/smoke steps). ADOPT it \u2014 the\nharness has checked the branch out;\
+        \ CALL the `open_pr` MCP tool (IDEMPOTENT:\nit adopts the existing PR and records it onto this\
+        \ run). Then OWN the PR:\nwatch the Tekton gates (incl. az/gcp end2end + end2end-ui), REACT to\
+        \ whatever\nfails (retest a flake; fix a real issue \u2014 lint, a new gate, a vuln), and\ndrive\
+        \ it green THROUGH TO MERGE. Do NOT open a new PR or redo the scaffold.\nThis is the bootstrap\
+        \ smoke \u2014 keep the template's app as-is; the real content\nlands in a later step. Stay until\
+        \ BOTH clusters are green AND merged.\n"
+      name: leartech-ship-proven-website-smoke
+      repo: leartech-ship-proven-website
+    name: smoke-dev
+    repo: mikelear/leartech-ship-proven-website
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - smoke-dev
+    inputs:
+      action: release-health-check
+      budgetMinutes: 60
+      healthPath: /health
+      namespace: jx-staging
+      service: leartech-ship-proven-website
+    name: release-monitor
+  - agentType: leartech-agent-ng
+    dependsOn:
+    - release-monitor
+    inputs:
+      branch: feat/shipproven-marketing-site
+      goal: "The repo is a scaffolded Angular app that is deployed + healthy (the\nrelease-check passed).\
+        \ Build the ShipProven single-page marketing site\nusing the APPROVED COPY below \u2014 VERBATIM\
+        \ where it gives headlines/body/CTAs.\nBritish English, confident + precise, NO hype, NO invented\
+        \ claims.\n\nBUILD:\n- A single-page site (Angular standalone components + routing/anchor nav)\n\
+        \  with one section per numbered block below, in order: Hero, Problem,\n  How it works (the 4\
+        \ mechanisms as cards/subsections), Meet the agents\n  (role cards with the Live / In-prototype\
+        \ status labels EXACT), Why\n  different (render section 5 as a comparison table), Regulated enterprises\n\
+        \  (feature grid), Showcase (the two build cards, with the PLACEHOLDER proof\n  links left as\
+        \ clearly-marked TODO anchors), Pricing (two tiers), Final\n  CTA / contact + footer.\n- A sticky\
+        \ top nav linking to the sections + the primary CTA.\n- Clean, professional styling (the template's\
+        \ conventions; a restrained\n  enterprise look \u2014 no stock-hype). Responsive.\n- Keep the\
+        \ app buildable + the template's /health + api.conf.json wiring\n  intact so it still deploys.\n\
+        HONESTY (critical): the \"Founder note\"/\"Honesty note\" lines in the copy are\nINSTRUCTIONS\
+        \ TO YOU, not published text \u2014 do NOT render them on the page\n(drop them, or keep as HTML\
+        \ comments). Keep every \"Live / In prototype /\ncoming\" status label EXACTLY as written \u2014\
+        \ the page's credibility depends on\nit. Leave the two Showcase proof links + the contact email\
+        \ as clearly-marked\nTODO placeholders (do not invent URLs).\nUpdate/extend the template's e2e-ui\
+        \ (Playwright) so the key sections +\nprimary CTA render. Open the PR (open_pr), OWN it, drive\
+        \ BOTH clusters'\ngates green (incl. end2end-ui) THROUGH TO MERGE.\n\n===== APPROVED COPY (ShipProven\
+        \ \u2014 website copy) =====\nProduct: ShipProven (shipproven.com / shipproven.ai). Company: LearTech\n\
+        (leartech.ai), UK. Voice: confident, precise, British English.\n\n1. HERO\nH1: Autonomous code,\
+        \ proven before it ships.\nSubhead: ShipProven is autonomous software engineering that can't ship\n\
+        unsafe code. Every change our AI agents produce must survive the same\nproduction pipeline a human\
+        \ engineer's would \u2014 and win the approval of a\nconsensus of independent models \u2014 before\
+        \ it can merge.\nPrimary CTA: Book a technical walkthrough. Secondary CTA: See how it works.\n\
+        Trust strip: Provider-agnostic \xB7 Multi-cloud \xB7 Built for regulated enterprises.\n\n2. THE\
+        \ PROBLEM \u2014 Headline: Generating code is solved. Trusting it isn't.\nBody: The last two years\
+        \ made generating code effortless. They did almost\nnothing to make trusting it safe. Today's\
+        \ agentic tools optimise for\ngeneration speed and leave a human to catch whatever's wrong afterwards\
+        \ \u2014\nwhich, for anyone shipping to production, is the expensive part. The code an\nagent\
+        \ writes is only worth as much as your confidence that it's correct,\nsecure, and won't break\
+        \ in production. In a regulated environment, \"the model\nis usually right\" is not an answer\
+        \ you can give an auditor. The industry built\na faster way to write code and never built the\
+        \ trust layer underneath it.\nThat's the layer ShipProven is.\n\n3. HOW IT WORKS \u2014 Section\
+        \ headline: Trust is manufactured by the pipeline \u2014\nnot assumed from the model. Intro: Four\
+        \ mechanisms, each one a moat. Together\nthey make it structurally impossible for our agents to\
+        \ ship code that hasn't\nearned its way in.\n3.1 Pipeline-as-judge \u2014 The pipeline is the\
+        \ arbiter of truth \u2014 no agent can\nbypass it. Safety and quality are enforced as deterministic\
+        \ pipeline steps \u2014\nbuild, deploy into an integrated ephemeral environment, full end-to-end\
+        \ and UI\ntests, multi-cloud security scanning. A change merges only when every step is\ngreen.\
+        \ Our agents open pull requests and iterate on them, but they have no\nprivileged path to merge:\
+        \ each one holds its own PR open and is forbidden to\nlift the hold. They read what failed, fix\
+        \ it, and push back \u2014 looping until\nthe pipeline itself says green. You add a new safety\
+        \ guarantee by adding a\nstep, not by rewriting a prompt.\n3.2 Multi-provider consensus review\
+        \ \u2014 One review, many independent models, a\nquorum that must agree. Our AI code-review step\
+        \ fans a single review out to\nmultiple models across multiple providers \u2014 through our own\
+        \ gateway \u2014 and\nenforces a quorum policy: models from a set number of different providers\
+        \ must\napprove. An independent meta-judge model then rules on the full set of reviews,\nand that\
+        \ verdict must pass too. No single model, and no single vendor, can wave\ncode through. This is\
+        \ a trust artifact you can put in front of a compliance\nteam \u2014 and it's only possible because\
+        \ we own the gateway underneath.\n3.3 Compounding memory \u2014 the Scrum-Master loop \u2014 Every\
+        \ failure makes the next\nrelease safer. Every failure and its resolution feeds future agent runs,\n\
+        through both prompt calibration and retrieval memory. The system carries a\ngrowing catalogue\
+        \ of hard-won lessons, and that institutional knowledge is\nours \u2014 not a frontier lab's.\
+        \ A dedicated Scrum-Master agent (in prototype)\ncloses the loop: it runs the retro after each\
+        \ cycle and feeds what it learns\nstraight back into the memory that steers every other agent.\
+        \ The result is a\ndelivery system that gets more reliable the more it's used.\n3.4 The gateway\
+        \ moat \u2014 Own the gateway, own the economics and the model\nflywheel. Because every model\
+        \ call routes through our own provider-agnostic\ngateway, we meter and cost-control everything\
+        \ down to per-tenant budgets, and\nwe can continuously A/B-test new models in production as review\
+        \ candidates. The\nbest graduate into agent duty; the strongest signal feeds a self-hosted\nfine-tuning\
+        \ flywheel trained on our own code conventions. That's cost control\nand model quality a tool\
+        \ captive to closed APIs can never own. The gateway is\nlive in production today across two clouds,\
+        \ fronting six-plus providers and\nalready carrying production review traffic.\n\n4. MEET THE\
+        \ TEAM OF AGENTS \u2014 Section headline: Not an AI developer. An\nautonomous delivery team. Intro:\
+        \ ShipProven isn't a single coding assistant.\nIt's a delivery organisation of role-specialised\
+        \ agents \u2014 all subordinate to\nthe same pipeline no agent can bypass. Each has a job; none\
+        \ can self-certify.\nCards (KEEP THE STATUS LABELS EXACT):\n- BA agent \xB7 Live \u2014 Turns\
+        \ requirements into structured, buildable work. Frames\n  the problem so the rest of the team\
+        \ can act on it.\n- Dev agent \xB7 Live \u2014 Writes the change, opens the pull request, and\
+        \ iterates\n  against the pipeline until every gate is green \u2014 holding its own PR the\n \
+        \ entire time.\n- QA agent \xB7 Live \u2014 Drives quality signals and validation, ensuring changes\n\
+        \  are exercised the way real usage would exercise them before they're allowed\n  near production.\n\
+        - Infra agent \xB7 In prototype \u2014 landing this cycle \u2014 Confirms the release\n  actually\
+        \ shipped and checks cluster health after merge.\n- Scrum-Master agent \xB7 In prototype \u2014\
+        \ landing this cycle \u2014 Runs the\n  retrospective and feeds every lesson back into the shared\
+        \ memory that steers\n  the whole team.\n(Do NOT render the \"honesty note for the founder\" \u2014\
+        \ it is guidance to you.)\n\n5. WHY SHIPPROVEN IS DIFFERENT \u2014 Section headline: Generation-first\
+        \ tools\ntrust the model. We trust the gate. Render as a table (Generation-first tools\n| ShipProven):\n\
+        - Trust the output because \"the model made it\" | Trust the output because it\n  survived the\
+        \ same production gate a human PR must\n- One LLM reviews another LLM | Deterministic gates +\
+        \ multi-provider consensus\n  + an independent meta-judge\n- Captive to frontier-API pricing |\
+        \ Own the gateway \u2014 own the cost and a\n  fine-tuning flywheel on your own conventions\n\
+        - A single coding assistant | A governed delivery team: BA, Dev, QA, Infra,\n  Scrum Master\n\
+        - Built for the individual developer | Built for regulated enterprises:\n  multi-cloud, data residency,\
+        \ per-tenant audit and budgets\n- Their cloud, their rules | Your cloud, your data residency (BYOC)\n\
+        Closing line: Nobody optimising for generation speed does provider-diverse\nconsensus review or\
+        \ pipeline-as-judge governance. That's the open lane, and\nit's the one we're built for.\n\n6.\
+        \ BUILT FOR REGULATED ENTERPRISES \u2014 Section headline: Made for teams that\ncannot ship on\
+        \ trust alone. Intro: ShipProven is fintech-native \u2014 built and\nhardened inside a regulated\
+        \ software organisation. The governance isn't bolted\non; it's the architecture. Feature grid:\n\
+        - Cloud-agnostic / BYOC. Runs in your cloud, not ours. The pipeline and\n  gateway operate cloud-agnostically\
+        \ across Azure and GCP today.\n- Data residency. Your code and model traffic stay where compliance\
+        \ requires.\n- Multi-cloud by design. The same governed delivery system runs across clouds.\n\
+        - Auditable by construction. Every safety guarantee is an explicit, enforced\n  pipeline step,\
+        \ and every model call routes through the gateway.\n- Per-tenant budgets and metering. Exact cost\
+        \ metering and hard per-tenant\n  budgets, enforced at the gateway.\n- Consensus as a compliance\
+        \ artifact. Multi-provider quorum plus meta-judge\n  review gives compliance teams something concrete\
+        \ to sign off against.\n\n7. SHOWCASE \u2014 Built with ShipProven. Why it matters: The last wave\
+        \ of software\nwas cloud-native. The next is AI-native and MCP-native. In finance, the wave\n\
+        after is chain-native. ShipProven builds it in by default \u2014 and everything it\nproduces passes\
+        \ the same governed pipeline + consensus review before it ships.\nIntro: These are real, live\
+        \ systems we built with ShipProven itself \u2014 proof of\nwhat it produces, not customer deployments.\n\
+        Card 1 \u2014 Mortgage Sourcing \xB7 AI-native + MCP from day one. MCP live at\napi.mortgagesourcing.com.\
+        \ Proves ShipProven produced a production-grade,\nAI-native, MCP-native fintech platform from\
+        \ the first commit. Proof link: TODO.\nCard 2 \u2014 NextGen Lending \xB7 chain-native, smart\
+        \ contracts out of the box.\nwww.nextgenlending.co.uk. AI-generated smart contracts, consensus-reviewed\
+        \ by\na quorum of models and gate-verified before they deploy. Proof link: TODO.\n(Do NOT render\
+        \ the founder note; leave proof links as TODO placeholders.)\n\n8. PRICING \u2014 Section headline:\
+        \ Two ways to run ShipProven. Intro: Pricing\nscales with how you want to deploy. Talk to us for\
+        \ a figure tailored to your\nestate. Tier 1 \u2014 Enterprise (BYOC): For banks and regulated\
+        \ organisations.\nRuns inside your own cloud \u2014 full data residency, per-tenant audit and\
+        \ budgets,\nconsultancy-assisted onboarding. CTA: Talk to sales. Tier 2 \u2014 Direct: For teams\n\
+        that want ShipProven without running the infrastructure. Multi-tenant, hosted on\nour self-hosted\
+        \ cluster; lower cost from low marginal inference cost. CTA: Join\nthe waitlist (mark as coming).\
+        \ No public price list.\n\n9. FINAL CTA / CONTACT \u2014 Headline: See autonomous code that can't\
+        \ ship unsafe.\nSubhead: Book a technical walkthrough and we'll show you the pipeline, the\nconsensus\
+        \ review, and the agent team on a real pull request. Primary CTA: Book\na walkthrough. Secondary\
+        \ CTA: Email us \u2014 TODO confirm address. Footer:\nShipProven is a product of LearTech, UK.\
+        \ Autonomous code, proven before it ships.\n===== END APPROVED COPY =====\n"
+      name: leartech-ship-proven-website-content
+      repo: leartech-ship-proven-website
+    name: content
+    repo: mikelear/leartech-ship-proven-website
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - content
+    inputs:
+      action: release-health-check
+      budgetMinutes: 60
+      healthPath: /health
+      namespace: jx-staging
+      service: leartech-ship-proven-website
+    name: release-monitor-content
+  tenant: leartech
+  triggeredBy: human

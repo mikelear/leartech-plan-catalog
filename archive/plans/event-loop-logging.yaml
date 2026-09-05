@@ -1,0 +1,88 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=3
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: event-loop-logging
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/loop-hop-structured-logging
+      goal: "Add the event\u2192BA loop-hop logging contract to the controller so the\nloop is traceable\
+        \ in Loki. At EACH hop the controller owns, emit a\nstructured (JSON/logr key-value) log line\
+        \ carrying the SAME field set:\n  loop_hop, event_id, plan, run_id (+ remediation_plan where relevant).\n\
+        The hops + their code sites:\n  - loop_hop=\"emit\"     \u2014 AnnounceReleaseDeployFailed / announcePlanEvents\n\
+        \                          (internal/controller/maestro_producer.go +\n                      \
+        \    plan_controller.go release.deploy_failed emit).\n  - loop_hop=\"consume\"  \u2014 the BAEventAdapter\
+        \ /consume_event handler entry\n                          (HandleReleaseDeployFailed, ba_event_adapter.go):\n\
+        \                          log on receipt with event_id + plan from the\n                    \
+        \      ConsumeEventRequestDto annotations.\n  - loop_hop=\"ba_spawn\" \u2014 where the adapter\
+        \ creates the BA AgentRun\n                          (already logs \"spawned BA AgentRun\" \u2014\
+        \ add the\n                          standard fields: event_id, plan, run_id=BA run).\n  - loop_hop=\"\
+        resolved\" \u2014 processRemediationResolution (plan_remediation.go)\n                       \
+        \   when it flips a target Failed\u2192Resolved: log\n                          event_id (if available),\
+        \ plan (target),\n                          remediation_plan, run_id.\nField names EXACTLY as\
+        \ above (a forensic tool + Maestro/other services\nkey on them). Use the existing structured logger\
+        \ (logr/zap) with these\nas key-value fields \u2014 do NOT bury them in the message string.\n\
+        Add unit tests asserting each hop logs loop_hop + event_id + plan\n(capture via a test logr sink\
+        \ / observed zap core). Do NOT change\nbehaviour \u2014 logging only. Own the PR + take gates\
+        \ green.\n"
+      name: controller-loop-logging
+      repo: leartech-orchestrator-controller
+    name: controller-loop-logging
+    repo: mikelear/leartech-orchestrator-controller
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/loop-hop-structured-logging
+      goal: "Add the event\u2192BA loop-hop logging contract to Maestro so its hops are\ntraceable in\
+        \ Loki alongside the controller. For release.deploy_failed\n(and generally per-event), emit a\
+        \ structured (zerolog) log line at:\n  - loop_hop=\"maestro_receive\"  \u2014 ProcessEvent entry\n\
+        \                                  (internal/eventprocessor/usecase.go):\n                   \
+        \               log event_id + eventName + plan\n                                  (from event.Annotations[\"\
+        plan\"]).\n  - loop_hop=\"maestro_dispatch\" \u2014 when dispatching to consumers\n          \
+        \                        (SendEventsToConsumers / consumption):\n                            \
+        \      log event_id + plan + the consumer\n                                  name + the resolved\
+        \ delivery URL +\n                                  the HTTP status/outcome (success vs the\n\
+        \                                  \"consumption failures\" path). A 404/\n                  \
+        \                non-2xx delivery MUST log at error with\n                                  these\
+        \ fields \u2014 that is the exact signal\n                                  that was invisible\
+        \ before.\nFields EXACTLY: loop_hop, event_id, plan (+ consumer, status where\nrelevant). Use\
+        \ the existing zerolog fields (.Str(...)), not the message.\nALSO: ensure the maestro pod is queryable\
+        \ in Loki by service \u2014 if the\nchart doesn't already set a stable label the log pipeline\
+        \ promotes,\nadd a pod-template label (e.g. app.kubernetes.io/name is present; verify\nit reaches\
+        \ Loki as a stream label, else add `app`). Document what you\ndid. Add unit tests for the receive/dispatch\
+        \ log fields (observed-log\npattern the repo already uses). Logging only \u2014 no behaviour change.\n\
+        Own the PR + gates green.\n"
+      name: maestro-loop-logging
+      repo: leartech-maestro-service
+    name: maestro-loop-logging
+    repo: mikelear/leartech-maestro-service
+  - agentType: leartech-agent-go
+    dependsOn:
+    - controller-loop-logging
+    inputs:
+      branch: feat/loop-forensics-use-hop-markers
+      goal: "Rewrite scripts/loop-forensics.sh to use the new loop-hop logging\ncontract (see Hub/status/event-loop-logging-proposal.md)\
+        \ instead of the\nbrittle text-regex + non-existent app-label queries it has today.\nFor each\
+        \ hop, query Loki by the structured marker:\n  {namespace=\"<ns>\"} | json | loop_hop=\"<hop>\"\
+        \n(or a line filter on `\"loop_hop\":\"<hop>\"` if the pipeline isn't json-\nparsed), correlated\
+        \ by event_id. Resolve event_id up front from the\n--plan (via the BA AgentRun's triggered-by-event\
+        \ annotation \u2014 the script\nalready does this) and thread it through every hop query. Drop\
+        \ the\n`app=~\".*maestro.*\"` selector (no such label; use namespace + the\nloop_hop field / the\
+        \ label the maestro step confirmed reaches Loki).\nKeep the per-hop LOGGED/NO-LOG verdict + the\
+        \ summary + LOGGING-GAPS\ncallout + the kubectl cross-checks + --report-json. Update\nscripts/loop-forensics.md\
+        \ to document the new marker-based queries.\nVerify `bash -n` + shellcheck clean. NOTE: the maestro-side\
+        \ markers\nland via a separate repo PR (maestro-loop-logging) \u2014 the script should\ndegrade\
+        \ gracefully (NO-LOG for a hop whose service hasn't shipped the\nmarker yet) rather than error.\
+        \ Own the PR + gates green.\n"
+      name: loop-forensics-rewrite
+      repo: leartech-orchestrator-controller
+    name: loop-forensics-rewrite
+    repo: mikelear/leartech-orchestrator-controller
+  tenant: leartech
+  triggeredBy: human

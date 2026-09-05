@@ -1,0 +1,89 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: remediate-lighthouse-pr-events-producer
+  namespace: jx-staging
+spec:
+  paused: true
+  remediates:
+  - name: lighthouse-pr-events-producer
+    namespace: jx-staging
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/release-build-green
+      goal: 'The main-push RELEASE pipeline for this repo failed and blocks the release; diagnose and
+        fix it AT SOURCE.
+
+
+        EVIDENCE ALREADY GATHERED (do not re-derive, build on it):
+
+        - PR #2 (feat: announce pr.merged / pr.closed_unmerged to Maestro) merged to main as commit e90376e5513f89f280680a2bccf3be3d3c5f6ef9
+        at 2026-08-17T08:22Z.
+
+        - The main-push release Tekton PipelineRun (ighthouse-pr-events-main-release-hzd7t) FIRED on both
+        gcp and az (so the trigger/webhook is HEALTHY - this is NOT the ''missing run'' case) but FAILED
+        in ~22s inside the `from-build-pack` task, i.e. an EARLY step (git-clone / next-version / jx-variables
+        / build-make-build) - well before the kaniko build + promote steps, which take minutes.
+
+        - The prior bootstrap release (commit 2f458dc, tag v0.0.1) ran the SAME release.yaml + the SAME
+        go1.26.6 toolchain and SUCCEEDED, so the pipeline definition, toolchain, and cluster wiring are
+        sound. The regression was introduced by PR #2''s content.
+
+        - The original release run''s pods are already garbage-collected, so its logs are gone; read logs
+        from a FRESH release run instead.
+
+
+        DO THIS:
+
+        1. Reproduce the release build locally EXACTLY as catalog tasks/go/release.yaml `build-make-build`
+        does: `go mod download`, then `go build -trimpath -ldflags="-s -w -X main.version=$(cat VERSION)"
+        -o bin/server ./cmd/server`, honoring the go.mod `toolchain go1.26.6` directive with GOTOOLCHAIN=auto.
+        Also run `make build` and `make test`. Fix any compile/build breakage on the merged main tree
+        (the release build compiles ./cmd/server with the real runtime image ghcr.io/mikelear/leartech-go-runtime:0.28.0
+        - watch for anything that passed the PR presubmit but breaks a clean release build).
+
+        2. FIX the scaffold leftover in .lighthouse/jenkins-x/release.yaml: the `openapi-generation` task
+        still sets env SwaggerServiceName=GoServiceTemplate and SpecPath=./docs/swagger.json - change
+        SwaggerServiceName to the real service name (leartech-lighthouse-pr-events) so the release''s
+        SECOND task does not fail once from-build-pack is green. Confirm docs/swagger.json renders via
+        `make swag`.
+
+        3. Open a PR on branch fix/release-build-green and drive ALL PR presubmit checks green on BOTH
+        clusters (pr, lint, test, govulncheck, security-scan, image-scan, ai-review, end2end). In the
+        PR body, document precisely which early release-build step was failing and the exact fix, and
+        show the local release-build reproduction passing.
+
+
+        SUCCESS = a merged fix that makes the main-push release pipeline pass end-to-end on both gcp and
+        az so a new version is released, promoted, and deployed. Do NOT /hold cancel and do NOT self-approve
+        - a human clears the hold.'
+      name: fix-release-build
+      repo: mikelear/leartech-lighthouse-pr-events
+    name: fix-release-build
+    repo: mikelear/leartech-lighthouse-pr-events
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - fix-release-build
+    inputs:
+      action: deploy-health
+      clusters:
+      - gcp
+      - az
+      goal: 'Verify the brief''s successCriteria deterministically: after the fix-release-build PR merges
+        and the main-push release re-runs, the new version of leartech-lighthouse-pr-events must be PROMOTED
+        and HEALTHY on BOTH gcp and az. Run leartech-k8s deploy_health (version-aware) per cluster and
+        require healthy=true with >=1 available replica and observed_version == the newly promoted version
+        (version derived from promote_status when not passed explicitly). This confirms ''release re-checks
+        report healthy'' end-to-end.'
+      name: verify-release-deploy-healthy
+      namespace: jx-staging
+      service: leartech-lighthouse-pr-events
+    name: verify-release-deploy-healthy
+    repo: mikelear/leartech-lighthouse-pr-events
+  tenant: leartech

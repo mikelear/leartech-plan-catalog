@@ -1,0 +1,144 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=7
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: build-plan-api
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: create-repo
+      newRepo: mikelear/leartech-plan-api
+    name: create
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - create
+    inputs:
+      action: register-source-config
+      cluster: gcp
+      service: leartech-plan-api
+    name: register-gcp
+    repo: mikelear/jx-build-cluster-gsm
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - create
+    inputs:
+      action: register-source-config
+      cluster: az
+      service: leartech-plan-api
+    name: register-az
+    repo: mikelear/jx-build-cluster-akv
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - register-gcp
+    - register-az
+    inputs:
+      action: scaffold-pr
+      name: leartech-plan-api
+      template: go
+    name: scaffold
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - scaffold
+    inputs:
+      action: smoke-pr
+      name: leartech-plan-api
+    name: smoke
+  - agentType: leartech-agent-go
+    dependsOn:
+    - smoke
+    inputs:
+      branch: smoke-leartech-plan-api
+      goal: "Adopt the open smoke PR for the freshly-scaffolded leartech-plan-api Go\nservice (idempotent\
+        \ open_pr), own it, and drive BOTH clusters' gates green\nTHROUGH TO MERGE so the first release\
+        \ cuts. Do not add features here \u2014 just\nmake the scaffold green and merged.\n"
+      name: plan-api-smoke-dev
+      repo: leartech-plan-api
+    name: smoke-dev
+    repo: mikelear/leartech-plan-api
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - smoke-dev
+    inputs:
+      action: release-health-check
+      budgetMinutes: 60
+      healthPath: /health
+      namespace: jx-staging
+      service: leartech-plan-api
+    name: release-monitor
+  - agentType: leartech-agent-go
+    dependsOn:
+    - release-monitor
+    inputs:
+      branch: feat/plan-read-api
+      goal: "Build the read-only Plan/AgentRun HTTP API for the ShipProven portal on the\nscaffolded leartech-plan-api\
+        \ Go service (gin, from leartech-go-service-template\nconventions). This is the FIRST service\
+        \ to front these CRDs \u2014 there is no\nexisting HTTP/MCP facade. Build against the REAL conventions\
+        \ below (verified\non the estate \u2014 do not invent):\n\nCRD TYPES (import directly, do NOT\
+        \ re-declare):\n  import \"github.com/mikelear/leartech-orchestrator-controller/api/v1alpha1\"\
+        \nThe Plan/AgentRun/AgentType types live in that repo's importable api/v1alpha1\npackage (group\
+        \ agent.leartech.io/v1alpha1). Add the require to go.mod. It's a\nPRIVATE repo \u2014 set GOPRIVATE=github.com/mikelear/*\
+        \ and rely on the build's\nGitHub auth (the same way other services import private modules); if\
+        \ the\nmodule can't be pulled, add the netrc/GOFLAGS the estate uses. Use a\ncontroller-runtime\
+        \ client (sigs.k8s.io/controller-runtime/pkg/client) with a\nscheme that registers v1alpha1 \u2014\
+        \ list/get only.\n\nENDPOINTS (read-only):\n  GET /plans            \u2192 list all Plans in the\
+        \ configured namespace(s)\n  GET /plans/:name      \u2192 one Plan, full detail\n  GET /healthz\
+        \ + /health (keep the scaffold's health)\nMap the CRD to a STABLE portal DTO (do NOT leak raw\
+        \ k8s objects) that carries\nEVERY state the screen must render \u2014 the portal ports a 5-view\
+        \ visualisation\n(Frontier, Lifecycle grid, DAG, Text, PR-gates) so it needs all of:\n  Plan:\
+        \   name, phase (Pending|Running|Paused|Succeeded|Failed|Cancelled),\n          tenant, triggeredBy,\
+        \ paused, startTime, completionTime, message,\n          conditions[] (type,status,reason,message),\
+        \ decisions[] (bounded),\n          steps[].\n  Step:   name, agentType, repo, dependsOn[], hold,\
+        \ fanIn,\n          stepPhase (Pending|Running|AwaitingReview|AwaitingApproval|\n            \
+        \         Succeeded|Failed|Cancelled),\n          agentPhase (the raw AgentRun.phase: Pending|Queued|Running|\n\
+        \                     Iterating|Succeeded|Failed|Cancelled),\n          agentRunName, pr, headBranch,\n\
+        \          prOutcome (opened|awaiting_review|merged|closed_unmerged),\n          retryCount.\n\
+        GATES (for the PR-gates view): GET /plans/:name/steps/:step/gates. Put this\nbehind a GatesSource\
+        \ INTERFACE \u2014 ship a GitHubAdapter now (a ResultsStoreAdapter\nis the planned durable follow-up;\
+        \ the source must be swappable WITHOUT touching\nthe handlers or the DTO). The GitHubAdapter:\
+        \ for a step that has a PR, fetch the\nPR's GitHub check-runs (per cluster context az/gcp) + parse\
+        \ the ai-review verdict\nfrom PR comments (score, label, per-reviewer model/score, findings sev/loc/msg),\n\
+        EXACTLY as docs/plan-viz.html in leartech-automated-agent-design models it. It is\nFINE that duration/history\
+        \ are unavailable (GitHub StatusContexts carry no\ntiming; nothing persists attempts) \u2014 return\
+        \ them null and let the UI render \"\u2013\";\ndo NOT fabricate. Use a GitHub bot token from the\
+        \ env/secret (optional:true; if\nabsent, the gates endpoint returns 501/empty and the other endpoints\
+        \ still work).\nSINGLE CLUSTER for this slice: read the CRDs in the pod's own cluster only (no\n\
+        cross-cluster kubeconfig).\n\nAUTH (all authed together): gate the /plans* routes behind the Hydra\
+        \ JWT using\ngithub.com/mikelear/leartech-go-common/pkg/auth \u2014 ServiceClient.Middleware(...)\n\
+        on a gin route group (RFC 8707 audience = leartech-plan-api). Follow the\nleartech-auth-service\
+        \ handler pattern. Make it flag-gated + fail-CLOSED when\nenabled (see the auth-middleware-fail-open\
+        \ lesson): construct the client from\nenv when auth is required, and add a gate-ON test with an\
+        \ httptest JWKS stub \u2014\ndo NOT ship a test that only exercises Required:false.\n\nRBAC: add\
+        \ a Role/ClusterRole + binding in the chart granting the service's\nServiceAccount get/list/watch\
+        \ on plans + agentruns (+ agenttypes) in\nagent.leartech.io \u2014 READ ONLY (no patch/update/create).\
+        \ Wire the SA onto the\ndeployment.\n\nSDK PUBLISH (the portal depends on this): annotate the\
+        \ handlers with\nswaggo/swag (@Summary/@Tags/@Router/@Security/@ID with clean @ID names),\n`swag\
+        \ init` into docs/swagger.json via the Makefile, and add the\nopenapi-generation task to .lighthouse/jenkins-x/release.yaml\n\
+        (SwaggerServiceName: PlanApi, SpecPath: ./docs/swagger.json, OutputLanguages:\n\"angular typescript\
+        \ go\") so release publishes @mikelear/leartech-plan-api-angular\n\u2014 mirror leartech-auth-service's\
+        \ release.yaml exactly.\n\nTESTS: unit-test the CRD\u2192DTO mapping for EVERY stepPhase/prOutcome/planPhase\n\
+        combination (use the state matrix above as the table). Extend end2end where the\nscaffold has\
+        \ it. Keep chart render + smoke green.\n\nConfig: NAMESPACE(s) to watch via env (default jx-staging);\
+        \ LEARTECH_AUTH_*\nfor the middleware; GH token optional. Own the PR + drive BOTH clusters' gates\n\
+        green THROUGH TO MERGE (\u2192 release publishes the SDK).\n"
+      name: plan-api-build
+      repo: leartech-plan-api
+    name: build-api
+    repo: mikelear/leartech-plan-api
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - build-api
+    inputs:
+      action: release-health-check
+      budgetMinutes: 60
+      healthPath: /health
+      namespace: jx-staging
+      service: leartech-plan-api
+    name: release-monitor-api
+  tenant: leartech
+  triggeredBy: human

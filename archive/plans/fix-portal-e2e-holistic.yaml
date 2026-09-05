@@ -1,0 +1,46 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-portal-e2e-holistic
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: fix/e2e-coupled-fixture-holistic
+      goal: "The e2e-ui suite is NOT green in staging and the prior fix (fix/dag-text-fixture-complete,\n\
+        merged) REGRESSED it: staging 0.0.11(GCP)/0.0.13(AZ) e2e-ui = 16 passed / 2 FAILED (was 17/1).\n\
+        Confirmed via Loki. The two failures are COUPLED through shared staging Plan data:\n  1. 05-dag-text.spec.ts:91\
+        \ 'Text view lists conditions[], decisions[], and per-step messages'\n     \u2014 STILL failing:\
+        \ the fixture plan lacks per-step conditions[]/decisions[]/messages the\n     Text view renders\
+        \ (the prior fix added dep edges for the DAG test :38 \u2014 which now PASSES \u2014\n     but\
+        \ not this data).\n  2. 03-plans-index.spec.ts:47 'renders one plan-card per plan, grouped into\
+        \ buckets' \u2014 NEWLY\n     failing: the extra fixture plan the prior fix created changed the\
+        \ plans-index card\n     count/bucket grouping the test asserts.\n\nFix the WHOLE e2e-ui suite\
+        \ to be green + DETERMINISTIC in staging on BOTH clusters \u2014 treat the\nspecs as a coupled\
+        \ set sharing Plan data, don't fix one test in isolation (that's the\nwhack-a-mole that caused\
+        \ the regression). Approach:\n- Diagnose precisely from the Playwright trace/error-context artifacts\
+        \ (uploaded to\n  gs://test-artifacts-product-first/results/v1/post-deploy/<cluster>/jx-staging/leartech-ship-proven-portal/<ver>/end2end-ui/)\n\
+        \  and the specs themselves: what EXACT data each failing assertion needs (05-dag-text:91 Text\n\
+        \  view fields; 03-plans-index:47 expected cards/buckets).\n- Design ONE coherent fixture strategy:\
+        \ a dedicated fixture Plan (fixed name) carrying dep\n  edges AND per-step conditions[]/decisions[]/messages\
+        \ so 05-dag-text:38 AND :91 both pass; AND\n  make 03-plans-index:47 robust to the fixture's existence\
+        \ (assert per-plan-card invariants /\n  filter to known plans, not a brittle exact global count/grouping)\
+        \ OR account for the fixture\n  in its expected buckets. Whichever, the WHOLE suite must be 18/18\
+        \ (or the current total)\n  deterministically \u2014 no test left failing, none newly broken.\n\
+        - Keep it idempotent + identical across preview + GCP + AZ (feedback_e2e_must_pass_in_all_run_contexts).\n\
+        Run the FULL e2e-ui locally in staging-shape (STAGING_URL; Chromium in your image) and confirm\n\
+        ALL specs pass (0 failed) before pushing. Open the PR, drive both clusters' gates green, STOP\
+        \ at\nAwaitingReview. Merging releases a new portal version \u2192 new Arrival \u2192 observer\
+        \ re-runs e2e \u2192 all\ngreen \u2192 qa-gate green FOR REAL (verify via Loki, not just the gate).\n"
+      name: fix-portal-e2e-holistic
+      repo: leartech-ship-proven-portal
+    name: fix-e2e-coupled-fixture
+    repo: mikelear/leartech-ship-proven-portal
+  tenant: leartech
+  triggeredBy: human

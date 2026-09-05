@@ -1,0 +1,33 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-gotmpl-vendor
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/gitignore-vendor
+      goal: "A service scaffolded from this template must NOT be able to commit the Go vendor/\ndirectory.\
+        \ Committing vendor/ just broke ai-review on a downstream service\n(leartech-plan-api PR #2: +1.98M\
+        \ lines / 4,956 files \u2192 GitHub diff 406 too_large,\nwhich exceeds the 300-file cap \u2192\
+        \ ai-review errored). The agent vendored to work\naround importing a PRIVATE module; the durable\
+        \ fix is: don't vendor, and make it\nimpossible to commit vendor by accident.\n\nCHANGES:\n1.\
+        \ Add `vendor/` to the template's .gitignore (if there's a .gitignore in the\n   scaffold output,\
+        \ add it there so scaffolded repos inherit it).\n2. In the template's README / CLAUDE.md (whatever\
+        \ guidance file the scaffold\n   carries), add a short note: private modules (github.com/mikelear/*)\
+        \ are pulled\n   via GOPRIVATE=github.com/mikelear/* + build-time GitHub auth \u2014 do NOT `go\
+        \ mod\n   vendor`/commit vendor/.\n3. Ensure the build/CI does not rely on a committed vendor/\
+        \ (uses modules).\n\nKeep it minimal. Verify a fresh `helm template` + build still work. Own the\
+        \ PR +\ndrive BOTH clusters' gates green THROUGH TO MERGE.\n"
+      name: fix-gotmpl-vendor
+      repo: leartech-go-service-template
+    name: gitignore-vendor
+    repo: mikelear/leartech-go-service-template
+  tenant: leartech
+  triggeredBy: human

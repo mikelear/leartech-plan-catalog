@@ -1,0 +1,72 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Succeeded, az=Paused
+# AgentRuns owned: gcp=5, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mcp-run-report-field-semantics
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/run-report-field-semantics
+      goal: "Make run_report read the fields the agent actually emits, so its numbers match a run rather\
+        \ than an assumption about one.\nREAD THE RECONCILIATION FIRST \u2014 IT IS THE SPEC. It is committed\
+        \ at mikelear/leartech-agent-run-reports baselines/RECONCILIATION-run_report-vs-baseline1.md,\
+        \ alongside the baseline it compares against. Every defect below is stated there with the expected\
+        \ value and the line of code that causes it. You have read access. If you cannot read that repo,\
+        \ STOP and report that rather than guessing at the numbers.\nCONFIRM EACH AGAINST A REAL RECORD,\
+        \ NOT AGAINST THIS BRIEF. For every field you change, find an actual emitted line for run agent-log-advertised-tools-log-advertised-tools\
+        \ and match what it contains. The whole class of defect here is field semantics inferred rather\
+        \ than observed, so a fix derived from this brief's prose would repeat the mistake in a new place.\n\
+        THE SIX DEFECTS.\n1. TOOL ERRORS ARE INVISIBLE, and this is the most serious. The agent emits\
+        \ {\"level\":\"WARN\",\"ok\":false,\"event\":\"tool_result\",\"tool\":...,\"msg\":\"... error:\
+        \ ...\"}. isError() checks `outcome` in {error,fail,failed,err} or `level` in {error,err}, so\
+        \ it can never see an agent tool error. Four existed in the baseline run, including a pr_number\
+        \ type mismatch that cost roughly $25 in a single later run. Verbatim errors are the headline\
+        \ reason this tool exists.\n2. mcp_call_count counts the wrong records. isMCP() returns true when\
+        \ a `server` field is present \u2014 those are the MCP HOST's own lines, not the agent's mcp__*\
+        \ tool calls. It reported 12, which is the mcp-servers line count; the histogram in the same report\
+        \ contains 43 mcp__* calls.\n3. turn_count renders 0 for a value the code knows it cannot determine.\
+        \ isTurn() guesses at turn_end / agent_turn_end / turn_complete and its own comment concedes the\
+        \ real name is undocumented. The value is in the run_end record as `turns` (229 for the baseline\
+        \ run; cost_usd is on the same record and is worth carrying too). Whatever you cannot determine\
+        \ must render as unavailable with a reason \u2014 the tool already does this correctly for advertised_tools\
+        \ and then breaks its own rule here. A 0 is a claim about the run.\n4. Attempts include other\
+        \ services. attempt_count was 8 and the list contained leartech-orchestrator-controller and leartech-maestro-service\
+        \ pods. Resolve the pod set from the AgentRun's Job \u2014 AgentRun.status.jobName \u2014 not\
+        \ from every pod that mentioned the run id.\n5. Wall clock spans the wrong window: 2h4m16s against\
+        \ the agent's 33m33s, because first_at/last_at come from all matching lines namespace-wide and\
+        \ the controller mentions a run id long before and after the agent runs. Decide what wall clock\
+        \ means, state it in the field's own note, and make it that.\n6. The coverage delta compares two\
+        \ run_id-filtered queries (556 vs 484, delta 72). Both miss the 519 agent lines that carry no\
+        \ run id at all. The real gap is {pod=\"...\"} 980 against `| json | run_id=` 461. Scope the broad\
+        \ side to the pod, as the earlier brief asked, or the number does not mean coverage.\nRECONCILE\
+        \ AGAIN BEFORE YOU CALL IT DONE. Run the fixed tool against agent-log-advertised-tools-log-advertised-tools\
+        \ and put the full twelve-row comparison in the PR description. Every previously disagreeing row\
+        \ must now agree OR be explained \u2014 if you conclude the BASELINE is wrong on any row, say\
+        \ so with evidence; it has been corrected twice already and is not authoritative by virtue of\
+        \ being handwritten.\nISOLATE TESTING: table-driven Go tests, no cluster, no network, extending\
+        \ the existing runreport_test.go and runreport_http_test.go rather than replacing them. Every\
+        \ fix needs a case built from a REAL emitted line shape: an error record with level WARN and ok\
+        \ false; an mcp__* call with no server field; a run_end carrying turns and cost_usd; a pod set\
+        \ containing a foreign service's pod that must be excluded; and a mixed JSON/non-JSON stream where\
+        \ the pod-scoped broad count exceeds the structured count by the non-JSON remainder. Non-negative\
+        \ coverage delta.\nDone = PR merged (open via open_pr, drive gates green)."
+      name: run-report-field-semantics
+      repo: mikelear/leartech-mcp-servers
+    kind: pr
+    name: run-report-field-semantics
+  - dependsOn:
+    - run-report-field-semantics
+    kind: check
+    name: run-report-field-semantics-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.run-report-field-semantics.pr}
+      repo: mikelear/leartech-mcp-servers
+      service: leartech-mcp-servers
+  triggeredBy: plan-catalog-internal-services

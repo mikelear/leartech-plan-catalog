@@ -1,0 +1,29 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: trackb-unify-mcp-logging
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/unify-mcp-logging
+      goal: "Unify structured logging across the Go MCP servers in leartech-mcp-servers.\nToday logging\
+        \ is inconsistent \u2014 some tools use stdlib log.Printf with\nkey=value strings (e.g. the new\
+        \ deploy_health tool), others barely log.\nStandardize on structured logging (log/slog with JSON\
+        \ handler, or the\nrepo's chosen structured logger) so Loki gets real FIELDS, not parsed\nstrings.\
+        \ Include: tool name, request/run id, args summary, outcome,\nduration. Convert deploy_health's\
+        \ log.Printf line (the nit ai-review\nflagged on PR #40) and the other tool call sites. Keep it\
+        \ a mechanical,\nlow-risk sweep \u2014 no behaviour change. Tests where they assert log\noutput;\
+        \ otherwise ensure build+lint green. Own the PR to green + merge.\n"
+      name: unify-mcp-logging
+      repo: leartech-mcp-servers
+    name: unify-mcp-logging
+    repo: mikelear/leartech-mcp-servers
+  tenant: leartech
+  triggeredBy: agent

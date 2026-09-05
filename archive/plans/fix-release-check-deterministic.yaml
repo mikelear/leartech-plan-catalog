@@ -1,0 +1,47 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-release-check-deterministic
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    inputs:
+      branch: fix/release-check-deploy-health
+      goal: "Make the infra `release-health-check` action DETERMINISTIC by composing MCP tools for\nevery\
+        \ stage (esp. the health stage via the k8s deploy_health MCP), and delete the\nunreachable HTTP\
+        \ /health probe. Root cause: the action's stage-4 HTTP probe can't reach\nthe ingress from the\
+        \ infra sandbox \u2192 false FAIL \u2192 spurious BA escalation. The k8s MCP\ntool `deploy_health`\
+        \ (merged, mcp-servers PR #40, in-cluster, no kubectl) already exists\nbut is NOT wired to the\
+        \ infra agent.\n\nCHANGES (this repo, leartech-automated-agent):\n1. gate/agent/mcp_catalog.yaml\
+        \ \u2014 add `leartech-k8s` to the `infra_agent` role's `mcps`\n   (exposes deploy_health, get_job_state,\
+        \ list_jobs_by_label). Confirm `leartech-jx-release`\n   is also in the infra role (add if missing\
+        \ \u2014 the action calls it). Define any missing\n   server entry in mcp_servers.\n2. gate/agent/infra_agent.py\
+        \ + gate/agent/release_health.py \u2014 rework the\n   release-health-check stages to be deterministic\
+        \ MCP calls, fail-closed ONLY on a genuine\n   failure, and emit the specific failing stage:\n\
+        \     - stage 1 release-fired: jx_release.release_status(repo) AND cross-check the release\n \
+        \      PipelineRun OUTCOME via the tekton MCP (fail if the release pipeline failed, not just\n\
+        \       \"tag missing\").\n     - stage 2 promote/verify/gate/merged: jx_release.promote_status(service,[gcp,az])\
+        \ \u2192\n       found + all_green + not gate_failed + all_merged; retest_promote ONCE on a flake;\n\
+        \       gate-fail \u2192 structured escalate marker (cross-plan).\n     - stage 3 boot-deployed:\
+        \ k8s.get_job_state / list_jobs_by_label per cluster \u2192 boot job\n       ran + succeeded.\n\
+        \     - stage 4 health: k8s.deploy_health(service, namespace, cluster) per cluster \u2192 verdict\n\
+        \       PASS iff healthy==true (>=1 available replica). DELETE the httpx /health probe in\n  \
+        \     release_health.py and REMOVE any \"kubectl unavailable => FAIL\" path \u2014 deploy_health\
+        \ is\n       the authoritative, in-cluster, deterministic check.\n   Verify BOTH clusters (gcp\
+        \ + az). If the k8s MCP can't reach the other cluster from the\n   infra pod, handle it explicitly\
+        \ (per-cluster) and note it \u2014 do NOT silently pass/fail.\n3. Keep structured logging (event=...,\
+        \ verdict, stage, cluster) so Loki captures each stage\n   + the final verdict + the MCP tool\
+        \ calls (we will verify via Loki after deploy).\n4. Add/adjust tests. Follow the local checks;\
+        \ open the PR, drive BOTH clusters green, STOP\n   at AwaitingReview.\n"
+      name: fix-release-check-deterministic
+      repo: leartech-automated-agent
+    name: code
+    repo: mikelear/leartech-automated-agent
+  tenant: leartech
+  triggeredBy: human

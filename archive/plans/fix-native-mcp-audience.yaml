@@ -1,0 +1,48 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=2
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-native-mcp-audience
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: chart-config
+      cluster: gcp
+      goal: "Fix native MCP connector 401 (GCP). In the auth-service config\n(helmfiles/jx-staging/configs/leartech-auth-service.yaml,\
+        \ edit SOURCE only), add the GCP\npublic MCP host to the USER-TOKEN default audiences so native\
+        \ OIDC login tokens carry it.\nThe value currently renders AUTH_USER_TOKEN_DEFAULT_AUDIENCES =\
+        \ leartech-orchestrator,\nleartech-auth-service, leartech-plan-api. ADD:\n  https://leartech-mcp-servers-public-jx-staging.jx.leartech.com\n\
+        (find the chart value that feeds AUTH_USER_TOKEN_DEFAULT_AUDIENCES \u2014 likely a list like\n\
+        `userTokenDefaultAudiences` / an oauth section; append the mcp host, keep the existing\nentries).\
+        \ WHY: a user token's aud = userTokenDefaultAudiences \u2229 the DCR client's allowed\naudiences;\
+        \ the DCR allow-list already has the mcp-host (DCR_DEFAULT_AUDIENCES), but the\nuser-token default\
+        \ does not, so the intersection drops it \u2192 aud=[plan-api] only \u2192 the MCP\n(MQUBE_AUTH_AUDIENCE=<mcp-host>)\
+        \ rejects at initialize. Adding it makes the intersection\ninclude the mcp-host. Do NOT remove\
+        \ existing audiences. Open ONE PR for review.\n"
+      service: leartech-auth-service
+    name: gcp
+    repo: mikelear/jx-build-cluster-gsm
+  - agentType: leartech-agent-infra
+    inputs:
+      action: chart-config
+      cluster: az
+      goal: 'Same as gcp but for AZ (jx-build-cluster-akv): add the AZ public MCP host
+
+        https://leartech-mcp-servers-public-jx-staging.az.leartech.com to
+
+        AUTH_USER_TOKEN_DEFAULT_AUDIENCES in the AZ auth-service config (keep existing entries).
+
+        Edit SOURCE only. Open ONE PR for review.
+
+        '
+      service: leartech-auth-service
+    name: az
+    repo: mikelear/jx-build-cluster-akv
+  tenant: leartech
+  triggeredBy: human

@@ -1,0 +1,37 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-observer-envtest-quarantine
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/test-harness-parity
+      goal: "PR #27 (feat/test-harness-parity) raised coverage to 77.9% (great, keep it) + added\nconformance/property/chart-render\
+        \ tests (fake-client, correct) \u2014 BUT it also put ENVTEST\ntests in the DEFAULT `go test ./...`\
+        \ path, so the CI go-test task (az/test) runs them,\ncan't start a control-plane (no KUBEBUILDER_ASSETS\
+        \ / no envtest binaries in the go-test\ntask), and FAILS \u2014 even though coverage computes.\
+        \ Fix by mirroring leartech-orchestrator-\ncontroller's pattern:\n- Move ALL envtest tests (anything\
+        \ constructing envtest.Environment / needing a real\n  apiserver) behind a build tag `//go:build\
+        \ integration` so `go test ./...` (default +\n  test-coverage + the CI go-test task) does NOT\
+        \ compile/run them.\n- Add a `test-integration` Makefile target that provisions binaries on-demand:\n\
+        \  `KUBEBUILDER_ASSETS=\"$(go run sigs.k8s.io/controller-runtime/tools/setup-envtest@latest use\
+        \ -p path)\" go test -tags=integration ./... -run <EnvtestTests>`\n  (copy the exact target shape\
+        \ from orchestrator-controller/Makefile:85).\n- KEEP all the fake-client conformance/property/chart-render\
+        \ tests in the default path\n  (they gave the 77.9% coverage \u2014 do NOT remove them or drop\
+        \ below the 70 ratcheted floor).\n- Confirm `go test ./...` (no integration tag) is GREEN locally\
+        \ with coverage still \u226570,\n  and `make test-integration` compiles (envtest tests build under\
+        \ the tag).\nPush to the SAME branch feat/test-harness-parity (updates PR #27). Drive az/test\
+        \ + gcp/test\nGREEN \u2192 the PR merges. Do NOT weaken coverage. STOP at AwaitingReview.\n"
+      name: fix-observer-envtest-quarantine
+      repo: leartech-arrivals-observer
+    name: quarantine-envtest
+    repo: mikelear/leartech-arrivals-observer
+  tenant: leartech
+  triggeredBy: human

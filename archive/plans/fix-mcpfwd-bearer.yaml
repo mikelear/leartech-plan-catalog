@@ -1,0 +1,47 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-mcpfwd-bearer
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/plan-forwarder-propagate-bearer
+      goal: "The public plan-forwarder MCP (mode=public, /mcp/plan) validates the inbound user token\n\
+        correctly, but create_plan/list_plans forwarded to plan-api return 401 because the\ncaller's raw\
+        \ Bearer is NOT propagated to the plan-api HTTP call. Proven end-to-end:\na user token with aud=[<MCP\
+        \ host>, leartech-plan-api] + scope leartechapi:mcp:write is\nACCEPTED by the MCP (initialize/tools/list/create_plan\
+        \ all reached it), but plan-api\nlogs \"POST /plans -> 401\" at the auth middleware (0ms) \u2014\
+        \ IDENTICAL whether or not the\ntoken carries aud=leartech-plan-api. So the forwarder is sending\
+        \ NO (or a wrong) token\nto plan-api, not the caller's.\n\ninternal/planserver/client.go is DESIGNED\
+        \ to attach the caller's Bearer verbatim\n(auth.BearerFromContext) to the plan-api request, with\
+        \ an s2s client-credentials\nfallback. The bug: the MCP's inbound auth middleware (the mqube/MQUBE_AUTH_*\
+        \ validator\nused in public mode) validates the token but does NOT store the RAW bearer in the\
+        \ ctx\nunder the key planserver's BearerFromContext reads \u2014 so the client finds no bearer\
+        \ and\nfalls back to s2s, which is UNCONFIGURED in the public deployment (no\nLEARTECH_AUTH_CLIENT_ID\
+        \ / LEARTECH_AUTH_TARGET_AUDIENCE env) \u2192 the plan-api call goes\nout with no Authorization\
+        \ \u2192 401.\n\nFIX (pick the cleanest, keep the \"MCP does not decide authorization\" invariant\
+        \ \u2014 plan-api\nmust see the CALLER's token so it enforces mcp:write/PlatformAdmin + records\
+        \ the real\ntriggeredBy):\n1. Ensure the public-mode inbound auth middleware stashes the validated\
+        \ RAW bearer into\n   the request context under the SAME key auth.BearerFromContext (used by\n\
+        \   internal/planserver/client.go) reads. i.e. bridge the mqube-auth ctx and the\n   go-common/BearerFromContext\
+        \ ctx key so the forwarder picks up the caller token.\n   Verify the whole path: inbound /mcp/plan\
+        \ tool call \u2192 ctx \u2192 client.do() attaches\n   `Authorization: Bearer <caller token>`\
+        \ to the plan-api request.\n2. Add a unit/integration test proving that when a call arrives with\
+        \ a Bearer, the\n   outbound plan-api request carries that same Bearer (not empty, not s2s).\n\
+        Do NOT weaken the inbound fail-closed authz. Keep the s2s fallback for peer/no-bearer\ncalls but\
+        \ it must not shadow the caller-bearer path. Lean diff. Own the PR, drive BOTH\nclusters' gates\
+        \ GREEN (build+test+lint+ai-review; run them LOCALLY before pushing to\navoid half-fixes) THROUGH\
+        \ TO MERGE.\n"
+      name: fix-mcpfwd-bearer
+      repo: leartech-mcp-servers
+    name: bearer
+    repo: mikelear/leartech-mcp-servers
+  tenant: leartech
+  triggeredBy: human

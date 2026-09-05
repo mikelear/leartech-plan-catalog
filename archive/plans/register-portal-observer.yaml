@@ -1,0 +1,40 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=2
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: register-portal-observer
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: chart-config
+      cluster: gcp
+      goal: "Register leartech-ship-proven-portal in the GCP Observer config\n(helmfiles/jx-staging/configs/leartech-arrivals-observer.yaml)\
+        \ \u2014 edit SOURCE only, never\nconfig-root/. Add under `services:` an entry mirroring the leartech-auth-ui\
+        \ entry\n(authenticated UI):\n  leartech-ship-proven-portal:\n    stagingUrl: https://leartech-ship-proven-portal-jx-staging.jx.leartech.com\n\
+        \    testPacks:\n      - { name: end2end, type: end2end }\n      - { name: end2end-ui, type: end2end-ui\
+        \ }\n    env: <copy the EXACT env block from the existing leartech-auth-ui entry \u2014\n    \
+        \      HYDRA_ADMIN_URL, USER_ID, and USER_EMAIL/USER_PASSWORD from the\n          auth-service-test-user\
+        \ secret (same keys)>\nCopy the auth env keys/secret keys verbatim from leartech-auth-ui. Open\
+        \ ONE PR for review.\n"
+      service: leartech-arrivals-observer
+    name: observer-gcp
+    repo: mikelear/jx-build-cluster-gsm
+  - agentType: leartech-agent-infra
+    inputs:
+      action: chart-config
+      cluster: az
+      goal: "Same as observer-gcp but for AZ (jx-build-cluster-akv) \u2014 register\nleartech-ship-proven-portal\
+        \ in helmfiles/jx-staging/configs/leartech-arrivals-observer.yaml\nwith the AZ stagingUrl (https://leartech-ship-proven-portal-jx-staging.az.leartech.com)\
+        \ and\nthe AZ auth env (mirror the AZ leartech-auth-ui entry's HYDRA_ADMIN_URL + USER creds).\n\
+        Edit SOURCE only. Open ONE PR for review.\n"
+      service: leartech-arrivals-observer
+    name: observer-az
+    repo: mikelear/jx-build-cluster-akv
+  tenant: leartech
+  triggeredBy: human

@@ -1,0 +1,96 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=3
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-mcp-portal-plan-auth
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/mcp-portal-plan-auth
+      goal: "Make it possible for an authenticated user token to (1) carry the correct RESOURCE\nAUDIENCE\
+        \ and (2) hold a WRITE scope, so both the public MCP and the browser Portal can\ncreate Plans.\
+        \ Proven gaps: issued user tokens have aud=[] (rejected by resource servers\n401) and only leartechapi:mcp:read\
+        \ is grantable via DCR.\n\nFIRST investigate (don't guess): how tokens are minted + audiences\
+        \ assigned. Find\nAUTH_USER_TOKEN_DEFAULT_AUDIENCES handling, the /oauth2/auth + /oauth2/token\
+        \ path, the\nDCR handler (/oauth2/register \u2014 DCR_ALLOWED_SCOPES, DCR_ALLOWED_REDIRECT_URI_PATTERNS,\n\
+        how it sets a client's allowed audiences), and whether the RFC 8707 `resource` request\nparameter\
+        \ is honored (MCP clients send `resource`, NOT Hydra's `audience`). Also find\nthe ROLE / claim\
+        \ model (what roles exist \u2014 PlatformAdmin? TenantAdmin? Admin? \u2014 and how\na user's role\
+        \ lands in the token, e.g. an ext/roles claim). Note: config values like the\naudience list live\
+        \ in per-cluster GitOps overlays (gsm=gcp, akv=az) \u2014 identify exactly\nwhich env/config keys\
+        \ must change and in which repo; if they're GitOps-overlay values\n(leartech-cluster-config or\
+        \ the jx-build-cluster-* config), DOCUMENT the required\nper-cluster values in the PR description\
+        \ (do NOT hand-edit config-root/).\n\nCHANGES:\n1. AUDIENCE: honor the RFC 8707 `resource` parameter\
+        \ on the authorize+token requests so\n   the issued access token's `aud` includes the requested\
+        \ resource (the MCP host\n   https://leartech-mcp-servers-public-<cluster>.jx.leartech.com AND/OR\
+        \ plan-api\n   `leartech-plan-api`), validated against an allow-list of known resources. If honoring\n\
+        \   `resource` is too invasive, the fallback is to ADD both the MCP public host(s) and\n   `leartech-plan-api`\
+        \ to the user-token default audiences \u2014 but the resource-param\n   approach is preferred\
+        \ (standards-correct, per-request). A DCR client must be able to\n   obtain a token whose aud\
+        \ matches the resource it will call.\n2. SCOPE: add a WRITE scope (name it to match the read one,\
+        \ e.g. `leartechapi:mcp:write`,\n   plus a plan-api-facing scope if reads/writes are modelled\
+        \ per-service) to\n   DCR_ALLOWED_SCOPES so self-registered clients (MCP + portal) can request\
+        \ read AND\n   write. Keep read as-is.\n3. ROLE + USERS: confirm/define the role that authorizes\
+        \ Plan CREATE. Per Mike: use an\n   ADMIN-type role (note \"Platform\" may be tenant-scoped in\
+        \ this model \u2014 pick the role\n   that means platform-wide admin) \u2014 but WRITE-scope-based\
+        \ authz is also acceptable; do\n   whichever fits the existing model, and make it consistent.\
+        \ Ensure there is a working,\n   documented way to CREATE a new admin/platform user and grant\
+        \ them this role (via the\n   auth-admin-ui user-management path or a seed/migration) \u2014 the\
+        \ whole point is \"a user\n   per session who can create plans\". If auth-admin-ui is the mechanism,\
+        \ verify it can\n   create a user + assign the role; document the steps in the PR.\n\nAdd tests\
+        \ (token minted with a requested resource has that aud; write scope grantable;\nrole/claim present\
+        \ for an admin user). Keep the diff lean, no vendor. Own the PR, drive\nBOTH clusters' gates green\
+        \ THROUGH TO MERGE. In the PR description, spell out the exact\nper-cluster GitOps config changes\
+        \ still needed (audiences + scopes) so the follow-up\nconfig PR is trivial.\n"
+      name: fix-mcp-portal-plan-auth
+      repo: leartech-auth-service
+    name: auth-foundation
+    repo: mikelear/leartech-auth-service
+  - agentType: leartech-agent-go
+    dependsOn:
+    - auth-foundation
+    inputs:
+      branch: feat/plan-forwarder-write-authz
+      goal: "Make the public plan-forwarder MCP accept a properly-audienced user token and authorize\n\
+        Plan operations by scope/role. Context: the MCP validates MQUBE_AUTH_AUDIENCE = its\nresource\
+        \ host; once auth-service (sibling PR feat/mcp-portal-plan-auth) mints tokens with\nthat aud +\
+        \ a write scope, wire the forwarder:\n- READ tools (list_plans, get_plan) require an authenticated\
+        \ token with the read scope\n  (leartechapi:mcp:read).\n- WRITE tool (create_plan) requires the\
+        \ WRITE scope (e.g. leartechapi:mcp:write) OR the\n  admin role \u2014 return a clear 403 otherwise.\n\
+        - When forwarding create to plan-api, set the Plan's triggeredBy from the AUTHED CALLER's\n  identity\
+        \ (sub), and keep the existing default spec.paused=true.\nRead how the forwarder currently authenticates\
+        \ + forwards (it has its own s2s client\nLEARTECH_AUTH_CLIENT_ID to reach plan-api at LEARTECH_PLAN_API_URL).\
+        \ Add a unit test for\nthe read-vs-write scope gate. Lean diff, own the PR, BOTH clusters green\
+        \ THROUGH TO MERGE.\n"
+      name: fix-mcp-portal-plan-auth-mcp
+      repo: leartech-mcp-servers
+    name: mcp-forwarder-authz
+    repo: mikelear/leartech-mcp-servers
+  - agentType: leartech-agent-go
+    dependsOn:
+    - auth-foundation
+    inputs:
+      branch: feat/read-write-authz-portal
+      goal: "Ensure plan-api authorizes READ vs WRITE correctly so BOTH the MCP forwarder AND the\nbrowser\
+        \ PORTAL (a future Angular SPA calling plan-api directly, aud=leartech-plan-api)\nwork behind\
+        \ login. plan-api already has AUTH_ENABLED=true, audience leartech-plan-api.\n- GET /plans, GET\
+        \ /plans/:name: allow any authenticated token with the read scope (or a\n  valid user) \u2014\
+        \ this is what the Portal's list/detail views + the MCP list_plans use.\n- POST /plans (create):\
+        \ require the WRITE scope (e.g. plans-create / leartechapi:mcp:write\n  \u2014 match what auth-foundation\
+        \ defines) OR an admin role; 403 otherwise. triggeredBy from\n  the authed caller. Keep spec.paused=true\
+        \ default + existing validation.\nConfirm the audience check accepts tokens minted for `leartech-plan-api`\
+        \ (portal path).\nRead the sibling auth-foundation PR (feat/mcp-portal-plan-auth) to match scope/role\
+        \ names\nEXACTLY. Add tests: read-scope token can GET but not POST (403); write/admin token can\n\
+        POST; wrong-audience token rejected. Lean diff, own the PR, BOTH clusters green THROUGH\nTO MERGE.\n"
+      name: fix-mcp-portal-plan-auth-api
+      repo: leartech-plan-api
+    name: plan-api-authz
+    repo: mikelear/leartech-plan-api
+  tenant: leartech
+  triggeredBy: human

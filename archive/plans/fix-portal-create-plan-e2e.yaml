@@ -1,0 +1,55 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  labels:
+    leartech.io/origin: post-deploy-gate-triage
+  name: fix-portal-create-plan-e2e
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: fix/create-plan-e2e
+      goal: "The end2end-ui gate is RED on both clusters for exactly one test, so post-deploy promotion\n\
+        of the portal is blocked. This is a real, deterministic failure (reproduced 3x, 17 other\ntests\
+        \ pass) \u2014 NOT a flake or an infra/resource issue (verified: re-run after fixing cluster\n\
+        resources still fails identically).\n\nFAILING TEST (identical on both clusters):\n  07-create-plan.spec.ts:20:7\
+        \ \u203A create plan (PlatformAdmin) \u203A creates a paused plan and it appears in the list\n\
+        \  Symptom: `await page.waitForURL(url => url.pathname === '/plans/${name}')` times out after\
+        \ 20s,\n  then `expect(page.getByTestId('plan-detail-page')).toBeVisible()` fails \u2014 i.e.\
+        \ after creating a\n  plan the app never navigates to / renders the plan-detail page.\n  AZ  leartech-ship-proven-portal\
+        \ 0.0.16 : 1 failed, 17 passed\n  GCP leartech-ship-proven-portal 0.0.14 : 1 failed, 17 passed\
+        \ (same test)\n\nREAD THE FAILURE ARTIFACTS FIRST \u2014 do not guess. Fetch and read these before\
+        \ touching code\n(they are the authoritative evidence of what actually happened at failure). The\
+        \ bucket is\nPRIVATE; use the projected GCS credentials (GOOGLE_APPLICATION_CREDENTIALS is set\
+        \ in your env\n\u2014 a service-account key; python3 `from google.cloud import storage` will pick\
+        \ it up\nautomatically, or gsutil if present):\n  AZ  : gs://test-artifacts-product-first/results/v1/post-deploy/az/jx-staging/leartech-ship-proven-portal/0.0.16/end2end-ui/\n\
+        \  GCP : gs://test-artifacts-product-first/results/v1/post-deploy/gcp/jx-staging/leartech-ship-proven-portal/0.0.14/end2end-ui/\n\
+        Under each, the key evidence for the failing spec is:\n  test-results/07-create-plan-create-plan-604ac--and-it-appears-in-the-list/error-context.md\
+        \   (DOM/aria snapshot at the moment of failure \u2014 read this first, it is plain text)\n  test-results/07-create-plan-create-plan-604ac--and-it-appears-in-the-list/test-failed-1.png\
+        \   (screenshot at failure)\n  test-results/07-create-plan-create-plan-604ac--and-it-appears-in-the-list/trace.zip\
+        \           (full Playwright trace \u2014 network + console + DOM timeline; open with `npx playwright\
+        \ show-trace`)\n  (there is also a .../-retry1/ variant of each)\n  playwright-report/       \
+        \                                                                     (the HTML report index)\n\
+        Report in the PR description WHICH artifacts you read and the specific evidence (the DOM state,\n\
+        the failing network call, the console error) that pinpoints the root cause.\n\nDIAGNOSE THE ROOT\
+        \ CAUSE from that evidence, then FIX IT. Likely candidates to confirm from the\ntrace, not assume:\
+        \ the create-plan POST failing or returning a shape the UI doesn't route on;\na client-side navigation/route\
+        \ guard that never fires; a testid missing on the plan-detail\npage; an auth/permission gap for\
+        \ PlatformAdmin in this flow; or a genuine timing/race. If \u2014 and\nonly if \u2014 the trace\
+        \ proves the TEST is wrong (not the app), fix the test; otherwise fix the app.\nDO NOT weaken,\
+        \ skip, or delete the assertion to make it pass \u2014 a green gate that no longer\nproves plan\
+        \ creation works is worse than the red one.\n\nKeep every other end2end-ui test passing and do\
+        \ not regress the seo-preview presubmit\n(it fetches raw no-JS HTML and asserts the hero/meta/sitemap\
+        \ \u2014 keep prerender/SSG). Extend the\ntest only if the fix legitimately changes the expected\
+        \ flow, and say so.\n\nDone = PR merged: open via open_pr, drive all gates green (end2end-ui included),\
+        \ and record your\ndiagnosis + fix in the PR description.\n"
+      name: fix-create-plan-e2e
+      repo: mikelear/leartech-ship-proven-portal
+    kind: pr
+    name: fix-create-plan-e2e

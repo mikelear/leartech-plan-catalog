@@ -1,0 +1,25 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: prove-release-check-mcp
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: release-health-check
+      clusters:
+      - gcp
+      - az
+      healthPath: /health
+      repo: mikelear/leartech-go-service-template
+      service: leartech-go-service-template
+    name: release-check
+    repo: mikelear/leartech-go-service-template
+  tenant: leartech
+  triggeredBy: human

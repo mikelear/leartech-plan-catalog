@@ -1,0 +1,57 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=2
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: plan-2-orch-track
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    budgetIter: 9
+    inputs:
+      base: main
+      branch: agent/cancel-stops-child-agentruns
+      description: 'When a Plan is cancelled, the reconciler must STOP the in-flight child AgentRuns.
+        Today cancel sets phase=Cancelled + marks steps Cancelled but leaves the child AgentRuns + pods
+        RUNNING (observed in Plan #1: steps kept executing after Cancelled; had to kubectl delete manually).'
+      goal: "In the Plan reconciler (leartech-orchestrator-controller), make plan cancellation PROPAGATE\
+        \ to\nrunning child AgentRuns. On spec.command.verb=cancel (plan -> Cancelled), the reconciler\
+        \ must stop\nthe in-flight child AgentRuns owned by that plan \u2014 delete them / set them cancelled\
+        \ so the AgentRun\ncontroller terminates their pods (prefer reconciler-driven child cleanup; k8s-native).\
+        \ Handle the\nper-step case too if step-level cancel exists. Add a controller/envtest: a Plan\
+        \ with a Running child\nAgentRun, when cancelled, results in the child AgentRun being stopped/deleted\
+        \ (not left Running); a\nnormally-completing plan is unaffected. All PR gates green incl a real\
+        \ ai-review verdict. Open a PR.\nHold it (do not merge).\n"
+      name: cancel-propagation
+      repo: leartech-orchestrator-controller
+    name: cancel-propagation
+    repo: mikelear/leartech-orchestrator-controller
+  - agentType: leartech-agent-py
+    budgetIter: 9
+    inputs:
+      base: main
+      branch: agent/e2e-authed-chat-plans
+      description: 'Close the last auth-off cheat: orch scripts/e2e.sh runs its main container with LEARTECH_AUTH_REQUIRED=false,
+        so the functional /plans + /chat tests are UNAUTHENTICATED. Run them with auth ON + a real user
+        token. Also produces the reusable get-user-token helper.'
+      goal: "In leartech-orchestrator scripts/e2e.sh, exercise the functional /plans + /chat tests with\
+        \ auth\nENABLED and a REAL user token (no LEARTECH_AUTH_REQUIRED=false for the functional path).\
+        \ Replay the\nseeded-user login (user test@leartech.com; mirror leartech-auth-service end2end/02-oauth-flow.sh:\n\
+        authorization_code+PKCE via Hydra /oauth2/auth -> login_challenge -> POST /api/auth/login -> consent\n\
+        auto-accept -> code -> token exchange), requesting audience=leartech-orchestrator so the token\
+        \ is\nbound to what chat validates. Assert: no token -> 401; with the user token -> 200 + real\
+        \ chat/plans\nbehaviour (create/list/view a plan, a chat turn). KEEP the existing fail-closed\
+        \ BOOT regression tests\n(auth=true + no issuer -> crash). Factor the token acquisition into a\
+        \ reusable helper/script (e.g.\nscripts/get-user-token.sh) that other tooling can source \u2014\
+        \ it unblocks live authed Orch driving. All\nPR gates green incl real ai-review. Open a PR. Hold\
+        \ it (do not merge).\n"
+      name: orch-e2e-authed-login
+      repo: leartech-orchestrator
+    name: orch-e2e-authed-login
+    repo: mikelear/leartech-orchestrator
+  tenant: platform
+  triggeredBy: session-plan-2-orch-track-2026-07-18

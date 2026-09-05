@@ -1,0 +1,61 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: prove-release-check-5step
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: release-status
+      repo: mikelear/leartech-go-service-template
+      requirePipelineSuccess: true
+    name: release-fired
+    repo: mikelear/leartech-go-service-template
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - release-fired
+    inputs:
+      action: promote-status
+      clusters:
+      - gcp
+      - az
+      service: leartech-go-service-template
+    name: promote-open
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - promote-open
+    inputs:
+      action: promote-gate
+      clusters:
+      - gcp
+      - az
+      service: leartech-go-service-template
+    name: verify-gate
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - verify-gate
+    inputs:
+      action: boot-status
+      clusters:
+      - gcp
+      - az
+      service: leartech-go-service-template
+    name: boot-deployed
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - boot-deployed
+    inputs:
+      action: deploy-health
+      clusters:
+      - gcp
+      - az
+      service: leartech-go-service-template
+    name: health
+  tenant: leartech
+  triggeredBy: human

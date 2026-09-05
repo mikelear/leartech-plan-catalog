@@ -1,0 +1,39 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-portal-detail-green2
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: feat/plan-portal
+      goal: "Continue on EXISTING branch feat/plan-portal (PR #2 \u2014 the 5-view Plan portal). Only\n\
+        az/test + gcp/test remain RED (ai-review + end2end already cleared). Your image now HAS a\nheadless\
+        \ browser (Chromium + CHROME_BIN), so RUN THE UNIT TESTS LOCALLY and fix them for\nreal \u2014\
+        \ do not guess.\n1) `npm ci --legacy-peer-deps` (fallback `npm install --legacy-peer-deps`), then\
+        \ `npm test`\n   (script: `ng test --watch=false --code-coverage --browsers=ChromeHeadlessNoSandbox`).\n\
+        2) The KNOWN failure: `PlansListComponent shows an error banner when the adapter rejects\n   with\
+        \ a 401` \u2014 the spec asserts the banner text `.toContain('401')` but the component\n   renders\
+        \ a friendly message (\"plan-api rejected the browser bearer (aud mismatch or\n   expired). Sign\
+        \ out and back in.\") with no '401'. Fix the MISMATCH correctly: either the\n   component should\
+        \ surface the status (e.g. include 401) OR the test should assert the\n   actual user-facing message\
+        \ \u2014 pick the one that matches intended UX (a friendly,\n   actionable banner is good UX;\
+        \ if so, fix the test's expectation, don't dumb-down the\n   component). Fix any other failing\
+        \ specs the same way \u2014 by running them.\n3) Enforce the 60% coverage floor CI checks: after\
+        \ tests pass, parse coverage/**/lcov.info\n   (sum LF/LH) and ensure total >= 60.0; add tests\
+        \ if below. Verify `npm test` is fully\n   green + coverage >= floor LOCALLY before pushing.\n\
+        SCOPE: unit `test` gate only. Do NOT gate on end2end-ui (Playwright) \u2014 leave it iterative\n\
+        (preview look-and-feel feedback loop). Own PR #2, drive BOTH clusters' `test` green THROUGH\n\
+        TO MERGE (then release-check + portal live).\n"
+      name: fix-portal-detail-green2
+      repo: leartech-ship-proven-portal
+    name: portalgreen2
+    repo: mikelear/leartech-ship-proven-portal
+  tenant: leartech
+  triggeredBy: human

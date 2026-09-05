@@ -1,0 +1,33 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-planapi-cov
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/read-write-authz-portal
+      goal: "Continue on the EXISTING branch feat/read-write-authz-portal (PR #5). All tests PASS but\n\
+        az/test FAILS the coverage gate: \"coverage dropped -1.00% vs origin/main (tolerance\n-0.5%)\"\
+        . The new read/write authz code added lines without matching tests. Raise coverage\nback within\
+        \ tolerance \u2014 do NOT change behaviour:\n- Add unit tests for the uncovered new paths, notably\
+        \ internal/plans/validator.go:31\n  (the Error path, currently 0%) and any other new-but-uncovered\
+        \ lines the coverage\n  report flags (check `go test ./... -cover` per package; target the low\
+        \ ones).\n- Keep/strengthen the authz tests already there (read requires mcp:read; POST create\n\
+        \  requires platform_admin/write; unauthenticated \u2192 401 fail-closed; wrong-audience\n  rejected).\
+        \ These already pass \u2014 just add the missing-coverage cases.\nRun `go test ./... -cover` locally\
+        \ to confirm the delta is within -0.5%. Keep the diff\nminimal, no behaviour change. Own PR #5,\
+        \ drive BOTH clusters' gates GREEN THROUGH TO\nMERGE (don't just wait for Tide \u2014 verify az/test\
+        \ coverage passes on the new commit).\n"
+      name: fix-planapi-cov
+      repo: leartech-plan-api
+    name: cov
+    repo: mikelear/leartech-plan-api
+  tenant: leartech
+  triggeredBy: human

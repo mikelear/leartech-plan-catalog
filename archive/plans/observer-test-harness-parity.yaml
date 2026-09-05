@@ -1,0 +1,64 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: observer-test-harness-parity
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/test-harness-parity
+      goal: "Raise this repo's test harness to the leartech-orchestrator-controller bar. Today the observer\n\
+        uses only client-go fakes (dynamic/fake NewSimpleDynamicClient + kubernetes/fake) with\nstraightforward\
+        \ unit tests. The orchestrator-controller adds a higher tier we want here \u2014 but\nADAPT to\
+        \ the observer's architecture: the observer deliberately uses the client-go DYNAMIC\n(unstructured)\
+        \ client, so do NOT rewrite it to controller-runtime typed clients. Bring over the\nPATTERNS +\
+        \ envtest, not the client type.\n\nFIRST: rebase on latest main (the per-service/pack resources+env\
+        \ and structured-logging/metrics/\ndashboard changes from plan observer-flex-and-observability\
+        \ should have landed \u2014 build the tests\non that final surface).\n\n1. ENVTEST harness: add\
+        \ a sigs.k8s.io/controller-runtime/pkg/envtest setup (real kube-apiserver +\n   etcd, no kubelet)\
+        \ usable with the observer's dynamic client, gated so `go test` skips cleanly\n   when KUBEBUILDER_ASSETS/envtest\
+        \ binaries are absent (mirror how orchestrator-controller guards\n   it) and runs in CI where\
+        \ they're present. Use it for at least one high-fidelity reconcile test\n   (arrival created \u2192\
+        \ dispatched \u2192 job status \u2192 terminal) against a real API server, complementing\n   the\
+        \ fast fake-dynamic-client unit tests.\n2. STATE-MACHINE CONFORMANCE test for the Arrival lifecycle:\
+        \ assert every legal transition\n   (\"\"/Pending\u2192Testing; Testing\u2192Passed/Failed/Timeout;\
+        \ terminal left alone EXCEPT rollout-retest\n   reset when deployedAt>finalizedAt+cooldown \u2192\
+        \ Pending w/ cleared tests; Skipped\u2192Pending when\n   testPacks appear) AND that ILLEGAL transitions\
+        \ never happen. Mirror\n   orchestrator-controller/internal/controller/state_machine_conformance_test.go\
+        \ in spirit.\n3. PROPERTY / INVARIANT tests (mirror jobspawn_property_test.go + agentrun_terminal_invariants_test.go):\n\
+        \   e.g. a terminal arrival never silently regresses; rollout-retest fires at most once per\n\
+        \   cooldown window (no N-retest storms); resource merge precedence pack>service>global holds\
+        \ for\n   arbitrary combos; env layering standard\u2192service\u2192pack (last wins) holds for\
+        \ arbitrary combos.\n4. CHART-RENDER tests (mirror chart_crds_yaml_test.go + chart_deployment_yaml_test.go):\
+        \ helm-template\n   the chart and ASSERT the rendered YAML \u2014 the CRD schema round-trips the\
+        \ new Resources/Env fields,\n   the SERVICES_JSON configmap renders per-service env + resources\
+        \ correctly, the Grafana dashboard\n   ConfigMap carries label `jenkins-x.io/grafana-dashboard:\
+        \ \"1\"` + annotation grafana_folder + valid\n   dashboard JSON, and (the bug-class that bit us)\
+        \ container resources land at the path the chart\n   actually consumes \u2014 a render test that\
+        \ would have caught `resources:` vs `pod.resources:`.\n5. Wire all of this into `make test` +\
+        \ the golden go test-coverage task so it runs locally AND in\n   Tekton identically (avoid the\
+        \ local-vs-CI drift class).\n6. RAISE COVERAGE + RATCHET THE FLOOR. Current total is 60.2% \u2014\
+        \ right on the 60.0% Makefile\n   threshold with almost no margin (one change could drop below).\
+        \ The weakest package is\n   `internal/controller` at 57.9% (the arrival state machine). The new\
+        \ conformance + property\n   tests (steps 2-3) target exactly that, so they should lift controller\
+        \ well up; also add\n   targeted tests for any remaining uncovered controller branches (rollout-retest\
+        \ cooldown,\n   terminal-phase guards, timeout path, skipped\u2192pending). Goal: controller \u2265\
+        75% and TOTAL \u226570%.\n   Then RATCHET the Makefile `test-coverage` THRESHOLD from 60.0 up\
+        \ to the new floor (e.g. 68-70,\n   set just under the achieved total so it can't regress) \u2014\
+        \ a one-way ratchet, never lower it.\n   (cmd/server main is ~0% and conventionally excluded \u2014\
+        \ don't chase it; focus on internal/.)\n\nHeavy LOCAL run of the full suite before pushing (incl.\
+        \ envtest if assets available; otherwise the\nskip-guard must keep `go test ./...` green). Confirm\
+        \ `make test-coverage` reports the new total\nABOVE the ratcheted threshold. Open PR, drive both\
+        \ clusters' gates green, STOP at\nAwaitingReview.\n"
+      name: observer-test-harness-parity
+      repo: leartech-arrivals-observer
+    name: test-harness
+    repo: mikelear/leartech-arrivals-observer
+  tenant: leartech
+  triggeredBy: human

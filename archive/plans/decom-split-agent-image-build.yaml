@@ -1,0 +1,58 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Succeeded, az=Paused
+# AgentRuns owned: gcp=5, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: decom-split-agent-image-build
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    inputs:
+      branch: chore/service-image-off-agent-go
+      goal: "Take the FastAPI service image OUT of the agent image chain so this repo stops being both\
+        \ a producer and a consumer of the same container build cycle.\nTHE CHANGE. Dockerfile line 11\
+        \ currently reads `FROM ghcr.io/mikelear/leartech-agent-go:0.31.1`. Re-base it on leartech-agent-base\
+        \ instead \u2014 the same image Dockerfile.runtime already builds on. The service image and leartech-agent-runtime\
+        \ then become SIBLINGS off one shared base, rather than the service sitting three hops downstream\
+        \ of an image this repo itself produces.\nDO NOT re-base onto python:3.14-slim. Verify before\
+        \ you choose the base: the service imports `gate.tools.pr_back`, which shells out to the `gh`\
+        \ CLI, and `app/` imports ten `gate.*` modules. leartech-agent-base carries ca-certificates, curl,\
+        \ git, gh and uv \u2014 confirm that list against the actual leartech-agent-base Dockerfile in\
+        \ leartech-dockerfiles rather than trusting this goal, then confirm every runtime dependency the\
+        \ service actually uses is present. If something the service needs is only in leartech-agent-go,\
+        \ install it explicitly in this Dockerfile (as ffmpeg already is) rather than keeping the agent-go\
+        \ base.\nPIN THE BASE the way the current line does \u2014 an explicit tag, and a digest if the\
+        \ surrounding convention uses one. Do not float to :latest.\nWHAT MUST NOT REGRESS. The image\
+        \ must still run uvicorn with the same ENTRYPOINT and the same absolute-path behaviour the current\
+        \ Dockerfile documents (operators run `kubectl exec <pod> -- leartech-agent ...` and depend on\
+        \ the console script being resolvable). Keep the COPY --chown ownership so the agent user can\
+        \ still write to the lessons catalog at runtime. Keep /workspace uncreated \u2014 the chart mounts\
+        \ it as an emptyDir and the existing comment explains the kaniko --snapshotMode=redo interaction.\n\
+        REPORT THE SIZE DELTA in the PR description \u2014 before and after. Dropping the Go toolchain,\
+        \ golangci-lint, govulncheck and yq from a uvicorn image should be a visible reduction, and if\
+        \ it is not, something is still pulling them in and that is worth knowing.\nALSO IN THE PR DESCRIPTION:\
+        \ state explicitly whether the release pipeline still builds BOTH images (the service via Dockerfile\
+        \ and leartech-agent-runtime via Dockerfile.runtime), and whether they can now build independently\
+        \ rather than in sequence. If the pipeline still serialises them unnecessarily, say so \u2014\
+        \ do not fix it in this PR, it is a separate change.\nISOLATE TESTING: this is a build-level change,\
+        \ so prove it at build level. The image must build, `uv run pytest` must pass inside it, and the\
+        \ console script `leartech-agent --help` must resolve on a default login PATH. Do not weaken any\
+        \ existing gate to make the build pass.\nDone = PR merged (open via open_pr, drive gates green)."
+      name: service-image-off-agent-go
+      repo: mikelear/leartech-automated-agent
+    kind: pr
+    name: service-image-off-agent-go
+  - dependsOn:
+    - service-image-off-agent-go
+    kind: check
+    name: service-image-off-agent-go-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.service-image-off-agent-go.pr}
+      repo: mikelear/leartech-automated-agent
+      service: leartech-automated-agent
+  triggeredBy: plan-catalog-internal-services

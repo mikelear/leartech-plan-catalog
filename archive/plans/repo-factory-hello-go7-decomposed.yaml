@@ -1,0 +1,79 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=7
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: repo-factory-hello-go7-decomposed
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: create-repo
+      newRepo: mikelear/hello-go7
+    name: create
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - create
+    inputs:
+      action: register-source-config
+      cluster: gcp
+      service: hello-go7
+    name: register-gcp
+    repo: mikelear/jx-build-cluster-gsm
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - create
+    inputs:
+      action: register-source-config
+      cluster: az
+      service: hello-go7
+    name: register-az
+    repo: mikelear/jx-build-cluster-akv
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - register-gcp
+    - register-az
+    inputs:
+      action: scaffold-pr
+      name: hello-go7
+      template: go
+    name: scaffold
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - scaffold
+    inputs:
+      action: smoke-pr
+      name: hello-go7
+    name: smoke
+  - agentType: leartech-agent-go
+    dependsOn:
+    - smoke
+    inputs:
+      branch: smoke-hello-go7
+      goal: "A smoke PR is already OPEN on branch `smoke-hello-go7` of this repo (opened by the Infra\n\
+        step). ADOPT it \u2014 the harness has checked the branch out; CALL the `open_pr` MCP tool\n(it\
+        \ is IDEMPOTENT: adopts the existing PR and records it onto this run). Then OWN the PR\nlike any\
+        \ other: watch the Tekton gates, REACT to whatever fails (retest a flake, fix a\nreal issue \u2014\
+        \ new gate, vuln, lint), and take it GREEN through to MERGE. This proves the\nfreshly-bootstrapped\
+        \ repo's PR pipelines work end-to-end. Do not re-do the pushed commit.\n"
+      name: hello-go7-smoke
+      repo: hello-go7
+    name: smoke-dev
+    repo: mikelear/hello-go7
+  - agentType: leartech-agent-infra
+    inputs:
+      action: release-health-check
+      budgetMinutes: 60
+      healthPath: /health
+      namespace: jx-staging
+      service: hello-go7
+    name: release-monitor
+    triggeredWhen:
+      phase: AwaitingReview
+      step: smoke-dev
+  tenant: leartech
+  triggeredBy: agent

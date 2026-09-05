@@ -1,0 +1,84 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Succeeded, az=Paused
+# AgentRuns owned: gcp=5, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mortgagesourcing-website-visual
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: feat/public-site-build
+      goal: "Build the public, AI-discoverable www.mortgagesourcing.com. Your design direction and page\
+        \ structure come from an ARTIFACT, not from this goal \u2014 fetch and read it first, in full,\
+        \ before writing any code.\nSTOP CONDITION \u2014 READ FIRST. Fetching the artifact is a HARD\
+        \ PRECONDITION, not best effort. Before any other work: write $GOOGLE_APPLICATION_CREDENTIALS_JSON\
+        \ to a file, export GOOGLE_APPLICATION_CREDENTIALS pointing at it, read the bundle's manifest.json\
+        \ and confirm its label is \"mortgagesourcing-website-visual\". If you cannot read it \u2014 no\
+        \ credential in the environment, a 403, an empty listing, anything \u2014 STOP IMMEDIATELY and\
+        \ fail the step with the exact error. Do NOT proceed from this goal's prose, do NOT substitute\
+        \ the live site, do NOT infer brand values. Then confirm tokens.json contains navy #0B2A5B; if\
+        \ that value is absent you have the wrong bundle. This mirrors the precaution that shipproven-website-visual\
+        \ now carries after it silently built from prose and produced a wrong primary brand colour.\n\
+        ARTIFACT: gs://artifacts-product-first/artifact/9685cf07-f5d7-4919-a0fa-b5869041a602/1/ Read manifest.json\
+        \ first (it indexes everything and captions every ref), then intent.md (the authoritative MUST\
+        \ / MUST NOT / MAY), then tokens.json, then the three docs under docs/ (WEBSITE-DESIGN, AI-DISCOVERABLE-BRIEF,\
+        \ MORTGAGES-PLATFORM). refs/ holds five HTML mockups + styles.css \u2014 the REFERENCE IMPLEMENTATION\
+        \ to translate into Angular \u2014 plus a PNG render of each. binding=guidance, so intent.md's\
+        \ MAY list is real latitude: use it and report what you chose.\nVERIFY CURRENT STATE FIRST. The\
+        \ repo may hold only a holding page / the ai-baseline scaffold. Inspect what actually exists \u2014\
+        \ routes, prerender config, existing SEO files \u2014 before building. Do not assume. Report the\
+        \ starting state in the PR.\nWHAT TO BUILD: 1. DESIGN SYSTEM \u2014 take EVERY brand value from\
+        \ tokens.json, not from this goal. Navy\n   #0B2A5B primary; emerald #0E9F6E the SINGLE accent\
+        \ (CTAs / live / rate highlights);\n   gold #C9A227 reserved; light theme on #F7F8FA with white\
+        \ cards; Newsreader headings,\n   Inter body/UI, JetBrains Mono for code; 10px card radii; soft\
+        \ navy-tinted shadows;\n   content max-width ~1160px; whitespace-heavy. Express as the project's\
+        \ theming (CSS\n   custom properties / Angular theme \u2014 your choice). One accent only; introduce\
+        \ NO\n   colour outside tokens.json.\n2. FIVE PAGES as Angular routes/components, structure +\
+        \ copy order per refs/: home (/),\n   /connect, /products (catalogue + filters), /products/:slug\
+        \ (detail), /demo.\n3. AI-DISCOVERABILITY LAYER \u2014 this is the point of the site. Keep SSG\
+        \ prerender\n   (outputMode: static): no JS-only routes, no content behind interaction; bulk content\n\
+        \   prerenders from the REST API at build. Put JSON-LD FinancialProduct on product pages,\n  \
+        \ mapping the shared schema per docs/AI-DISCOVERABLE-BRIEF: provider<-lender,\n   interestRate<-initial_rate,\
+        \ loanTerm<-term,\n   feesAndCommissionsSpecification<-attributes.fees,\n   description<-attributes.marketing_copy,\
+        \ attributes.features[] as tags,\n   attributes.ercs[] in content, dateModified<-updated_at. Emit\
+        \ llms.txt, sitemap.xml\n   with <lastmod>, robots.txt with a Sitemap: line, and a visible \"\
+        Rates as of <date>\"\n   trust line.\n4. /connect advertises the MCP endpoint https://api.mortgagesourcing.com/mcp\
+        \ (Tier-0\n   anonymous) with copy-paste client config and the four tools search_products,\n \
+        \  compare_products, get_product, get_product_rates \u2014 per refs/connect.html.\n5. DATA \u2014\
+        \ read-only; NEVER write products. Bulk/marketing + product pages prerender\n   server-side from\
+        \ the REST API (base URL from the runtime ConfigMap /api.conf.json,\n   default https://api.mortgagesourcing.com).\
+        \ /demo is client-side; until the TS/Angular\n   SDK and CORS on the public read endpoints land,\
+        \ use the bundled illustrative fixtures\n   shown in refs/demo.html and label them illustrative.\n\
+        \nACCESSIBILITY: WCAG 2.2 AA. Explicitly verify emerald #0E9F6E contrast on white AND on #F7F8FA\
+        \ \u2014 green-on-white is the known risk in this palette. Keep a skip-link, visible focus, keyboard\
+        \ nav and prefers-reduced-motion.\nDO NOT REGRESS CRAWLABILITY. If a raw-HTML (no-JS) SEO presubmit\
+        \ already exists, keep it green and do not weaken it. If none exists, ADD one that fetches RAW\
+        \ HTML with no JS and asserts prerendering, the hero h1 verbatim, the full meta set, robots.txt\
+        \ with a Sitemap: line and a well-formed sitemap.xml \u2014 so the AI-discoverable guarantee is\
+        \ enforced by a gate, not merely implemented once.\nREPORT IN THE PR DESCRIPTION: every derivation\
+        \ and MAY choice \u2014 how you expressed the tokens, any layout adaptation from the mockups,\
+        \ and exactly which data is live vs illustrative fixtures. Latitude is granted on condition it\
+        \ is recorded.\nISOLATE TESTING: extend end2end-ui specs to assert the build landed \u2014 the\
+        \ brand colours resolve on the rendered page, all five routes prerender, a product page carries\
+        \ JSON-LD FinancialProduct, llms.txt / sitemap.xml / robots.txt return 200, and /connect names\
+        \ the MCP endpoint and the four tools. Runnable against the PR preview; no new infrastructure.\n\
+        Done = PR merged (open via open_pr, drive gates green, SEO presubmit included)."
+      name: build-public-site
+      repo: mikelear/leartech-mortgagesourcing-web
+    kind: pr
+    name: build-public-site
+  - dependsOn:
+    - build-public-site
+    kind: check
+    name: build-public-site-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.build-public-site.pr}
+      repo: mikelear/leartech-mortgagesourcing-web
+      service: leartech-mortgagesourcing-web
+  triggeredBy: plan-catalog-internal-services

@@ -1,0 +1,6845 @@
+[
+  {
+    "name": "agent-bash-failure-fields",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-29T16:52:09Z",
+      "az": "2026-08-29T16:52:06Z"
+    },
+    "phase": {
+      "gcp": "Failed",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "bash-failure-fields",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "bash-failure-fields-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "bash-failure-fields"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "agent-gcs-artifact-read",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-11T17:27:32Z",
+      "az": "2026-08-11T17:27:23Z"
+    },
+    "phase": {
+      "gcp": "Paused",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "controller-gcs-secret",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "enable-gcs-gsm",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/jx-build-cluster-gsm",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 2,
+        "name": "enable-gcs-akv",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/jx-build-cluster-akv",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 3,
+        "name": "verify-agent-can-read",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-website",
+        "use": null,
+        "dependsOn": [
+          "controller-gcs-secret",
+          "enable-gcs-gsm"
+        ]
+      },
+      {
+        "index": 4,
+        "name": "controller-gcs-secret-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "controller-gcs-secret"
+        ]
+      },
+      {
+        "index": 5,
+        "name": "enable-gcs-gsm-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "enable-gcs-gsm"
+        ]
+      },
+      {
+        "index": 6,
+        "name": "enable-gcs-akv-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "enable-gcs-akv"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "agent-log-advertised-tools",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-29T18:23:46Z",
+      "az": "2026-08-29T16:52:06Z"
+    },
+    "phase": {
+      "gcp": "Cancelled",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 4,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "log-advertised-tools",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "log-advertised-tools-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "log-advertised-tools"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "agent-port-pipeline-to-mcp",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-21T21:33:06Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "port-pipeline-shim-to-remote-mcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "agent-port-tekton-to-mcp",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-21T19:43:41Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "port-tekton-shim-to-remote-mcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "agent-repo-access-terminal",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-31T08:08:52Z",
+      "az": "2026-08-31T08:08:20Z"
+    },
+    "phase": {
+      "gcp": "Failed",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "repo-access-terminal",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "repo-access-terminal-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "repo-access-terminal"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "agent-run-cross-run-pass",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-30T16:52:22Z",
+      "az": "2026-08-29T16:52:06Z"
+    },
+    "phase": {
+      "gcp": "Failed",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "cross-run-pass",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-agent-run-recorder",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "cross-run-pass-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "cross-run-pass"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "agent-run-recorder-core",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-30T22:07:08Z",
+      "az": "2026-08-29T16:52:06Z"
+    },
+    "phase": {
+      "gcp": "Cancelled",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 1,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "recorder-core",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-agent-run-recorder",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "recorder-core-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "recorder-core"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "agent-run-recorder-report",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-30T16:52:23Z",
+      "az": "2026-08-29T16:52:06Z"
+    },
+    "phase": {
+      "gcp": "Failed",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "recorder-report",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-agent-run-recorder",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "recorder-report-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "recorder-report"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "agent-selfwrite-guard",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-15T15:39:09Z",
+      "az": "2026-08-15T15:39:03Z"
+    },
+    "phase": {
+      "gcp": "Succeeded",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 15,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "sanitise-subprocess-identity",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "teach-agents-the-hazard",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": [
+          "sanitise-subprocess-identity"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "protect-agentrun-phase",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 3,
+        "name": "sanitise-subprocess-identity-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "sanitise-subprocess-identity"
+        ]
+      },
+      {
+        "index": 4,
+        "name": "teach-agents-the-hazard-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "teach-agents-the-hazard"
+        ]
+      },
+      {
+        "index": 5,
+        "name": "protect-agentrun-phase-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "protect-agentrun-phase"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "artifact-create-durability",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-14T18:41:04Z",
+      "az": "2026-08-14T18:42:04Z"
+    },
+    "phase": {
+      "gcp": "Succeeded",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "create-durability",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-artifact-api",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "create-durability-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "create-durability"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "artifact-endpoints",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-12T15:31:03Z",
+      "az": "2026-08-12T15:30:49Z"
+    },
+    "phase": {
+      "gcp": "Cancelled",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 1,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "gcs-storage",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-artifact-api",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "rest-endpoints",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-artifact-api",
+        "use": null,
+        "dependsOn": [
+          "gcs-storage"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "mcp-tools",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": [
+          "rest-endpoints"
+        ]
+      },
+      {
+        "index": 3,
+        "name": "verify-roundtrip",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-artifact-api",
+        "use": null,
+        "dependsOn": [
+          "rest-endpoints",
+          "mcp-tools"
+        ]
+      },
+      {
+        "index": 4,
+        "name": "gcs-storage-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "gcs-storage"
+        ]
+      },
+      {
+        "index": 5,
+        "name": "rest-endpoints-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "rest-endpoints"
+        ]
+      },
+      {
+        "index": 6,
+        "name": "mcp-tools-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "mcp-tools"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "artifact-rest-and-mcp",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-12T18:27:57Z",
+      "az": "2026-08-12T18:27:53Z"
+    },
+    "phase": {
+      "gcp": "Failed",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 9,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "rest-endpoints",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-artifact-api",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "mcp-tools",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": [
+          "rest-endpoints"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "verify-roundtrip",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-artifact-api",
+        "use": null,
+        "dependsOn": [
+          "rest-endpoints",
+          "mcp-tools"
+        ]
+      },
+      {
+        "index": 3,
+        "name": "rest-endpoints-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "rest-endpoints"
+        ]
+      },
+      {
+        "index": 4,
+        "name": "mcp-tools-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "mcp-tools"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "authfound-fix-nits",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T17:54:14Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "fix-nits",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-auth-service",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "ba-agent-slice",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-28T14:37:45Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 5
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "ba-controller-crd",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "ba-event-adapter",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": [
+          "ba-controller-crd"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "ba-agent-code",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 3,
+        "name": "ba-agenttype-wiring",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": [
+          "ba-agent-code"
+        ]
+      },
+      {
+        "index": 4,
+        "name": "ba-test-harness",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": [
+          "ba-agenttype-wiring"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "ba-enablement-mcp-tools",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-28T09:42:23Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 2
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "deploy-health-tool",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "plan-authoring-tools",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": [
+          "deploy-health-tool"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "bootstrap-accept-bots-msw",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-11T13:32:42Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "create",
+        "kind_declared": "apply",
+        "kind_effective": "apply",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "bootstrap-agent-run-recorder",
+    "clusters": [
+      "az"
+    ],
+    "created": {
+      "az": "2026-08-31T08:36:24Z"
+    },
+    "phase": {
+      "az": "Failed"
+    },
+    "agent_runs_owned": {
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "reg",
+        "kind_declared": "apply",
+        "kind_effective": "apply",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "register-existing-service",
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "build-plan-agent-test-mode",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-29T15:19:10Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 5
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "agent-test-mode",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "mcp-tool-test-mode",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 2,
+        "name": "controller-mock-proutcome",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 3,
+        "name": "conformance-suite",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": [
+          "agent-test-mode",
+          "mcp-tool-test-mode",
+          "controller-mock-proutcome"
+        ]
+      },
+      {
+        "index": 4,
+        "name": "self-test-live",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": [
+          "conformance-suite"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "build-plan-api",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-30T16:00:49Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 7
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "create",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "register-gcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-gsm",
+        "use": null,
+        "dependsOn": [
+          "create"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "register-az",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-akv",
+        "use": null,
+        "dependsOn": [
+          "create"
+        ]
+      },
+      {
+        "index": 3,
+        "name": "scaffold",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "register-gcp",
+          "register-az"
+        ]
+      },
+      {
+        "index": 4,
+        "name": "smoke",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "scaffold"
+        ]
+      },
+      {
+        "index": 5,
+        "name": "smoke-dev",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": [
+          "smoke"
+        ]
+      },
+      {
+        "index": 6,
+        "name": "release-monitor",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "smoke-dev"
+        ]
+      },
+      {
+        "index": 7,
+        "name": "build-api",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": [
+          "release-monitor"
+        ]
+      },
+      {
+        "index": 8,
+        "name": "release-monitor-api",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "build-api"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "build-plan-api-code",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T08:33:00Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "build-api",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "release-check",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "build-api"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "build-plan-api-v2",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T09:36:19Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 2
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "build-api",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "release-check",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "build-api"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "build-plan-conformance-consumer",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-04T13:37:54Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 9
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "create",
+        "kind_declared": "apply",
+        "kind_effective": "apply",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "register-gcp",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-gsm",
+        "use": null,
+        "dependsOn": [
+          "create"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "register-az",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-akv",
+        "use": null,
+        "dependsOn": [
+          "create"
+        ]
+      },
+      {
+        "index": 3,
+        "name": "scaffold",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "register-gcp",
+          "register-az"
+        ]
+      },
+      {
+        "index": 4,
+        "name": "smoke",
+        "kind_declared": "apply",
+        "kind_effective": "apply",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "scaffold"
+        ]
+      },
+      {
+        "index": 5,
+        "name": "smoke-dev",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-conformance-consumer",
+        "use": null,
+        "dependsOn": [
+          "smoke"
+        ]
+      },
+      {
+        "index": 6,
+        "name": "release-monitor",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "smoke-dev"
+        ]
+      },
+      {
+        "index": 7,
+        "name": "build-consume",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-conformance-consumer",
+        "use": null,
+        "dependsOn": [
+          "release-monitor"
+        ]
+      },
+      {
+        "index": 8,
+        "name": "release-monitor-consume",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "build-consume"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "build-plan-template-expansion",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-02T20:00:47Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "expand",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "build-portal-2b",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T13:08:14Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "design",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-portal",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "build-portal-detail",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T22:40:45Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 2
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "build-portal",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-portal",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "release-check",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "build-portal"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "build-release-check-individual-actions",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-03T16:19:32Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "build-actions",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "build-ship-proven-portal",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T21:44:42Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 7
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "create",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "register-gcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-gsm",
+        "use": null,
+        "dependsOn": [
+          "create"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "register-az",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-akv",
+        "use": null,
+        "dependsOn": [
+          "create"
+        ]
+      },
+      {
+        "index": 3,
+        "name": "scaffold",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "register-gcp",
+          "register-az"
+        ]
+      },
+      {
+        "index": 4,
+        "name": "smoke",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "scaffold"
+        ]
+      },
+      {
+        "index": 5,
+        "name": "smoke-dev",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-portal",
+        "use": null,
+        "dependsOn": [
+          "smoke"
+        ]
+      },
+      {
+        "index": 6,
+        "name": "release-monitor",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "smoke-dev"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "build-ship-proven-website",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-30T08:46:12Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 9
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "create",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "register-gcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-gsm",
+        "use": null,
+        "dependsOn": [
+          "create"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "register-az",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-akv",
+        "use": null,
+        "dependsOn": [
+          "create"
+        ]
+      },
+      {
+        "index": 3,
+        "name": "scaffold",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "register-gcp",
+          "register-az"
+        ]
+      },
+      {
+        "index": 4,
+        "name": "smoke",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "scaffold"
+        ]
+      },
+      {
+        "index": 5,
+        "name": "smoke-dev",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-website",
+        "use": null,
+        "dependsOn": [
+          "smoke"
+        ]
+      },
+      {
+        "index": 6,
+        "name": "release-monitor",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "smoke-dev"
+        ]
+      },
+      {
+        "index": 7,
+        "name": "content",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-website",
+        "use": null,
+        "dependsOn": [
+          "release-monitor"
+        ]
+      },
+      {
+        "index": 8,
+        "name": "release-monitor-content",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "content"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "controller-ba-agent-default-sa",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-28T11:13:06Z",
+      "az": "2026-08-28T11:13:09Z"
+    },
+    "phase": {
+      "gcp": "Failed",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 2,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "ba-agent-default-sa",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "ba-agent-default-sa-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "ba-agent-default-sa"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "controller-consume-pr-events",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-15T10:47:19Z",
+      "az": "2026-08-15T10:47:12Z"
+    },
+    "phase": {
+      "gcp": "Succeeded",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "pr-event-consumer",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "pr-event-consumer-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "pr-event-consumer"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "controller-respawn-observability",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-19T07:26:35Z",
+      "az": "2026-08-19T07:26:35Z"
+    },
+    "phase": {
+      "gcp": "Succeeded",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "respawn-observability",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "respawn-observability-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "respawn-observability"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "controller-spawn-conflict-handling",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-28T15:38:07Z",
+      "az": "2026-08-28T15:38:15Z"
+    },
+    "phase": {
+      "gcp": "Succeeded",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "spawn-conflict-handling",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "spawn-conflict-handling-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "spawn-conflict-handling"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "controller-stuck-pod-detection",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-15T12:53:00Z",
+      "az": "2026-08-15T12:51:05Z"
+    },
+    "phase": {
+      "gcp": "Succeeded",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "stuck-pod-detection",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "stuck-pod-detection-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "stuck-pod-detection"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "decom-orchestrator-cli-coupling",
+    "clusters": [
+      "az"
+    ],
+    "created": {
+      "az": "2026-08-15T10:47:12Z"
+    },
+    "phase": {
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "drop-orch-cli-client",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "drop-orch-cli-client-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "drop-orch-cli-client"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "decom-split-agent-image-build",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-15T10:47:19Z",
+      "az": "2026-08-15T10:47:12Z"
+    },
+    "phase": {
+      "gcp": "Succeeded",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "service-image-off-agent-go",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "service-image-off-agent-go-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "service-image-off-agent-go"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "e2e-cacherace",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-10T16:54:07Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 5
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "empty-commit",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-qa-canary",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "empty-commit-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "empty-commit"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "e2e-dag-fixture",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-03T13:59:15Z",
+      "az": "2026-08-03T13:59:45Z"
+    },
+    "phase": {
+      "gcp": "Paused",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "scaffold",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "review",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": [
+          "scaffold"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "release",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": [
+          "review"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "e2e-portal-demo-258wb1",
+    "clusters": [
+      "az"
+    ],
+    "created": {
+      "az": "2026-08-03T13:12:05Z"
+    },
+    "phase": {
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "scaffold",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "e2e-portal-demo-2xel85",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-11T11:52:12Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "scaffold",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "scaffold-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "scaffold"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "e2e-portal-demo-64agrr",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-06T22:23:05Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "scaffold",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "e2e-portal-demo-6laga2",
+    "clusters": [
+      "az"
+    ],
+    "created": {
+      "az": "2026-08-11T11:50:31Z"
+    },
+    "phase": {
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "scaffold",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "scaffold-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "scaffold"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "e2e-portal-demo-7qz02b",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-03T13:59:13Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "scaffold",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "e2e-portal-demo-9zygn5",
+    "clusters": [
+      "az"
+    ],
+    "created": {
+      "az": "2026-08-03T15:42:14Z"
+    },
+    "phase": {
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "scaffold",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "e2e-portal-demo-ae6gaz",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-03T13:12:37Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "scaffold",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "e2e-portal-demo-crc3fc",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-03T15:41:46Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "scaffold",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "e2e-portal-demo-nb2m7s",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-03T14:53:47Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "scaffold",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "e2e-portal-demo-qgyesz",
+    "clusters": [
+      "az"
+    ],
+    "created": {
+      "az": "2026-08-06T22:22:18Z"
+    },
+    "phase": {
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "scaffold",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "e2e-portal-demo-qhoxzu",
+    "clusters": [
+      "az"
+    ],
+    "created": {
+      "az": "2026-08-03T13:59:56Z"
+    },
+    "phase": {
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "scaffold",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "e2e-portal-demo-qqd8u6",
+    "clusters": [
+      "az"
+    ],
+    "created": {
+      "az": "2026-08-03T14:47:51Z"
+    },
+    "phase": {
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "scaffold",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "e2e-portal-demo-s57dku",
+    "clusters": [
+      "az"
+    ],
+    "created": {
+      "az": "2026-08-03T13:12:22Z"
+    },
+    "phase": {
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "scaffold",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "enable-mcp-token-exchange",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T14:39:30Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "authsvc-client",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-auth-service",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "flip-gcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-gsm",
+        "use": null,
+        "dependsOn": [
+          "authsvc-client"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "flip-az",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-akv",
+        "use": null,
+        "dependsOn": [
+          "authsvc-client"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "event-loop-logging",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-29T23:55:33Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 3
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "controller-loop-logging",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "maestro-loop-logging",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-maestro-service",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 2,
+        "name": "loop-forensics-rewrite",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": [
+          "controller-loop-logging"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "fix-agent-dashboards",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-30T15:11:58Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "fix-dashboards",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "release-check",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "fix-dashboards"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "fix-aireview-large-diff",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T09:36:45Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "diff-fallback",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-dockerfiles",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-authsvc-register-portal-ui",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T13:18:04Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "chart",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-auth-service",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-authsvc-swag-green",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T14:52:36Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "swag",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-auth-service",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-authsvc-tokenex-lint-green",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T15:32:05Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "lintgreen",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-auth-service",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-babrief-contract",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-28T20:04:20Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "fix-babrief-contract",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-go-template-optional-db",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T07:20:19Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "optional-db",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-go-service-template",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-gotmpl-vendor",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T09:36:20Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "gitignore-vendor",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-go-service-template",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-mcp-portal-plan-auth",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T17:19:42Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 3
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "auth-foundation",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-auth-service",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "mcp-forwarder-authz",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": [
+          "auth-foundation"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "plan-api-authz",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": [
+          "auth-foundation"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "fix-mcp-token-exchange",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T13:34:33Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "forwarder",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-mcpfwd-bearer",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T21:35:30Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "bearer",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-mcpfwd-bearer2",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T22:47:26Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "realfix",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-mcpfwd-bearer2-green",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T07:52:28Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "lintgreen",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-mcpfwd-failclosed",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T18:40:30Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "failclosed",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-native-mcp-audience",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T17:53:10Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 2
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "gcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-gsm",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "az",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-akv",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-native-mcp-audience-az2",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T18:30:31Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "az",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-akv",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-ng-tmpl-e2eui-staging",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T15:39:39Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "fix-e2eui",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-angular-service-template",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-observer-envtest-quarantine",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-03T15:42:27Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "quarantine-envtest",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-arrivals-observer",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-persona-seed-dsn",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-02T19:46:56Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "code",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-auth-service",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-persona-seed-onconflict",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-02T22:03:38Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "code",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-auth-service",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-plan-api-auth-default",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T13:54:08Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "auth-default",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-planapi-agenttypes-rbac",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T12:20:46Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "rbac",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-planapi-auth-jwks",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T09:34:05Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 3
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "code",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "config-gcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-gsm",
+        "use": null,
+        "dependsOn": [
+          "code"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "config-az",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-akv",
+        "use": null,
+        "dependsOn": [
+          "code"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "fix-planapi-authurl-value",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T11:17:29Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "chart",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-planapi-cors",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T20:40:13Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 3
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "code",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "cfg-gcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-gsm",
+        "use": null,
+        "dependsOn": [
+          "code"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "cfg-az",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-akv",
+        "use": null,
+        "dependsOn": [
+          "code"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "fix-planapi-cov",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T18:54:49Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "cov",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-portal-create-plan-e2e",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-11T10:23:15Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "fix-create-plan-e2e",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-portal",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-portal-dag-staging",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-03T13:30:01Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "fix-dag-e2e",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-portal",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-portal-dag-text-fixture",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-03T14:10:27Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "complete-dag-fixture",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-portal",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-portal-detail-green2",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T09:16:00Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "portalgreen2",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-portal",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-portal-e2e-holistic",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-03T14:59:15Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "fix-e2e-coupled-fixture",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-portal",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-release-check-deterministic",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-02T16:36:51Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "code",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-release-health-det",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T08:04:41Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "health-check",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-ssr-ship-proven-preview",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T14:29:40Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "fix-preview",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-website",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "fix-test-user-persona-matrix",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-02T15:13:53Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 3
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "seeder",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-auth-service",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "e2e",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-portal",
+        "use": null,
+        "dependsOn": [
+          "seeder"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "observer-gcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-gsm",
+        "use": null,
+        "dependsOn": [
+          "seeder"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "go-converge-2",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T09:07:48Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "mk",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-pipeline-catalog",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "tasks",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-pipeline-catalog",
+        "use": null,
+        "dependsOn": [
+          "mk"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "image",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-dockerfiles",
+        "use": null,
+        "dependsOn": [
+          "mk"
+        ]
+      },
+      {
+        "index": 3,
+        "name": "adopt-mcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": [
+          "tasks"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "go-converge-3",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T15:30:48Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 3
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "tasks",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-pipeline-catalog",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "image",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-dockerfiles",
+        "use": null,
+        "dependsOn": [
+          "tasks"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "adopt-mcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": [
+          "tasks"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "go-lint-converge-tail",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-02T21:16:59Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 3
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "agent-golden-mk-local",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "converge-controller",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 2,
+        "name": "audit-go-repos",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "harden-agentrun-terminal",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-30T14:26:23Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "harden-terminal",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "harden-jx-platform-resources",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-03T07:33:39Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 2
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "gsm",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-gsm",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "akv",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-akv",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "hold-as-init-option",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-20T10:21:46Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 3
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "agent-hold-option",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "controller-awaiting-approval",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 2,
+        "name": "mcp-pr-labels",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "job-observation-proper",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-20T14:06:44Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 3
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "agent-capture-and-publish",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "controller-verify-pr-branch",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 2,
+        "name": "platform-state-reconcile-query",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "lighthouse-pr-events-producer",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-16T12:01:23Z",
+      "az": "2026-08-16T12:01:14Z"
+    },
+    "phase": {
+      "gcp": "Failed",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 8,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "bootstrap-repo",
+        "kind_declared": "apply",
+        "kind_effective": "apply",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "bootstrap-authed-service",
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "pr-event-producer",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-lighthouse-pr-events",
+        "use": null,
+        "dependsOn": [
+          "bootstrap-repo"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "pr-event-producer-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "pr-event-producer"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "logging-json-standard",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-30T12:16:22Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 3
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "controller-json-logging",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "template-json-logging",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-go-service-template",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 2,
+        "name": "forensics-json",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": [
+          "controller-json-logging"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "loop-logging-eventid-standardize",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-30T10:03:42Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 2
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "controller-eventid",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "maestro-eventid",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-maestro-service",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "mcp-accept-pr-number-as-string",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-30T08:22:28Z",
+      "az": "2026-08-30T08:22:27Z"
+    },
+    "phase": {
+      "gcp": "Succeeded",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "accept-pr-number-as-string",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "accept-pr-number-as-string-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "accept-pr-number-as-string"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "mcp-create-plan-resubmit-verdict",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-31T11:42:24Z",
+      "az": "2026-08-31T11:42:24Z"
+    },
+    "phase": {
+      "gcp": "Succeeded",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "create-plan-verdict",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "create-plan-verdict-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "create-plan-verdict"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "mcp-loki-run-report",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-30T16:52:23Z",
+      "az": "2026-08-29T16:52:06Z"
+    },
+    "phase": {
+      "gcp": "Succeeded",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "loki-run-report",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "loki-run-report-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "loki-run-report"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "mcp-plan-adapter",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T14:52:07Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "plan-mcp-forwarder",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "mcp-rewrite-shims-to-real",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-28T22:10:11Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "shims-to-real-mcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "mcp-run-report-field-semantics",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-30T18:14:50Z",
+      "az": "2026-08-30T18:14:54Z"
+    },
+    "phase": {
+      "gcp": "Succeeded",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "run-report-field-semantics",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "run-report-field-semantics-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "run-report-field-semantics"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "mcp-run-report-wait-counters",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-30T19:30:35Z",
+      "az": "2026-08-30T19:30:41Z"
+    },
+    "phase": {
+      "gcp": "Succeeded",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "run-report-wait-counters",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "run-report-wait-counters-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "run-report-wait-counters"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "mcpfwd-green",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T19:51:53Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "green",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "mortgagesourcing-website-visual",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-11T17:27:32Z",
+      "az": "2026-08-11T17:27:23Z"
+    },
+    "phase": {
+      "gcp": "Succeeded",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "build-public-site",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-mortgagesourcing-web",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "build-public-site-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "build-public-site"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "nextgenlending-website-rebuild",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-11T19:59:21Z",
+      "az": "2026-08-11T19:59:19Z"
+    },
+    "phase": {
+      "gcp": "Failed",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "rebuild-public-site",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/next-generation-lending-website",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "rebuild-public-site-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "rebuild-public-site"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "ng-test-green",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T08:23:43Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 2
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "browser",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-dockerfiles",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "lesson",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "observer-flex-and-observability",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-03T10:58:28Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 5
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "persona-secret",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-auth-service",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "observer-resources-env",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-arrivals-observer",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 2,
+        "name": "observer-observability",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-arrivals-observer",
+        "use": null,
+        "dependsOn": [
+          "observer-resources-env"
+        ]
+      },
+      {
+        "index": 3,
+        "name": "wire-gcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-gsm",
+        "use": null,
+        "dependsOn": [
+          "persona-secret",
+          "observer-resources-env"
+        ]
+      },
+      {
+        "index": 4,
+        "name": "wire-az",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-akv",
+        "use": null,
+        "dependsOn": [
+          "persona-secret",
+          "observer-resources-env"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "observer-test-harness-parity",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-03T11:27:24Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "test-harness",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-arrivals-observer",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "orch-deadcode-decommission",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-19T17:34:50Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "remove-dead-plan-python",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "leartech-orchestrator",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "plan-1-dogfood",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-18T15:28:04Z"
+    },
+    "phase": {
+      "gcp": "Cancelled"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "a-buscommon-mqube",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-bus-common",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "b-mcpservers-adopt",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": [
+          "a-buscommon-mqube"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "c-infra-crd-selfcontained",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-infra-agent",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "plan-2-orch-track",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-18T16:02:21Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 2
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "cancel-propagation",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "orch-e2e-authed-login",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-orchestrator",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "plan-3-orch-completion",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-18T16:36:16Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "orch-repoint-plans-to-mcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-orchestrator",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "plan-4-orch-decommission",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-19T10:15:49Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "orch-decommission-python-runner",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-orchestrator",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "plan-5-proutcome-via-mcp",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-19T10:41:22Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 2
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "pr-context-add-merged",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "controller-proutcome-fetcher",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "plan-6-controller-mcp-auth",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-19T12:13:05Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 2
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "authsvc-controller-client",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-auth-service",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "controller-wire-mcp-auth",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "plan-api-auth-optional",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T12:58:32Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "auth-optional",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "plan-api-resubmit-semantics",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-30T16:58:40Z",
+      "az": "2026-08-30T16:58:43Z"
+    },
+    "phase": {
+      "gcp": "Succeeded",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "resubmit-semantics",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "resubmit-semantics-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "resubmit-semantics"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "plan-api-v2-finish",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T10:43:44Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "finish-gates",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "plan-model-fidelity",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-06T21:53:13Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 2
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "portal-client",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-portal",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "portal-views",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-portal",
+        "use": null,
+        "dependsOn": [
+          "portal-client"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "plan-submit-reads-resubmit-verdict",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-31T11:42:24Z",
+      "az": "2026-08-31T11:42:24Z"
+    },
+    "phase": {
+      "gcp": "Cancelled",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 2,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "submit-reads-verdict",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-catalog",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "submit-reads-verdict-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "submit-reads-verdict"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "planapi-cov2",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T19:51:52Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "cov2",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "port-plan-firability-preflight",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-15T10:47:19Z",
+      "az": "2026-08-15T10:47:12Z"
+    },
+    "phase": {
+      "gcp": "Succeeded",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "firability-preflight-api",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "firability-preflight-api-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "firability-preflight-api"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "portal-e2e-continue",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T19:32:58Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "continue",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-portal",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "portal-e2e-fixture",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-03T14:53:47Z",
+      "az": "2026-08-03T14:47:33Z"
+    },
+    "phase": {
+      "gcp": "Paused",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "scaffold",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "review",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": [
+          "scaffold"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "release",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/demo-repo",
+        "use": null,
+        "dependsOn": [
+          "review"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "prompt-contract-checks-tool-schemas",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-30T08:22:28Z",
+      "az": "2026-08-30T08:22:27Z"
+    },
+    "phase": {
+      "gcp": "Failed",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 5,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "prompt-contract-tool-schemas",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "prompt-contract-tool-schemas-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "prompt-contract-tool-schemas"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "prove-release-check-5step",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-03T17:40:26Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "release-fired",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/leartech-go-service-template",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "promote-open",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "release-fired"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "verify-gate",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "promote-open"
+        ]
+      },
+      {
+        "index": 3,
+        "name": "boot-deployed",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "verify-gate"
+        ]
+      },
+      {
+        "index": 4,
+        "name": "health",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "boot-deployed"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "prove-release-check-mcp",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-03T16:03:46Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "release-check",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/leartech-go-service-template",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "python-deadcode-shrink",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-21T10:34:41Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 3
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "delete-deprecated-pr-context-server",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "delete-dead-log-markers",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 2,
+        "name": "controller-guard-no-pr-repo-step",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "rebuild-agent-dashboard",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-30T12:26:05Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "dashboard-rebuild",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "reconcile-ship-proven-agent-status",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-30T15:16:26Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 2
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "reconcile-status-labels",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-website",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "release-check",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "reconcile-status-labels"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "recorder-gate-parity",
+    "clusters": [
+      "az"
+    ],
+    "created": {
+      "az": "2026-08-31T10:30:24Z"
+    },
+    "phase": {
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "recorder-gate-parity",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-agent-run-recorder",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "recorder-gate-parity-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "recorder-gate-parity"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "refire-deploy-health-40",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-28T11:31:23Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "adopt-and-merge-40",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "register-portal-observer",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T20:09:10Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 2
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "observer-gcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-gsm",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "observer-az",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-akv",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "remediate-agent-bash-failure-fields",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-30T00:49:30Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "verify-release-deploy-healthy",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "remediate-artifact-rest-and-mcp",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-12T22:10:25Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "verify-release-health-artifact-api",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/leartech-artifact-api",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "remediate-build-plan-api",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-30T16:57:33Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "release-health-gcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "release-health-az",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": [
+          "release-health-gcp"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "remediate-build-ship-proven-portal",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T22:39:31Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "verify-gcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/leartech-ship-proven-portal",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "verify-az",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/leartech-ship-proven-portal",
+        "use": null,
+        "dependsOn": [
+          "verify-gcp"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "remediate-deploy-health-images-only-repos",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-30T12:08:34Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "fix-deploy-health-images-only",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "verify-release-deploy-healthy",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": [
+          "fix-deploy-health-images-only"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "remediate-e2e-inject-canary",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-10T15:27:39Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "verify-canary-release-healthy",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/leartech-qa-canary",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "remediate-lighthouse-pr-events-producer",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-17T08:32:07Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "fix-release-build",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-lighthouse-pr-events",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "verify-release-deploy-healthy",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/leartech-lighthouse-pr-events",
+        "use": null,
+        "dependsOn": [
+          "fix-release-build"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "remediate-livetest-infra-go-verify",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-09T12:35:59Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "fix-hello-go7-optional-db",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/hello-go7",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "verify-release-deploy-healthy",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/hello-go7",
+        "use": null,
+        "dependsOn": [
+          "fix-hello-go7-optional-db"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "remediate-livetest-verify-release-flow",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-09T09:35:34Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "fix-hello-go7-optional-db",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/hello-go7",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "verify-release-deploy-healthy",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/hello-go7",
+        "use": null,
+        "dependsOn": [
+          "fix-hello-go7-optional-db"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "remediate-nextgenlending-deploy-health-naming",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-12T00:02:42Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "align-chart-name-to-service",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/next-generation-lending-website",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "verify-release-deploy-healthy",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/next-generation-lending-website",
+        "use": null,
+        "dependsOn": [
+          "align-chart-name-to-service"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "remediate-s2-verify-planapi-health",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-08T19:17:15Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "verify-deploy-healthy",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "remediate-s2-verify-planapi-release",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-08T19:20:51Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "verify-deploy-healthy",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "remediate-s2-verify-pr13",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-08T19:05:30Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "harden-release-status-wait",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-py",
+        "repo": "mikelear/leartech-automated-agent",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "verify-deploy-healthy",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/leartech-plan-api",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "remediate-shipproven-website-visual",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-11T10:20:14Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "fix-visual-layer-qa-gate",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-website",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "verify-release-healthy",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/leartech-ship-proven-website",
+        "use": null,
+        "dependsOn": [
+          "fix-visual-layer-qa-gate"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "repo-factory-hello-go7-decomposed",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-27T18:33:04Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 7
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "create",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "register-gcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-gsm",
+        "use": null,
+        "dependsOn": [
+          "create"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "register-az",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-akv",
+        "use": null,
+        "dependsOn": [
+          "create"
+        ]
+      },
+      {
+        "index": 3,
+        "name": "scaffold",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "register-gcp",
+          "register-az"
+        ]
+      },
+      {
+        "index": 4,
+        "name": "smoke",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "scaffold"
+        ]
+      },
+      {
+        "index": 5,
+        "name": "smoke-dev",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/hello-go7",
+        "use": null,
+        "dependsOn": [
+          "smoke"
+        ]
+      },
+      {
+        "index": 6,
+        "name": "release-monitor",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "setup-mcp-design",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-05T19:24:11Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 8
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "artifact-api",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": null,
+        "repo": null,
+        "use": "bootstrap-authed-service",
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "design-mcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": null,
+        "repo": null,
+        "use": "bootstrap-mcp-forwarder",
+        "dependsOn": [
+          "artifact-api"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "shipproven-website-ga-finishing",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-11T22:52:53Z",
+      "az": "2026-08-11T22:52:47Z"
+    },
+    "phase": {
+      "gcp": "Succeeded",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 10,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "content-and-showcase",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-website",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "visuals-and-quality",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-website",
+        "use": null,
+        "dependsOn": [
+          "content-and-showcase"
+        ]
+      },
+      {
+        "index": 2,
+        "name": "content-and-showcase-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "content-and-showcase"
+        ]
+      },
+      {
+        "index": 3,
+        "name": "visuals-and-quality-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "visuals-and-quality"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "shipproven-website-visual",
+    "clusters": [
+      "gcp",
+      "az"
+    ],
+    "created": {
+      "gcp": "2026-08-10T21:01:15Z",
+      "az": "2026-08-11T17:27:23Z"
+    },
+    "phase": {
+      "gcp": "Failed",
+      "az": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 3,
+      "az": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "apply-visual-layer",
+        "kind_declared": "pr",
+        "kind_effective": "pr",
+        "kind_was_defaulted": false,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-website",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "apply-visual-layer-verify-release",
+        "kind_declared": "check",
+        "kind_effective": "check",
+        "kind_was_defaulted": false,
+        "agentType": null,
+        "repo": null,
+        "use": "verify-release-flow",
+        "dependsOn": [
+          "apply-visual-layer"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "ssr-ship-proven",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T13:44:34Z"
+    },
+    "phase": {
+      "gcp": "Paused"
+    },
+    "agent_runs_owned": {
+      "gcp": 0
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "add-ssr",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-website",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "release-check",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "add-ssr"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "ssr-template",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-31T13:45:46Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "add-ssr",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-angular-service-template",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "template-expansion-continue",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-02T20:46:41Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "continue",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-orchestrator-controller",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "trackb-unify-mcp-logging",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-28T14:38:49Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 1
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "unify-mcp-logging",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-go",
+        "repo": "mikelear/leartech-mcp-servers",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "update-ship-proven-website",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-30T13:38:25Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 2
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "content-update",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-website",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "release-check",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "content-update"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "update-ship-proven-website-v2",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-07-30T14:29:16Z"
+    },
+    "phase": {
+      "gcp": "Succeeded"
+    },
+    "agent_runs_owned": {
+      "gcp": 2
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "content-update",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-ng",
+        "repo": "mikelear/leartech-ship-proven-website",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "release-check",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": null,
+        "use": null,
+        "dependsOn": [
+          "content-update"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "wire-observer-portal-personas",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-03T12:23:33Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 2
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "wire-gcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-gsm",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "wire-az",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-akv",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  },
+  {
+    "name": "wire-planapi-portal-config",
+    "clusters": [
+      "gcp"
+    ],
+    "created": {
+      "gcp": "2026-08-01T11:22:48Z"
+    },
+    "phase": {
+      "gcp": "Failed"
+    },
+    "agent_runs_owned": {
+      "gcp": 2
+    },
+    "steps": [
+      {
+        "index": 0,
+        "name": "gcp",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-gsm",
+        "use": null,
+        "dependsOn": null
+      },
+      {
+        "index": 1,
+        "name": "az",
+        "kind_declared": null,
+        "kind_effective": "pr",
+        "kind_was_defaulted": true,
+        "agentType": "leartech-agent-infra",
+        "repo": "mikelear/jx-build-cluster-akv",
+        "use": null,
+        "dependsOn": null
+      }
+    ]
+  }
+]

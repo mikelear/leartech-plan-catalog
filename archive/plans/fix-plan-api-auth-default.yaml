@@ -1,0 +1,47 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-plan-api-auth-default
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/auth-secret-optional
+      goal: "Continue on the EXISTING branch fix/auth-secret-optional (PR #4). ai-review FAILED\non BOTH\
+        \ clusters with a real, correct critical finding and it must be fixed (do NOT\njust /retest):\
+        \ the chart default `auth.enabled` was flipped from true to false in\ncharts/leartech-plan-api/values.yaml,\
+        \ so /plans* defaults to UNAUTHENTICATED and\nevery overlay must remember to opt back in \u2014\
+        \ a fail-OPEN posture. That is wrong.\n\nThe ORIGINAL problem being solved was a preview CreateContainerConfigError:\
+        \ the\ndeployment referenced an auth secret (backend-service-oauth / LEARTECH_AUTH_*) that\ndoes\
+        \ not exist in preview / not-yet-ESO-synced namespaces, so the pod could not\nstart. The CORRECT\
+        \ fix is to make the pod BOOT without the secret WHILE KEEPING auth\non + fail-closed by default:\n\
+        \n1. Restore the chart default to `auth.enabled: true` (canonical/production stance,\n   fail-CLOSED).\
+        \ Cluster/preview overlays may still set it, but the SECURE value is\n   the default. Update the\
+        \ surrounding comment to reflect fail-closed-by-default.\n2. Make the auth secret reference in\
+        \ the Deployment env block OPTIONAL:\n   `valueFrom.secretKeyRef.optional: true` for every LEARTECH_AUTH_*\
+        \ (and any JWKS/\n   oauth) secretKeyRef. This is what fixes CreateContainerConfigError \u2014\
+        \ the pod\n   starts even when the secret is absent. (See the estate pattern: new chart\n   secretKeyRefs\
+        \ must be optional for previews.)\n3. Code side, fail-CLOSED and NIL-SAFE: when auth.enabled=true\
+        \ but the JWKS/issuer\n   config or secret is empty/unavailable at startup, the middleware must\
+        \ DENY (401)\n   on /plans* \u2014 it must NOT panic on a nil auth client and must NOT silently\
+        \ pass\n   through. /health + /healthz must ALWAYS answer 200 regardless (so the pod is\n   Ready\
+        \ and previews deploy green even while /plans* returns 401). When\n   auth.enabled=false, log\
+        \ an explicit one-line WARNING that /plans* is\n   UNAUTHENTICATED (addresses the yellow finding\
+        \ about no explicit signal).\n4. Tests: keep/extend the gate-ON httptest-JWKS test (auth enabled\
+        \ + valid token =>\n   200, missing/invalid token => 401); ADD a test that auth enabled + MISSING\n\
+        \   secret/JWKS config => fail-closed 401 (NOT a panic, NOT pass-through); /health=200\n   in\
+        \ all cases. Keep coverage at/above the gate.\n\nKeep the diff LEAN. Do NOT reintroduce the DB\
+        \ or vendor/. Own PR #4 and drive BOTH\nclusters' gates GREEN \u2014 including ai-review (the\
+        \ finding above must be resolved, not\nbypassed) \u2014 THROUGH TO MERGE.\n"
+      name: fix-plan-api-auth-default
+      repo: leartech-plan-api
+    name: auth-default
+    repo: mikelear/leartech-plan-api
+  tenant: leartech
+  triggeredBy: human

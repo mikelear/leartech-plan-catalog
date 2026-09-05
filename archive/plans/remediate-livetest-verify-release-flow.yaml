@@ -1,0 +1,54 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: remediate-livetest-verify-release-flow
+  namespace: jx-staging
+spec:
+  paused: true
+  remediates:
+  - name: livetest-verify-release-flow
+    namespace: jx-staging
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/hello-go7-optional-db
+      goal: "The hello-go7 Deployment in jx-staging is stuck 0/2 available: every app pod AND the hello-go7-migrate\
+        \ job are in CreateContainerConfigError with 'secret \"hello-go7-db\" not found'. The chart references\
+        \ a mandatory DB secret (hello-go7-db) that does not exist in the target namespace, so the release\
+        \ deploys the new image (version 0.0.2, image tag matches) but pods can never start. Remediate\
+        \ at source in the hello-go7 Helm chart: set database.enabled=false in the chart's values.yaml\
+        \ AND ensure the DB-dependent resources are gated behind database.enabled so nothing requires\
+        \ the hello-go7-db secret when it is disabled. Specifically: (1) wrap the deployment's DB env\
+        \ block / secretKeyRef to hello-go7-db in an {{- if .Values.database.enabled }} guard (or mark\
+        \ it optional: true), and (2) gate the migrate Job (and any other hello-go7-db consumers) behind\
+        \ the same flag. Goal: with database.enabled=false the pods start cleanly with >=1 available replica\
+        \ and no CreateContainerConfigError. Do NOT hardcode or invent a secret value \u2014 the DB secret\
+        \ is human-owned; this change removes the hard dependency so the service is healthy without it.\
+        \ Open a PR against mikelear/hello-go7 with the chart change and any unit/lint updates the pipeline\
+        \ requires."
+      name: fix-hello-go7-optional-db
+    name: fix-hello-go7-optional-db
+    repo: mikelear/hello-go7
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - fix-hello-go7-optional-db
+    inputs:
+      action: deploy-health
+      clusters:
+      - gcp
+      - az
+      goal: 'Verify the brief successCriteria: after the hello-go7 chart fix merges, releases and reconciles,
+        the deployed hello-go7 service is the NEW promoted version AND healthy (>=1 available replica,
+        no CreateContainerConfigError) per cluster. This is the deterministic, version-aware final verification
+        of the remediation.'
+      name: verify-release-deploy-healthy
+      namespace: jx-staging
+      service: hello-go7
+    name: verify-release-deploy-healthy
+    repo: mikelear/hello-go7
+  tenant: leartech

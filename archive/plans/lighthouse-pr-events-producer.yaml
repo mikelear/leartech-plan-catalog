@@ -1,0 +1,129 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Failed, az=Paused
+# AgentRuns owned: gcp=8, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: lighthouse-pr-events-producer
+  namespace: jx-staging
+spec:
+  steps:
+  - kind: apply
+    name: bootstrap-repo
+    use: bootstrap-authed-service
+    with:
+      name: leartech-lighthouse-pr-events
+      namespace: jx-staging
+      templateRepo: leartech-go-service-template
+  - agentType: leartech-agent-go
+    dependsOn:
+    - bootstrap-repo
+    inputs:
+      branch: feat/announce-pr-lifecycle-events
+      goal: "Turn the scaffolded leartech-lighthouse-pr-events service into a Lighthouse\nEXTERNAL PLUGIN\
+        \ that announces PR lifecycle events to Maestro. The repo already\nexists, is registered in source-config\
+        \ on both clusters, and has a green\nscaffold on main from leartech-go-service-template. You are\
+        \ adapting it.\n\nREAD THESE TWO FILES FIRST, they are the working prior art:\nthe lighthouse-webui-plugin's\
+        \ receive path (it calls\nutil.ParseExternalPluginEvent at internal/lighthouse/handler.go:35),\
+        \ and\ncharts/leartech-orchestrator-controller/templates/maestro-eventregistration.yaml\nin leartech-orchestrator-controller,\
+        \ which is a heavily-commented, working\nEventRegistration you should mirror rather than invent.\n\
+        \nTHE MERGE-DETECTION TRAP \u2014 GET THIS WRONG AND THE PLUGIN SILENTLY NEVER FIRES.\ngo-scm's\
+        \ GitHub driver maps webhook action \"closed\" to scm.ActionClose\nALWAYS. The ActionMerge branch\
+        \ is commented out in source\n(scm/driver/github/webhook.go, the `case \"closed\":` arm). scm.ActionMerge\n\
+        exists in the const set and the GitHub driver never emits it. So:\n  merged          == hook.Action\
+        \ == scm.ActionClose && hook.PullRequest.Merged\n  closed unmerged == hook.Action == scm.ActionClose\
+        \ && !hook.PullRequest.Merged\nThe Merged flag does survive conversion (convertPullRequestHook\
+        \ builds\nPullRequest via convertPullRequest, which sets Merged from the payload), so you\ndo\
+        \ not need a GitHub API call to tell them apart. Do NOT switch on\nscm.ActionMerge. Write a test\
+        \ that feeds an ActionClose payload with\nMerged=true and asserts pr.merged is announced, and\
+        \ a second with Merged=false\nasserting pr.closed_unmerged \u2014 those two tests are the point\
+        \ of this service.\n\nRECEIVE. Serve POST /lighthouse/events (that path matches how external plugins\n\
+        are already registered in this estate). Validate with\nutil.ParseExternalPluginEvent using the\
+        \ shared Lighthouse HMAC token, delivered\nby ExternalSecret \u2014 the scaffold already has an\
+        \ externalsecret template to\nextend. Reject unsigned or wrongly-signed requests. Handle only\n\
+        scm.WebhookKindPullRequest; ignore every other kind quietly, because the\nregistration this service\
+        \ will eventually sit behind relays all webhook kinds.\n\nANNOUNCE. POST to Maestro at /api/event_maestro/announce_event.\
+        \ The event names\nare exactly pr.merged and pr.closed_unmerged. The delivery payload carries\n\
+        annotations ONLY \u2014 there is no body \u2014 so pass repo and pr as annotations and do\nnot\
+        \ attempt to ship any other state. Authenticate the announce the way\nleartech-plan-catalog's\
+        \ cmd/plan-submit does it (OAuth2 client_credentials\nagainst the auth service, secret via ExternalSecret).\
+        \ If you cannot resolve a\nworking client-credentials pattern from existing estate code, STOP\
+        \ and say so\nin the PR description \u2014 do NOT invent an auth scheme.\n\nREGISTER BEFORE YOU\
+        \ ANNOUNCE. Ship an EventRegistration in this service's chart\ndeclaring produces: pr.merged and\
+        \ pr.closed_unmerged, with annotation keys that\nEXACTLY match what you send. Maestro validates\
+        \ at announce time and returns\n\"no producer registered for event\" if nothing produces the name,\
+        \ and \"missing\nrequired annotation\" if a required key is absent \u2014 so a mismatch means\
+        \ every\nannounce fails. The schema requires a baseURL even though this service only\nproduces;\
+        \ set it to this service's own Service DNS. Add a chart-render test\nasserting both event names\
+        \ appear in produces:.\n\nAND ASSERT THE KEYS, NOT JUST THE NAMES. Event-name presence is the\
+        \ easy half.\nThe silent-failure point is DRIFT between the annotation keys declared in the\n\
+        chart's EventRegistration and the keys the announce code actually sends: the\nnames match, the\
+        \ registration renders, the test passes, and every announce is\nrejected at runtime for a missing\
+        \ required annotation. Derive both sides from\none source, or add a test that reads the rendered\
+        \ chart and fails non-zero when\nthe key sets differ. A test that only checks names does not cover\
+        \ this.\n\nNEVER RETURN 5xx TO LIGHTHOUSE. Lighthouse's relay retries transport errors only\n\
+        (five attempts, doubling backoff) and drops a non-2xx response after logging a\nwarning \u2014\
+        \ there is no persistence and no redelivery. A 5xx therefore buys\nnothing and loses the event\
+        \ either way. Return 2xx once the webhook is validated\nand parsed, and log an announce failure\
+        \ rather than failing the response. The\ncontroller's 15-second poll is the self-healing backstop\
+        \ and it is untouched.\n\nSTAY OUT OF THE RECONCILER'S JOB. This service must NOT resolve which\
+        \ Plan or\nstep owns a repo+PR, must NOT read or write AgentRun/Plan objects, and must NOT\nhave\
+        \ a Kubernetes client or RBAC at all. The event is a trigger; the controller\nre-reads truth through\
+        \ its existing PROutcomeFetcher. If you find yourself\nadding a Kubernetes client, stop and explain\
+        \ why in the PR description.\n\nCHART. Start from what the scaffold gave you. DROP the migrations\
+        \ ConfigMap and\nmigrations Job \u2014 this service has no database; leartech-plan-api is the\n\
+        precedent for a template-derived service that removed them cleanly. ADD the\nEventRegistration.\
+        \ Keep the ExternalSecret, extended for the HMAC token and the\nMaestro client secret. Keep the\
+        \ default ServiceAccount but add NO Role and NO\nRoleBinding: plan-api's chart adds rbac.yaml\
+        \ because it talks to the apiserver,\nand this service must not. If the rendered chart grants\
+        \ any API permission, that\nis a defect, not a convenience.\n\nON THE SCAFFOLD'S \"KEEP EVERYTHING\"\
+        \ INSTRUCTION. The bootstrap step that created\nthis repo was told to keep the inherited wiring\
+        \ lazy rather than judge what the\nservice needs \u2014 deliberately, because at that point nothing\
+        \ knew what this\nservice was for. That judgement belongs to YOU, here. This service has no\n\
+        datastore and is authenticated by an HMAC signature on the webhook, not by a\nuser bearer. Remove\
+        \ the inherited wiring it genuinely does not use and record in\nthe PR description what you removed\
+        \ and why. Do NOT keep dead code merely\nbecause an earlier step said to keep it.\n\nDO NOT REGISTER\
+        \ THIS PLUGIN WITH LIGHTHOUSE. Adding the external_plugins entry\nis an operator-applied GitOps\
+        \ change on the cluster repos and is explicitly out\nof scope. Do not open PRs against jx-build-cluster-gsm\
+        \ or jx-build-cluster-akv.\nThe service being deployed and idle is the correct end state for this\
+        \ Plan.\n\nQUALITY BAR. Raise the coverage threshold in this repo's Makefile test-coverage\ntarget\
+        \ from 60.0 to 80.0 and meet it. That literal is the ONLY place the number\nlives for a template-scaffolded\
+        \ service \u2014 it is copied in, not sourced from a\ncatalog \u2014 so changing it here changes\
+        \ it for this service and nothing else.\n\nMAKE THE NUMBER REAL. Nothing currently runs test-coverage:\
+        \ it is absent from CI\nand `pre-push` runs `test`, not `test-coverage`. A threshold no gate reads\
+        \ is\ndecoration. Wire `make test-coverage` into this repo's own\n.lighthouse/jenkins-x test pipeline\
+        \ so the floor is enforced on every PR here.\nDo not attempt to change this for other repos or\
+        \ for the template \u2014 that is a\nseparate, fleet-wide piece of work.\n\nHOW TO REACH 80 HONESTLY.\
+        \ The scaffold you inherited sits at roughly 49% overall,\nwith whole packages at 0% that have\
+        \ nothing to do with this service. Reaching the\nfloor by DELETING inherited code this service\
+        \ does not use is correct and\nexpected. Reaching it by writing tests that exercise inherited\
+        \ code you are not\nusing is waste, and reaching it with tests that assert nothing is worse than\n\
+        missing the bar \u2014 it will be treated as a failed review, not a pass. If after\nremoving genuine\
+        \ surplus you still cannot reach 80 without hollow tests, stop at\nthe honest number and say so\
+        \ in the PR description with the figure and why.\n\n`make pre-push` must pass in full: fmt, vet,\
+        \ swag-check, tidy-check, build, test,\nlint, vuln, secrets. Keep the golden toolchain exactly\
+        \ as the template pins it;\ndo not swap linters or loosen versions. If a gate genuinely does not\
+        \ apply to a\nwebhook receiver, say so in the PR description rather than deleting it quietly.\n\
+        \nLOGGING TO VERIFY. This is how a human will confirm the path end to end, so it\nis a deliverable,\
+        \ not a nicety. Emit one structured line on webhook receipt and\none on announce, carrying at\
+        \ minimum repo, pr, the decided event name, and the\nannounce outcome. Use snake_case keys consistently\
+        \ \u2014 do not mix spellings of the\nsame correlation id in one record. A reader must be able\
+        \ to follow a single PR\nmerge from webhook through announce in Loki.\n\nDone = PR merged (open\
+        \ via open_pr, drive gates green)."
+      name: pr-event-producer
+      repo: mikelear/leartech-lighthouse-pr-events
+    kind: pr
+    name: pr-event-producer
+    repo: mikelear/leartech-lighthouse-pr-events
+  - dependsOn:
+    - pr-event-producer
+    kind: check
+    name: pr-event-producer-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.pr-event-producer.pr}
+      repo: mikelear/leartech-lighthouse-pr-events
+      service: leartech-lighthouse-pr-events
+  triggeredBy: plan-catalog-internal-services

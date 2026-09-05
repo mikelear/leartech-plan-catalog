@@ -1,0 +1,43 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-authsvc-register-portal-ui
+  namespace: jx-staging
+spec:
+  paused: true
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/registered-uis
+      goal: "leartech-auth-service owns the frontend-services OAuth2Client's redirectUris + the CORS\n\
+        allow-lists (via chart values authUIURL + adminUIURL, and createHydraOAuthClients). There\nis\
+        \ no way to register a THIRD UI, so the ShipProven portal's OIDC login fails with\nredirect_uri\
+        \ mismatch (Hydra rejects https://leartech-ship-proven-portal-jx-staging.\njx.leartech.com/auth/callback)\
+        \ \u2192 the SPA renders BLANK (can't complete login). Confirmed:\nthe portal app loads fine (config\
+        \ + JS 200), only login is blocked.\n\nImplement the \"registeredUIs\" refactor the chart comments\
+        \ already call for (see\nleartech-auth-service.yaml comments \"registered-UIs refactor\"):\n-\
+        \ Add a chart value `registeredUIs` \u2014 a LIST of UI base URLs. For EACH entry, the chart\n\
+        \  (a) adds <url>/auth/callback + <url>/silent-renew.html to the frontend-services\n  OAuth2Client\
+        \ redirectUris, (b) adds <url> to the nginx ingress cors-allow-origin\n  annotation (auth-service\
+        \ AND the hydra public ingress), and (c) adds <url> to hydra\n  serve.public.cors.allowed_origins.\
+        \ Keep authUIURL/adminUIURL working (either fold them\n  into registeredUIs with backward-compat\
+        \ defaults, or have both feed the same rendered\n  lists) \u2014 do NOT drop the existing auth-ui\
+        \ / auth-admin-ui / webcoder-ui / template\n  registrations. One place to add a UI, fanning out\
+        \ to all three surfaces.\n- Whichever mechanism actually registers frontend-services in Hydra\
+        \ (the\n  createHydraOAuthClients path and/or the OAuth2Client CR consumed by hydra-maester),\n\
+        \  make the redirectUris come from the rendered registeredUIs list so they SURVIVE boot +\n  get\
+        \ pushed to Hydra. Verify by helm template.\n\nThen the per-cluster config sets registeredUIs\
+        \ to include the portal (GCP portal host now;\nAZ host is handled by the AZ config plan). Lean\
+        \ diff. Own the PR, drive BOTH clusters green\nTHROUGH TO MERGE \u2192 release \u2192 deploy.\
+        \ After deploy, portal OIDC login completes \u2192 portal\nrenders with real Plans.\n"
+      name: fix-authsvc-register-portal-ui
+      repo: leartech-auth-service
+    name: chart
+    repo: mikelear/leartech-auth-service
+  tenant: leartech
+  triggeredBy: human

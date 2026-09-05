@@ -1,0 +1,53 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Failed, az=Paused
+# AgentRuns owned: gcp=5, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: agent-bash-failure-fields
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    inputs:
+      branch: feat/bash-failure-fields
+      goal: "Promote a failed bash call's exit status and error text to structured fields so a reader\
+        \ with only Loki can tell WHY it failed, without raising the 2000-character result clip.\nCONFIRM\
+        \ THE PREMISE FIRST. In gate/agent/tool_logging.py read _MAX, _VERDICT_KEYS and _verdict_fields,\
+        \ and confirm the promotion happens before the text is clipped and that log_tool_result splices\
+        \ the result in. Then establish what a Bash tool result actually looks like when the command fails\
+        \ \u2014 the exact shape of the content the SDK hands back, including where the exit status appears.\
+        \ Do not guess it from the tool name; find it, and state what you found in the PR description.\
+        \ If bash failures already carry promoted fields, STOP and say so.\nMIRROR _verdict_fields, DO\
+        \ NOT INVENT A SECOND PATH. Same helper style, same snake_case field names, same splice into the\
+        \ obslog.emit call, promotion strictly before clipping. Field names are a wire contract the recorder\
+        \ will key on, so state them in the PR description.\nWHAT TO PROMOTE, AND WHAT NOT TO. The exit\
+        \ status, and enough of the error to identify it \u2014 the first line, or the last, whichever\
+        \ actually carries the message for a failing shell command; justify the choice. Do NOT promote\
+        \ the whole output and do NOT raise _MAX: the clip bounds log volume and that reasoning is unchanged.\
+        \ A promoted field that is itself 2000 characters has moved the problem, not fixed it.\nDO NOT\
+        \ BREAK THE VERDICT FIELDS. _verdict_fields is load-bearing and recently added for the same class\
+        \ of bug. Its tests must still pass untouched, and a bash result must not start emitting verdict\
+        \ keys or vice versa.\nISOLATE TESTING: pytest, no network, no cluster. Cover: a failing bash\
+        \ result whose body exceeds 2000 characters still yields the exit status and an identifiable error;\
+        \ a succeeding bash call does not emit a spurious failure field; the existing verdict-field behaviour\
+        \ is unchanged; and the promoted error is itself bounded. Non-negative coverage delta.\nLOGGING\
+        \ TO VERIFY: include in the PR description the LogQL query that lists every failed bash call for\
+        \ one run id with its exit status and error.\nDone = PR merged (open via open_pr, drive gates\
+        \ green)."
+      name: bash-failure-fields
+      repo: mikelear/leartech-automated-agent
+    kind: pr
+    name: bash-failure-fields
+  - dependsOn:
+    - bash-failure-fields
+    kind: check
+    name: bash-failure-fields-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.bash-failure-fields.pr}
+      repo: mikelear/leartech-automated-agent
+      service: leartech-automated-agent
+  triggeredBy: plan-catalog-internal-services

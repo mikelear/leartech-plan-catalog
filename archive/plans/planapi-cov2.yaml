@@ -1,0 +1,31 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: planapi-cov2
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/read-write-authz-portal
+      goal: "Continue on EXISTING branch feat/read-write-authz-portal (PR #5). A prior continuation\n\
+        did not complete (ran out of budget). The ONLY blocker is the az/test COVERAGE gate:\n\"coverage\
+        \ dropped vs origin/main beyond tolerance -0.5%\"; internal/plans/validator.go:31\n(the Error\
+        \ path) + other new authz lines are under-covered. All functional tests already\nPASS and ai-review\
+        \ is 98/100 \u2014 do NOT change behaviour, just ADD tests.\nSteps: run `go test ./... -cover`\
+        \ locally, find the packages/lines below tolerance\n(esp. validator.go Error path + the new read/write\
+        \ authz), add focused unit tests to\nbring the delta within -0.5%. VERIFY locally that `go build\
+        \ ./...`, `go test ./...` and\ncoverage all pass BEFORE pushing (do not push a half-fix). Then\
+        \ push, own PR #5, drive\nBOTH clusters' gates GREEN THROUGH TO MERGE. If az/dynamic-scan flakes,\
+        \ that's infra.\n"
+      name: planapi-cov2
+      repo: leartech-plan-api
+    name: cov2
+    repo: mikelear/leartech-plan-api
+  tenant: leartech
+  triggeredBy: human

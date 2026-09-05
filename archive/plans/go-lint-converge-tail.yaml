@@ -1,0 +1,68 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=3
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: go-lint-converge-tail
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    inputs:
+      branch: fix/go-localcheck-golden-mk-direct
+      goal: "DURABLE FIX for Go lint/test drift (see feedback_go_local_checks_drift_from_tekton): make\n\
+        the agent's local Go check run the GOLDEN mk DIRECTLY, so a repo's own (possibly drifted)\nMakefile\
+        \ can never let lint/coverage escape to CI.\nProblem: CI runs the catalog go-lint/go-test tasks\
+        \ (curl go/leartech-go.mk \u2192 yq-merge\nbase+repo .golangci \u2192 ~30 linters; coverpkg+60%floor+delta).\
+        \ But many repo Makefiles run\nbare `golangci-lint run ./...` (repo-overrides-only) / bare `go\
+        \ test ./...` \u2192 local passes,\nCI fails (hit on leartech-orchestrator-controller PR #73).\n\
+        FIX (in this repo \u2014 gate/agent/lessons + wherever the Go pre-push/local-check is defined):\n\
+        on any repo whose .lighthouse uses the catalog go-lint/go-test `uses:` tasks, the agent's\npre-push\
+        \ local check must CURL the golden mk (leartech-pipeline-catalog/go/leartech-go.mk)\nand run `make\
+        \ -f <mk> lint` + `make -f <mk> test-coverage` \u2014 the SAME code CI runs\n(base+repo yq-merge,\
+        \ coverage floor+delta) \u2014 instead of the repo's `make lint`/`go test`.\nUpdate the Go pre-push\
+        \ lesson accordingly (retire the bare quick-ref). Keep it green on both\nclusters; open PR; STOP\
+        \ at AwaitingReview.\n"
+      name: go-agent-run-golden-mk-directly
+      repo: leartech-automated-agent
+    name: agent-golden-mk-local
+    repo: mikelear/leartech-automated-agent
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/makefile-golden-mk
+      goal: "Converge this repo's Makefile to the golden go mk so LOCAL `make lint`/`make test-coverage`\n\
+        match CI exactly (they currently drift \u2014 Makefile runs bare `golangci-lint run ./...` which\n\
+        loads only .golangci.yml overrides, while CI's go-lint task yq-merges the catalog\n.golangci.base.yml\
+        \ \u2014 ~30 linters). Follow the go-green-converge pattern: the Makefile\n`lint` + `test-coverage`\
+        \ targets should curl/include leartech-pipeline-catalog/go/\nleartech-go.mk and delegate to it\
+        \ (base+repo yq-merge + coverage floor/delta), so\n`make lint`/`make test-coverage` run the identical\
+        \ logic to tasks/go-lint + tasks/go-test.\nDo NOT weaken linters. Run it locally to confirm it\
+        \ matches CI, fix any newly-surfaced\nlint/coverage issues, get both clusters green, open PR,\
+        \ STOP at AwaitingReview.\n"
+      name: converge-controller-golden-mk
+      repo: leartech-orchestrator-controller
+    name: converge-controller
+    repo: mikelear/leartech-orchestrator-controller
+  - agentType: leartech-agent-py
+    inputs:
+      branch: chore/audit-go-lint-drift
+      goal: "AUDIT (read-only discovery, output a report \u2014 do NOT change other repos): enumerate\
+        \ all\nmikelear Go repos that use the catalog go-lint/go-test `uses:` tasks (check .lighthouse/\n\
+        jenkins-x/lint.yaml + test.yaml for `uses:\u2026/tasks/go-lint|go-test`), and for each, inspect\n\
+        its Makefile to determine whether it ADOPTS the golden go/leartech-go.mk (include/curl +\n`make\
+        \ -f mk lint`/`test-coverage`) or DRIFTS (bare `golangci-lint run`, bare `go test`).\nProduce\
+        \ a markdown report table: repo | lint converged? | test-coverage converged? | drift.\nPost it\
+        \ as a GitHub tracking issue (e.g. in leartech-automated-agent or leartech-pipeline-\ncatalog)\
+        \ titled \"Go lint/test golden-mk convergence audit\" listing the drifted repos to\nconverge as\
+        \ follow-ups. Use gh api for discovery. This step opens no code PR (repo:\"\" style\n\u2014 it's\
+        \ a report); if it must produce a branch, put the report as a committed docs/ file +\nPR in this\
+        \ repo. Keep it lightweight.\n"
+      name: audit-go-repo-lint-drift
+      repo: leartech-automated-agent
+    name: audit-go-repos
+    repo: mikelear/leartech-automated-agent
+  tenant: leartech
+  triggeredBy: human

@@ -1,0 +1,68 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=2
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: build-portal-detail
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: feat/plan-portal
+      goal: "Build the ShipProven Plan portal on the already-scaffolded+released\nleartech-ship-proven-portal:\
+        \ the 5-view Plan visualisation behind login, driven by REAL\nplan-api data. Nice look-and-feel\
+        \ app, but the REAL thing is the Plans working \u2014 let the\nactual plan-api functionality DRIVE\
+        \ it and iterate HARD on e2e-ui to get as CLOSE as\npossible to the design mock. Source mock (READ\
+        \ + port faithfully):\n~/leartech/automated-agent-design/docs/plan-viz.html in leartech-automated-agent-design\n\
+        (5 views over the two-layer state model: Frontier, Lifecycle grid, DAG, Text, PR-gates).\n\nSTACK\
+        \ / CONVENTIONS (verified estate \u2014 do not invent):\n- Angular 20 standalone + signals on\
+        \ lt-shell, following leartech-auth-admin-ui EXACTLY.\n  Use @mikelear/leartech-common (provideLeartechAuth\
+        \ Hydra OIDC, EnvironmentService via\n  /api.conf.json APP_INITIALIZER, UserContextService, AuthInterceptor)\
+        \ +\n  @mikelear/leartech-ui (LtShellComponent, authGuard, permissionGuard, KNOWN_PERMISSIONS\n\
+        \  User/Admin/PlatformAdmin, isPlatformAdmin). CRITICAL: inject EnvironmentService from\n  @mikelear/leartech-common\
+        \ (the LOADED one), NOT a local shared/ copy \u2014 wrong one \u2192\n  relative-URL 405s (authui-two-environmentservice\
+        \ footgun).\n- Consume plan-api via the published SDK @mikelear/leartech-plan-api-angular\n  (adapter-pattern\
+        \ like auth-admin-ui \u2194 auth-service). npm install --legacy-peer-deps;\n  DIFF the lockfile\
+        \ after install + heed peer warnings (npm-install lockfile peer drift).\n\nAUTH (login is part\
+        \ of the portal):\n- Own login screen (provideLeartechAuth \u2192 Hydra OIDC). Browser client\
+        \ calling plan-api\n  DIRECTLY (token aud=leartech-plan-api \u2014 already in deployed AUTH_USER_TOKEN_DEFAULT_\n\
+        \  AUDIENCES; NOT via the MCP). authGuard on all routes.\n- READ (5 views, list/detail): any authenticated\
+        \ user with read access.\n- WRITE (create-plan): plan-api create requires write scope (leartechapi:mcp:write)\
+        \ OR an\n  admin/PlatformAdmin ROLE. A browser user won't carry mcp:write \u2192 the create path\
+        \ relies\n  on the PlatformAdmin/Admin role. Gate the Create-Plan UI behind permissionGuard/\n\
+        \  isPlatformAdmin; let plan-api authorize by role. VERIFY the deployed plan-api (0.0.5)\n  authz\
+        \ + role model before finalising; match names exactly.\n\nVIEWS (port plan-viz.html): render EVERY\
+        \ state the SDK DTO carries \u2014 Plan.phase, Step.\nstepPhase, AgentRun agentPhase (show when\
+        \ != stepPhase), prOutcome, derived stranded/\nfrozen-lane/az\u2260gcp gate-split/broke-gate,\
+        \ conditions[], decisions[], start/completion,\nmessage. Five views: Frontier, Lifecycle grid,\
+        \ DAG, Text, PR-gates (gates from\nGET /plans/:name/steps/:step/gates \u2014 duration/history\
+        \ null \u2192 \"\u2013\", never fabricate). Plus\na Create-Plan form (admin) \u2192 POST via the\
+        \ SDK, defaulting paused.\n\nE2E-UI (aggressive + doubles as a USER DEMO): Playwright \u2014 log\
+        \ in \u2192 walk all 5 views on\nreal/seeded plans \u2192 create a Plan \u2192 verify it appears.\
+        \ Write as a coherent narrated\nwalkthrough (reusable demo), not just assertions. Keep iterating\
+        \ toward the plan-viz.html\nlook/feel. Suite MUST be valid in BOTH contexts \u2014 PR preview\
+        \ AND post-deploy staging\narrival (read base URL from runner env, render-mode-agnostic; e2e-must-pass-in-all-\n\
+        contexts lesson). Reuse the e2e-ui GCS-artifact + PR-comment mechanism.\n\nStatic serving like\
+        \ the template/website (nginx SPA-fallback + per-route). Chart takes\ningress host(s) as values.\
+        \ Lean diff (no vendor). Own the PR, drive BOTH clusters' gates\ngreen (incl end2end-ui) THROUGH\
+        \ TO MERGE.\n"
+      name: portal-build
+      repo: leartech-ship-proven-portal
+    name: build-portal
+    repo: mikelear/leartech-ship-proven-portal
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - build-portal
+    inputs:
+      action: release-health-check
+      budgetMinutes: 60
+      healthPath: /health
+      namespace: jx-staging
+      service: leartech-ship-proven-portal
+    name: release-check
+  tenant: leartech
+  triggeredBy: human

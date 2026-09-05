@@ -1,0 +1,121 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Succeeded, az=Paused
+# AgentRuns owned: gcp=10, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: shipproven-website-ga-finishing
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: feat/ga-content-and-showcase
+      goal: "Finish the ShipProven marketing site content for GA. docs/WEBSITE-CONTENT.md is the source\
+        \ of truth for wording and docs/WEBSITE-DESIGN.md for structure \u2014 read both first. Do NOT\
+        \ weaken crawlability: .lighthouse/jenkins-x/seo-preview.yaml is a BLOCKING presubmit that fetches\
+        \ raw HTML with no JS and asserts the hero h1, the meta set, robots.txt and sitemap.xml \u2014\
+        \ keep prerender/SSG (outputMode: static), no JS-only routes, no content behind interaction.\n\
+        1. SHOWCASE \u2014 wire the two now-LIVE reference builds (WEBSITE-CONTENT.md \xA77). Replace\
+        \ BOTH [PLACEHOLDER] proof blocks with real, working \"View live\" click-throughs and a one-line\
+        \ caption each. Also update docs/WEBSITE-CONTENT.md \xA77 in the same PR so the source of truth\
+        \ no longer says [PLACEHOLDER].\n  - Card 1 \"Mortgage Sourcing \u2014 AI-native + MCP\": link\
+        \ https://mortgagesourcing.com\n    (the consumer site is now live). Show the MCP endpoint in\
+        \ mono\n    (api.mortgagesourcing.com). Frame: a production-grade, AI-native, MCP-native\n   \
+        \ fintech platform built through the governed pipeline.\n  - Card 2 \"NextGen Lending \u2014 chain-native\"\
+        : link https://www.nextgenlending.co.uk .\n    Feature the live block explorer and that AI-generated\
+        \ smart contracts are\n    consensus-reviewed + gate-verified before they deploy.\n  - HONESTY:\
+        \ each card's caption must state it is a LIVE, fully-built demonstration \u2014\n    PROOF OF\
+        \ CAPABILITY, NOT a customer and NOT a trading company. Add the existing\n    \"we ship a new\
+        \ proof regularly\" line. Do not over-claim \"DeFi\".\n\n2. REMOVE LEARTECH ENTIRELY. Remove the\
+        \ \"Reference customer: LearTech ...\" line beneath the Showcase and grep -ri \"leartech\" across\
+        \ templates/content/meta/OG/JSON-LD \u2014 there must be ZERO occurrences in the built output.\
+        \ Footer/eyebrow attribution is ShipProven \xB7 by Verrian only (\"SHIPPROVEN \xB7 BY VERRIAN\"\
+        \ eyebrow; footer \"a product of Verrian Ltd, UK\").\n3. DESIGN AGENT = LIVE. The Design agent\
+        \ went live 2026-08-11 (it rebuilt this site). Flip its status from \"Prototype\" (amber) to \"\
+        Live\" (green) in the agent roster, and ensure the agent-org diagram shows ALL SIX agents (BA,\
+        \ Dev, QA, Infra, Scrum-Master, Design) as Live. No \"Prototype\" pill may remain anywhere on\
+        \ the site.\n4. AGENT-BUS LABEL Maestro -> Axon. Rename the visible bus LABEL from \"Maestro\"\
+        \ to \"Axon\" across the site (diagram + any copy/nav/alt text). BRAND LABEL ONLY \u2014 do NOT\
+        \ touch any code, repo, CRD or env var (the underlying maestro implementation is a separate future\
+        \ task). No public-facing \"Maestro\" string may remain.\n5. LAUNCH ASSETS + ATTRIBUTION. Ensure\
+        \ og-default.png (1200x630) returns 200 (og:image already points at it); add favicon + app icons\
+        \ (16/32/apple-touch/maskable), a web manifest and theme-color. Keep the brand palette consistent\
+        \ with the deck and both reference sites (ink #0B1F3A, signal-green #16A34A accent).\n6. UK LEGAL\
+        \ + COMPANY DETAILS. Add Privacy Policy, Cookie Policy (GDPR/PECR) and Terms pages, linked in\
+        \ the footer. Footer must carry the company details: Verrian Ltd, company registration number,\
+        \ registered office. Add a cookie-consent banner IF (and only if) any non-essential cookies/analytics\
+        \ are set.\n7. NO DEAD BUTTONS \u2014 wire every CTA. \"Book a walkthrough\" -> a calendar link;\
+        \ \"Talk to sales\"/Contact -> a contact form or the verified sales@verrian.co.uk address; \"\
+        Join the waitlist\" -> a waitlist form with spam protection. Route form submissions to the ShipProven-built\
+        \ CRM (dogfood) or a monitored inbox. No CTA may be a dead link.\nISOLATE TESTING: extend the\
+        \ end2end-ui specs to assert, against the PR preview: both Showcase \"View live\" links resolve\
+        \ over HTTPS and carry the proof-of-capability caption; ZERO \"leartech\" and ZERO \"Maestro\"\
+        \ in the rendered output; all six agents render Live with no Prototype pill; og-default.png returns\
+        \ 200; Privacy/Cookie/Terms pages exist and are linked; every CTA resolves to a real destination.\
+        \ No new infra.\nREPORT in the PR description exactly what you changed per section, what you removed\
+        \ (LearTech hits, Maestro labels), and where form submissions are routed.\nDone = PR merged (open\
+        \ via open_pr, drive gates green, seo-preview included)."
+      name: content-and-showcase
+      repo: mikelear/leartech-ship-proven-website
+    kind: pr
+    name: content-and-showcase
+  - agentType: leartech-agent-ng
+    dependsOn:
+    - content-and-showcase
+    inputs:
+      branch: feat/ga-visuals-and-quality
+      goal: "Finish the ShipProven site visuals + launch-quality gate for GA. Read docs/VISUAL-BUILD-SPEC.md,\
+        \ docs/WEBSITE-DESIGN.md and docs/VISUAL-STARTER.md first. Do NOT change the copy (docs/WEBSITE-CONTENT.md\
+        \ is source of truth) and do NOT weaken the blocking .lighthouse/jenkins-x/seo-preview.yaml presubmit\
+        \ (keep prerender/SSG, hero h1, meta, robots.txt, sitemap.xml intact).\n1. ESCALATING-GATES PIPELINE\
+        \ DIAGRAM (VISUAL-BUILD-SPEC \xA74). Replace the flat gate stack with the escalating staircase:\
+        \ one set of gates to ENTER the repo, MORE to reach a TEST environment, MORE AGAIN to reach PRODUCTION\
+        \ \u2014 with the final prod promotion drawn as a deliberate HUMAN GitOps change (human-in-the-loop\
+        \ at the prod boundary), and reversibility shown (revert the PR / re-pin the prior version). This\
+        \ is the \"software-DD standard\" story. Render as INLINE SVG (prerender-safe, themeable, crawlable)\
+        \ \u2014 not <img>, not canvas, not a JS chart lib. Honour prefers-reduced-motion and give the\
+        \ diagram accessible alt/aria text. Also deliver the sanitised gateway consensus fan-out render\
+        \ (review -> gateway -> parallel models across providers -> quorum -> meta-judge -> verdict).\n\
+        2. SANITISATION \u2014 HARD REQUIREMENT (WEBSITE-DESIGN \xA74.6). This is a PUBLIC site. No internal\
+        \ hostnames, IPs, GCS paths, *.jx.leartech.com preview hosts, cluster tags or real repo/PR ids\
+        \ may appear in any rendered SVG or markup. Replace with neutral values.\n3. LAUNCH-QUALITY GATE\
+        \ (WEBSITE-DESIGN \xA76):\n  - Accessibility WCAG 2.2 AA \u2014 explicitly verify #16A34A green\
+        \ contrast on white AND\n    on #F3F6F9 (the known risk); keyboard nav + visible focus; skip-link;\
+        \ alt/aria on\n    all SVGs; prefers-reduced-motion respected.\n  - Responsive \u2014 hero visual\
+        \ stacks, nav -> hamburger; test the breakpoints.\n  - Performance \u2014 good Core Web Vitals;\
+        \ font preload + font-display: swap; optimise SVG;\n    keep critical-CSS on.\n  - Security headers\
+        \ via nginx \u2014 CSP, HSTS, X-Content-Type-Options, Referrer-Policy.\n  - Branded 404/error\
+        \ page.\n  - Privacy-friendly analytics (Plausible or GA4-with-consent) that tracks CTA clicks.\n\
+        \nISOLATE TESTING: extend the end2end-ui specs to assert, against the PR preview: the pipeline\
+        \ diagram is present as inline SVG showing three escalating gate tiers + an explicit human GitOps\
+        \ prod-promotion, with accessible text; no internal/preview hostnames appear anywhere in the rendered\
+        \ markup; the security headers are present; the branded 404 renders. Runnable against the preview;\
+        \ no new infrastructure.\nREPORT in the PR description: the diagram approach, exactly what you\
+        \ sanitised, and the a11y/perf/security results (contrast values, CWV, header scan).\nDone = PR\
+        \ merged (open via open_pr, drive gates green, seo-preview included)."
+      name: visuals-and-quality
+      repo: mikelear/leartech-ship-proven-website
+    kind: pr
+    name: visuals-and-quality
+  - dependsOn:
+    - content-and-showcase
+    kind: check
+    name: content-and-showcase-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.content-and-showcase.pr}
+      repo: mikelear/leartech-ship-proven-website
+      service: leartech-ship-proven-website
+  - dependsOn:
+    - visuals-and-quality
+    kind: check
+    name: visuals-and-quality-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.visuals-and-quality.pr}
+      repo: mikelear/leartech-ship-proven-website
+      service: leartech-ship-proven-website
+  triggeredBy: plan-catalog-internal-services

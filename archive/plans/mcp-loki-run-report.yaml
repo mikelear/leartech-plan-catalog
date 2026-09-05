@@ -1,0 +1,104 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Succeeded, az=Paused
+# AgentRuns owned: gcp=5, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mcp-loki-run-report
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/loki-run-report
+      goal: "Add a `run_report` tool to internal/lokiserver that turns one run's Loki lines into the aggregates\
+        \ a reviewer reads, so nobody has to do that arithmetic by hand again.\nCONFIRM THE PREMISE FIRST.\
+        \ In internal/lokiserver read tools.go and confirm reconstruct_run, service_errors and tool_calls\
+        \ exist, how each is registered, and that no run_report exists. Reuse their registration, their\
+        \ input-struct shape (run id, namespace, since-hours, limit) and their logging \u2014 same helpers,\
+        \ same field vocabulary. If something equivalent already exists, STOP and report that rather than\
+        \ adding a second one.\nWHAT IT MUST RETURN. Turn count; wall-clock; a histogram of tool calls\
+        \ by name; the wait-tool ratio, meaning fail-fast calls against full-terminal calls, named explicitly\
+        \ because that ratio is the estate's only proven prompt-change signal; line counts PER SOURCE\
+        \ (agent, controller, maestro, mcp-servers, plan-api); the count of MCP calls; and every tool\
+        \ error.\nERRORS GO BACK VERBATIM. Do not summarise, truncate or classify them. Four image and\
+        \ prompt defects came from reading them exactly as emitted; a summarised error would have hidden\
+        \ all four. Everything else in the report is counted, but the errors are quoted.\nABSENT IS NOT\
+        \ ZERO \u2014 THIS IS THE POINT OF THE TOOL. Several fields can be genuinely unavailable rather\
+        \ than genuinely zero, and the two must never render the same way. If the advertised-tool set\
+        \ is not present in the logs (it is emitted by a separate change that may not have landed yet),\
+        \ report it as UNAVAILABLE, not as an empty set \u2014 an empty set reads as \"no tools were advertised\"\
+        , which is a false statement about the run. Same for a run older than Loki's 720h retention, and\
+        \ same for a source that logged nothing.\nCOUNT LINES TWO WAYS AND REPORT THE DELTA \u2014 THE\
+        \ INSTRUMENT MUST CHECK ITSELF. reconstruct_run queries `{namespace=...} | json | run_id=\"...\"\
+        `. The `| json` stage silently discards every line that is not JSON, and for the baseline run\
+        \ that is 519 of 980 lines \u2014 53 percent of the run, including all human-readable progress\
+        \ output. Loki HAS those lines; the query cannot see them. Verified: `{pod=\"...\"}` returns 980,\
+        \ the run_id query returns 461.\nThat is the most dangerous shape of gap, because a query dropping\
+        \ half its input returns a confident, complete-looking answer with no error and nothing absent\
+        \ to notice. So report BOTH counts: the broad count for the run's pod (the pod name is on AgentRun.status.jobName,\
+        \ so no guessing) and the count the structured query actually parsed, and the difference between\
+        \ them. A reader must be able to see \"980 lines exist, 461 were parseable\" rather than trust\
+        \ 461 as the whole run.\nDo NOT simply build on reconstruct_run unmodified \u2014 it would inherit\
+        \ this blind spot. Either widen the query or report what it misses; say which you chose and why.\n\
+        AGGREGATE ACROSS EVERY ATTEMPT, AND SAY HOW MANY THERE WERE. One AgentRun can have several pods,\
+        \ because the Job retries. Aggregating one pod and presenting it as the run understates turns,\
+        \ calls, cost and errors without any sign that it has. Report per-attempt figures and the attempt\
+        \ count, and note that this is NOT the same as AgentRun.status.iteration, which only moves on\
+        \ a controller respawn.\nNO SILENT CAPS. If a query hit its limit, the report must say so on its\
+        \ face. A truncated run that renders as a short run is worse than an error: it invites a confident\
+        \ wrong conclusion about how the agent behaved.\nCOMPUTE available MINUS called. The advertised\
+        \ set now exists \u2014 it was added by leartech-automated-agent#244 and its field names are a\
+        \ FIXED wire contract you must read, not choose:\n\n    event=agent_advertised_tools   (level\
+        \ INFO, one record per run)\n    mcp_servers=[sorted server names]     allowed_tools=[sorted tool\
+        \ names]\n    mcp_server_count=<int>                allowed_tool_count=<int>\n    run_id=<ambient>\
+        \                      namespace=<ambient>\n\nThose names are pinned by tests in that repo (test_log_advertised_tools_stable_event_name\
+        \ and test_log_advertised_tools_names_every_server_and_tool), so read them from a real record\
+        \ rather than restating them from this brief \u2014 if this brief and the emitter ever disagree,\
+        \ the emitter is right.\nCOMPUTE BOTH DIRECTIONS \u2014 the second one is the stronger signal.\
+        \ The agent runs with permission_mode='bypassPermissions', so allowed_tools is a DECLARED list\
+        \ and NOT an enforced boundary. Proven in the baseline runs: ToolSearch was called and is not\
+        \ declared, and an earlier run called leartech-k8s and leartech-tekton tools that appear in no\
+        \ declared list. So:\n\n  declared - called   tools declared and unused. WEAK evidence \u2014\
+        \ a tool may simply\n                      be irrelevant to that run's work. 8 of 16 in the baseline.\n\
+        \  called - declared   tools used but never declared. STRONGER \u2014 it means the\n         \
+        \             declared list has drifted from what the agent actually needs.\n\nA report that computed\
+        \ only the first would have called the baseline run clean.\nReport which advertised tools were\
+        \ never called. That set is the only evidence for a class of prompt defect that raises no error\
+        \ at all \u2014 the agent reaches for bash instead of a tool it was given, and succeeds slowly.\
+        \ In the baseline run, Bash was 114 of 228 calls against 43 MCP calls, and whether that is reasonable\
+        \ was impossible to judge precisely because the advertised set did not yet exist.\nRuns from BEFORE\
+        \ that change carry no such record, and the baseline is one of them. For those, follow the absent-is-not-zero\
+        \ rule above: report UNAVAILABLE.\nISOLATE TESTING: table-driven Go tests against fixture Loki\
+        \ responses, no cluster and no network \u2014 mirror however the existing lokiserver tests fake\
+        \ their transport. Cover: each aggregate computed from a known fixture; errors returned verbatim\
+        \ including one exceeding any clip length; absent versus zero rendering differently for every\
+        \ field that can be absent; a limit-hit run reporting that it was capped; and a run with no lines\
+        \ at all. Non-negative coverage delta.\nRECONCILE AGAINST THE MANUAL BASELINE \u2014 THIS IS THE\
+        \ ACCEPTANCE TEST. The baseline is committed at mikelear/leartech-agent-run-reports baselines/2026-08-29-agent-log-advertised-tools.md,\
+        \ for run id agent-log-advertised-tools-log-advertised-tools. It asserts, among others: 228 tool\
+        \ calls, 4 errors, 114 Bash against 43 MCP across 11 tools, a wait-tool ratio of 9:1 fail-fast\
+        \ to full-terminal, 33m33s wall clock, and per-source line counts of agent 460 / controller 42\
+        \ / maestro 26 / mcp-servers 12 / plan-api 0. Run this tool against that run id and compare every\
+        \ aggregate against the baseline: turn count, tool histogram, wait-tool ratio, per-source line\
+        \ counts, and the error list. Put the comparison in the PR description. Where they differ, say\
+        \ which is wrong and why \u2014 the baseline may be the mistaken one, but a difference must be\
+        \ explained, never averaged away or quietly dropped. Fixtures you wrote yourself only prove the\
+        \ code does what you assumed; the baseline is the only check that the assumption matches a real\
+        \ run.\nDone = PR merged (open via open_pr, drive gates green)."
+      name: loki-run-report
+      repo: mikelear/leartech-mcp-servers
+    kind: pr
+    name: loki-run-report
+  - dependsOn:
+    - loki-run-report
+    kind: check
+    name: loki-run-report-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.loki-run-report.pr}
+      repo: mikelear/leartech-mcp-servers
+      service: leartech-mcp-servers
+  triggeredBy: plan-catalog-internal-services

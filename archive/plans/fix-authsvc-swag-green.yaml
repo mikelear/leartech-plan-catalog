@@ -1,0 +1,40 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-authsvc-swag-green
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/registered-uis
+      goal: "Continue on EXISTING branch feat/registered-uis (PR #150 \u2014 the portal OIDC registeredUIs\n\
+        fix). It is RED on az/pr because the preview/from-build-pack build runs `make swag` and\nfails:\
+        \ `swag: No such file or directory` \u2192 `make: *** [Makefile:32: swag] Error 127`. The\n`swag`\
+        \ (swaggo) binary is NOT installed where the build invokes it. This is a build-env\nissue, NOT\
+        \ the registeredUIs code \u2014 do NOT revert or weaken the registeredUIs change.\n\nFix swag\
+        \ availability so `make swag` works in CI:\n- PREFER making the Makefile `swag:` target self-installing:\
+        \ e.g. prepend\n  `command -v swag >/dev/null 2>&1 || go install github.com/swaggo/swag/cmd/swag@<pin>`\n\
+        \  (pin the same swag version the repo expects \u2014 v1.16.x per the Makefile comment) before\n\
+        \  the `swag init ...` line, so the target works whether or not swag is pre-installed. This\n\
+        \  fixes it for every build path (preview, release) and likely affects ALL auth-service PRs\n\
+        \  (a regression), so a self-contained target is the robust fix.\n- If the failure is actually\
+        \ in the Dockerfile/image build (not the Makefile), install\n  swag in the appropriate build stage\
+        \ instead. Trace where `make swag` runs in az/pr\n  (the from-build-pack preview) and fix THAT\
+        \ path.\n- The runAsNonRoot policy warnings on preview-client-provisioning / preview-seed-test-user\n\
+        \  are audit-mode warnings \u2014 only address if they actually block; the swag Error 127 is the\n\
+        \  real failure.\n\nRun `make swag` locally (install swag first) to confirm it regenerates docs\
+        \ cleanly. Keep\nthe diff lean + focused on swag availability + the existing registeredUIs work.\
+        \ Open the PR\n(idempotent open_pr adopts #150) and get az/pr + ALL gates GREEN \u2014 then STOP\
+        \ at\nAwaitingReview. Do NOT poll for or chase the merge (a human/Tide merges the green PR).\n"
+      name: fix-authsvc-swag-green
+      repo: leartech-auth-service
+    name: swag
+    repo: mikelear/leartech-auth-service
+  tenant: leartech
+  triggeredBy: human

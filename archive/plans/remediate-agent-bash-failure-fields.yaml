@@ -1,0 +1,35 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: remediate-agent-bash-failure-fields
+  namespace: jx-staging
+spec:
+  paused: true
+  remediates:
+  - name: agent-bash-failure-fields
+    namespace: jx-staging
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: deploy-health
+      clusters:
+      - gcp
+      - az
+      goal: "Verify the leartech-automated-agent release is deployed and healthy per cluster for the promoted\
+        \ version (gcp 0.10.185 / az 0.10.195). NOTE FOR REVIEWER: this repo is IMAGE-ONLY by design (no\
+        \ Helm chart, no Deployment) \u2014 a Deployment-based deploy-health check cannot pass here. The\
+        \ true release-healthy signal (release + promote both clusters + bootjob) already passed. This\
+        \ step exists to satisfy the remediation contract but will remain red until the release-verify\
+        \ generator is fixed to treat image-only repos correctly (see capability_gap in the authoring\
+        \ report)."
+      name: verify-release-deploy-healthy
+      namespace: jx-staging
+      service: leartech-automated-agent
+    name: verify-release-deploy-healthy
+    repo: mikelear/leartech-automated-agent
+  tenant: mikelear

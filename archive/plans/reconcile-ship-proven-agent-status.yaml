@@ -1,0 +1,55 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=2
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: reconcile-ship-proven-agent-status
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: fix/agent-status-live
+      goal: "The ShipProven marketing site (Angular, already live) has drifted from the\napproved copy\
+        \ on the agent STATUS LABELS. The source of truth is section 4\n\"Meet the team of agents\" in\
+        \ the approved copy: ALL FIVE agents \u2014 BA, Dev, QA,\nInfra and Scrum-Master \u2014 are \"\
+        Live\" (running in production today; the copy has\nan explicit honesty note to that effect). The\
+        \ site currently mislabels two of\nthem as \"In prototype\".\n\nMake the site match the approved\
+        \ copy \u2014 these are the credibility spine, so be\nexact and complete:\n\n1. src/app/landing/landing.component.ts\
+        \ \u2014 the agents data array: set BOTH\n   - \"Infra agent\"  -> status: 'Live', statusKind:\
+        \ 'live'\n   - \"Scrum-Master agent\" -> status: 'Live', statusKind: 'live'\n   (currently status:\
+        \ 'In prototype \u2014 landing this cycle', statusKind:\n   'prototype'). Leave BA / Dev / QA\
+        \ as 'Live' (already correct).\n\n2. Remove the stale \"(in prototype)\" parenthetical in the\
+        \ \xA73.3\n   Compounding-memory card body in the same file (the \"A dedicated\n   Scrum-Master\
+        \ agent (in prototype) closes the loop\u2026\" line) \u2014 the\n   Scrum-Master is Live, so drop\
+        \ \"(in prototype)\". Reword minimally so the\n   sentence still reads cleanly.\n\n3. Scan the\
+        \ WHOLE landing component + templates for any other \"prototype\" /\n   \"in prototype\" / \"\
+        coming\" status wording on an agent and align it to the\n   approved copy (all five agents Live).\
+        \ Do not invent new statuses.\n\n4. Update the tests that currently HARD-ASSERT the prototype\
+        \ text so they lock\n   in the corrected reality (and would catch a future regression):\n   -\
+        \ src/app/landing/landing.component.spec.ts \u2014 the exact-status expectations\n     (Infra\
+        \ agent / Scrum-Master agent -> 'Live').\n   - end2end-ui/07-shipproven-landing.spec.ts \u2014\
+        \ the\n     getByTestId('agent-status-Infra agent') / '\u2026Scrum-Master agent'\n     assertions\
+        \ -> 'Live'. Keep the statusKind/pill-class expectations\n     consistent (live pill, not prototype\
+        \ pill).\n\nDo NOT change any other copy, layout, or the /health + api.conf.json wiring.\nKeep\
+        \ the app buildable, unit + e2e-ui green. Open the PR (open_pr), OWN it,\ndrive BOTH clusters'\
+        \ gates green (incl. end2end-ui) THROUGH TO MERGE.\n"
+      name: ship-proven-reconcile-agent-status
+      repo: leartech-ship-proven-website
+    name: reconcile-status-labels
+    repo: mikelear/leartech-ship-proven-website
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - reconcile-status-labels
+    inputs:
+      action: release-health-check
+      budgetMinutes: 60
+      healthPath: /health
+      namespace: jx-staging
+      service: leartech-ship-proven-website
+    name: release-check
+  tenant: leartech
+  triggeredBy: human

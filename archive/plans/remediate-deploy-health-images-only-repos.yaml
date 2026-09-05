@@ -1,0 +1,70 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: remediate-deploy-health-images-only-repos
+  namespace: jx-staging
+spec:
+  paused: true
+  remediates:
+  - name: prompt-contract-checks-tool-schemas
+    namespace: jx-staging
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/deploy-health-images-only-aware
+      goal: "Make the `deploy_health` MCP tool (leartech-k8s server, served by this repo) IMAGES-ONLY\
+        \ aware so release verification of images-only repos stops failing closed.\n\nBACKGROUND / ROOT\
+        \ CAUSE: The verify-release-flow release check (Step 4 `deploy-healthy`, action `deploy-health`)\
+        \ failed Plan `prompt-contract-checks-tool-schemas` (namespace jx-staging) for service `leartech-automated-agent`.\
+        \ deploy_health returned `deployment_exists=false` (\"deployment jx-staging/leartech-automated-agent\
+        \ not found\") on BOTH gcp and az and failed closed. But `mikelear/leartech-automated-agent` publishes\
+        \ IMAGES ONLY: its `.lighthouse/jenkins-x/release.yaml` explicitly has NO Dockerfile-service and\
+        \ NO helm chart, by design (confirmed: the repo has no `charts/` dir). There is no runtime Deployment\
+        \ to check and there never will be. The release genuinely shipped \u2014 the plan's `release-passed`,\
+        \ `promote-merged` and `bootjob-ran` checks all SUCCEEDED; only the Deployment-replica gate (Step\
+        \ 4) failed. deploy_health's fail-closed 'no Deployment' verdict is therefore a STRUCTURAL false-negative\
+        \ for images-only repos.\n\nFIX (at source, in deploy_health): teach deploy_health to detect a\
+        \ genuinely IMAGES-ONLY service via a POSITIVE signal and, in that case, return a healthy verdict\
+        \ (healthy=true) with an explicit reason such as 'not-applicable: images-only repo (no runtime\
+        \ Deployment by design; release verified via image publish + promote)' INSTEAD of failing closed\
+        \ on deployment_exists=false. Recommended detection: probe the service's source repo (mikelear/<service>)\
+        \ for a helm chart (no `charts/` dir AND no chart file) \u2014 absent chart => images-only =>\
+        \ no Deployment expected. Alternatively/additionally accept an explicit input (e.g. `images_only`\
+        \ or `expect_deployment`, defaulting to today's fail-closed behaviour) that callers can thread\
+        \ through. CRITICAL SAFETY: this MUST be a POSITIVE images-only determination \u2014 a REAL deployed\
+        \ service whose Deployment is genuinely missing MUST STILL fail closed (do NOT convert every 'deployment\
+        \ not found' into healthy, or you will mask real broken rollouts). Keep the existing version-match\
+        \ semantics unchanged for services that DO have a Deployment.\n\nTESTS (add regression coverage):\
+        \ (a) images-only service (repo with no chart, no Deployment) => deploy_health returns healthy=true\
+        \ with the not-applicable reason; (b) normal deployed service with a genuinely-missing Deployment\
+        \ => still healthy=false / fail closed; (c) present Deployment with matching/mismatching image\
+        \ tag => version-match verdict unchanged. Ensure ruff/go test/build pass so the JX3 PR gate is\
+        \ green on both clusters. Open a PR; do not merge (the plan is held for review)."
+      name: fix-deploy-health-images-only
+    name: fix-deploy-health-images-only
+    repo: mikelear/leartech-mcp-servers
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - fix-deploy-health-images-only
+    inputs:
+      action: deploy-health
+      clusters:
+      - gcp
+      - az
+      goal: 'Verify the brief''s successCriteria: after the deploy_health images-only fix lands and the
+        leartech-k8s MCP server is rolled out, the release re-check reports HEALTHY for service `leartech-automated-agent`.
+        Run the `deploy-health` action for service `leartech-automated-agent` in namespace `jx-staging`
+        across clusters gcp and az. EXPECT healthy=true with the images-only not-applicable verdict, rather
+        than a fail-closed ''deployment not found''. This confirms the deploy-healthy gate that failed
+        Plan `prompt-contract-checks-tool-schemas` would now pass.'
+      name: verify-release-deploy-healthy
+      namespace: jx-staging
+      service: leartech-automated-agent
+    name: verify-release-deploy-healthy
+    repo: mikelear/leartech-automated-agent
+  tenant: leartech

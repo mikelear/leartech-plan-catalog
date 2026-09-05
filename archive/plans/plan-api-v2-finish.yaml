@@ -1,0 +1,31 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: plan-api-v2-finish
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/plan-read-api-v2
+      goal: "ADOPT the existing open PR #3 (\"read + guarded-write Plan/AgentRun HTTP API\") on\nbranch\
+        \ feat/plan-read-api-v2 (idempotent open_pr \u2014 it already exists). The prior\nagent hit the\
+        \ max_turns ceiling before finishing; your job is ONLY to drive the\nremaining RED gates to green\
+        \ and merge \u2014 do NOT rewrite the feature.\nCurrently red on both clusters: end2end, pr (the\
+        \ from-build-pack/kaniko build),\ntest. Investigate each: `pr` red usually means the Go build/compile\
+        \ fails \u2192 fix\ncompile/lint errors first (that unblocks test + end2end which build on it).\
+        \ Then\nfix the failing Go tests and the end2end. Keep the PR LEAN \u2014 do NOT commit\nvendor/\
+        \ (GOPRIVATE is already set for the private CRD import); do not add\ngenerated trees. Own PR #3\
+        \ and drive BOTH clusters' gates green THROUGH TO MERGE\n\u2192 plan-api releases (publishes @mikelear/leartech-plan-api-angular\
+        \ + OpenAPI).\nIf you approach the turn ceiling again, ensure all work is pushed before exiting.\n"
+      name: plan-api-v2-finish
+      repo: leartech-plan-api
+    name: finish-gates
+    repo: mikelear/leartech-plan-api
+  tenant: leartech
+  triggeredBy: human

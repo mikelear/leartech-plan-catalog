@@ -1,0 +1,50 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-persona-seed-dsn
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/persona-seed-via-dsn
+      goal: "Make the staging persona-matrix seed ACTUALLY seed the database the auth-service app\nreads,\
+        \ so platform-admin (and every persona) is created where it's visible. Today it\nsilently seeds\
+        \ the WRONG DB and is gated off \u2014 a chain of 3 bugs (all must be fixed):\n\nCONTEXT (verified\
+        \ live 2026-08-02): on staging useSharedCluster=true, so the app's\nauth_service DB is the SHARED\
+        \ CNPG (leartech-staging in cnpg-system, via the\nauth-service-db secret's `dsn`). But scripts/setup-auth.sh\
+        \ `seed_persona_matrix` seeds via\n`kubectl exec` into a pod labeled app.kubernetes.io/name=postgresql\
+        \ \u2014 which in jx-staging\nis the LEGACY orphaned `auth-postgresql-0` pod, NOT the CNPG the\
+        \ app uses. Also the\nprovisioning image is python:3.14 (no kubectl/psql). So seeding never worked\
+        \ on staging.\n\nFIXES (coordinated, in charts/leartech-auth-service):\n1. files/scripts/run-provisioning.sh\
+        \ \u2014 it calls setup-auth.sh with only\n   `--env \"$SETUP_AUTH_ENV\" --namespace \"$NAMESPACE\"\
+        `; ADD\n   `--seed-test-user \"${SEED_TEST_USER:-false}\"` so the toggle (SEED_TEST_USER env,\
+        \ already\n   wired from postgresql.seedTestUser by PR #155) actually reaches setup-auth.sh (which\n\
+        \   reads it ONLY from the --seed-test-user arg \u2014 it resets the env internally).\n2. files/scripts/setup-auth.sh\
+        \ `seed_persona_matrix` \u2014 when a DB DSN is available (the\n   shared-cluster case), connect\
+        \ DIRECTLY to that DSN and UPSERT the persona rows, instead\n   of kubectl-exec into a label-matched\
+        \ pod. Use python psycopg (image is python:3.14 \u2014 no\n   kubectl/psql): pip install psycopg[binary]\
+        \ (like bcrypt is already pip-installed), read\n   the DSN from a new env (e.g. AUTH_DB_DSN),\
+        \ and run the SAME idempotent UPSERTs\n   (user=['User'], platform-admin=['User','PlatformAdmin'],\
+        \ ON CONFLICT(email)). Keep the\n   existing kubectl-exec path ONLY as a fallback for a local-pod\
+        \ (preview) with no DSN.\n   This removes the kubectl/psql dependency and targets the CNPG the\
+        \ app reads.\n3. templates/client-provisioning-job.yaml \u2014 pass the DB DSN to the Job env\n\
+        \   (AUTH_DB_DSN) from the postgresql DSN secret (.Values.postgresql.secretName /\n   .secretKey\
+        \ = auth-service-db / dsn \u2014 the same DSN the app uses). SEED_TEST_USER env is\n   already\
+        \ added (#155).\n\nKeep staging/preview-only (preserve the production hard-refusal of --seed-test-user).\n\
+        TESTS (push for strong LOCAL coverage before the PR): extend test/scripts-guard/\npersona-matrix.sh\
+        \ (and add a unit/guard test) to assert: run-provisioning passes\n--seed-test-user; seed_persona_matrix\
+        \ uses the DSN path when AUTH_DB_DSN is set (mock/dry-run\nthe UPSERTs); the SQL UPSERTs are correct\
+        \ for both personas; prod still refuses. Prove it\nall GREEN locally, then open the PR, drive\
+        \ BOTH clusters green, STOP at AwaitingReview.\n"
+      name: fix-persona-seed-dsn
+      repo: leartech-auth-service
+    name: code
+    repo: mikelear/leartech-auth-service
+  tenant: leartech
+  triggeredBy: human

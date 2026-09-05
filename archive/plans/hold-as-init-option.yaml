@@ -1,0 +1,113 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=3
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: hold-as-init-option
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    budgetIter: 14
+    inputs:
+      base: main
+      branch: agent/hold-as-init-option
+      description: 'Make PR merge-hold an OPT-IN Initiative option instead of the current
+
+        unconditional always-hold. Default false = the agent drives gates green
+
+        and lets Tide auto-merge (the gate suite incl ai-review IS the review;
+
+        fail-fast fixes red) so plans self-complete autonomously.
+
+        '
+      goal: "CONTEXT: today gate/agent/initiative_prompt.py HARDCODES an unconditional\n\"always post\
+        \ /hold on a freshly-opened PR\". That replicates/defeats Tide\n(JX3's model is green\u2192Tide\
+        \ auto-merges) and makes plans never self-complete.\nChange hold to an opt-in Initiative field.\n\
+        \n1. Add a boolean field `hold` (default False) to the Initiative model in\n   gate/initiatives/loader.py\
+        \ (class Initiative) \u2014 with a docstring: \"When\n   true, the agent posts /hold on the opened\
+        \ PR to require human approval\n   before merge; default false lets Tide auto-merge once all gates\
+        \ are green.\"\n2. In gate/agent/initiative_prompt.py: make the `/hold` posting CONDITIONAL\n\
+        \   on `initiative.hold` \u2014 only instruct/post `/hold` when hold is true.\n   When hold is\
+        \ false (default), DO NOT post /hold \u2014 let Tide merge on green.\n   Keep the rule \"the agent\
+        \ must NEVER post /hold cancel\" (only an approver\n   cancels). Update the numbered steps + the\
+        \ summary bullets accordingly so\n   the prompt no longer says \"always /hold\".\n3. Thread `hold`\
+        \ from the initiative YAML/inputs through to wherever the\n   prompt is rendered (so a plan step's\
+        \ inputs.hold reaches initiative.hold).\n4. Tests: initiative with hold=true \u2192 prompt includes\
+        \ the /hold instruction;\n   hold omitted/false \u2192 prompt does NOT; loader parses hold correctly.\n\
+        Keep the diff focused. All PR gates green incl real ai-review. Open a PR.\n"
+      name: agent-hold-option
+      repo: leartech-automated-agent
+    name: agent-hold-option
+    repo: leartech-automated-agent
+  - agentType: leartech-agent-py
+    budgetIter: 14
+    inputs:
+      base: main
+      branch: agent/step-awaiting-approval
+      description: "Add a first-class StepPhaseAwaitingApproval (PLAN STEP level, NOT an\nAgentRun phase)\
+        \ so a deliberately-held step (Init hold=true) is\ndistinguished from a transient AwaitingReview\
+        \ (gates still running). The\nAgentRun phase stays Succeeded \u2014 the agent finished; the DELIVERABLE\
+        \ is\nparked for an approver.\n"
+      goal: "CONTEXT: PlanStep.stepPhase currently has Pending/Running/AwaitingReview/\nSucceeded/Failed/Cancelled\
+        \ (api/v1alpha1). A held PR (agent posted /hold per\nInit hold=true) is indistinguishable from\
+        \ an open-in-progress PR \u2014 both land\nAwaitingReview. Add an AwaitingApproval value driven\
+        \ by the step's own spec.\n\n1. api/v1alpha1: add `StepPhaseAwaitingApproval PlanStepPhase = \"\
+        AwaitingApproval\"`.\n   It is a NON-terminal step phase (dependents stay blocked; not Succeeded/Failed).\n\
+        \   Do NOT add any new AgentRun phase \u2014 the agent stays Succeeded.\n2. internal/controller/plan_controller.go\
+        \ deriveStepPhase: when the agent\n   Phase==Succeeded AND the PR is open (PROutcomeOpened/AwaitingReview)\
+        \ AND\n   the STEP requested a hold (read from the step spec \u2014 the plan authored it,\n  \
+        \ e.g. step.Inputs[\"hold\"]==true / a step.Hold field), return\n   StepPhaseAwaitingApproval\
+        \ instead of StepPhaseAwaitingReview. hold=false\n   stays AwaitingReview (transient \u2192 Tide\
+        \ merges on green \u2192 resolves).\n3. Roll-up: AwaitingApproval is non-terminal so the plan\
+        \ stays Running; ALSO\n   surface it \u2014 add a plan-level signal/condition so a plan with any\n\
+        \   AwaitingApproval step is reported as \"awaiting approval\" (a computed rollup\n   indicator,\
+        \ e.g. a PlanCondition or a distinct message), so chat/UX can say\n   \"waiting on human approval\"\
+        \ vs generic Running. Do NOT change how\n   depsReady/rollUp key off StepPhaseSucceeded (merged).\n\
+        4. Tests: hold step + open PR \u2192 AwaitingApproval; non-hold step + open PR \u2192\n   AwaitingReview;\
+        \ merged \u2192 Succeeded regardless; dependents of an\n   AwaitingApproval step stay blocked.\n\
+        All PR gates green incl real ai-review. Open a PR.\n"
+      name: controller-awaiting-approval
+      repo: leartech-orchestrator-controller
+    name: controller-awaiting-approval
+    repo: leartech-orchestrator-controller
+  - agentType: leartech-agent-py
+    budgetIter: 12
+    inputs:
+      base: main
+      branch: agent/pr-context-labels
+      description: 'Add PR labels (+ mergeable state) to the pr_context get_pr_metadata output
+
+        so consumers can VERIFY a hold actually landed and catch the watcher''s
+
+        do-not-merge/manual-fix label (agent-couldn''t-fix = distinct needs-human).
+
+        Complements the controller''s spec-driven AwaitingApproval.
+
+        '
+      goal: 'In leartech-mcp-servers internal/prcontextserver: extend PRMetadataOut
+
+        (tools.go) with `Labels []string` (the PR''s label names) and optionally
+
+        `Mergeable string` / a computed `Held bool` (true when a do-not-merge/*
+
+        label is present). Populate from the GitHub PR JSON (labels[].name;
+
+        mergeable_state). Keep the existing fields unchanged (repo/number/head_sha/
+
+        base_sha/title/body/state/merged/merged_at/changed_files). Update the tool
+
+        description + the parity_test/tools_test fixtures + extend end2end if present.
+
+        All PR gates green incl real ai-review. Open a PR.
+
+        '
+      name: mcp-pr-labels
+      repo: leartech-mcp-servers
+    name: mcp-pr-labels
+    repo: leartech-mcp-servers
+  tenant: platform
+  triggeredBy: hold-opt-in-redesign

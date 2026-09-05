@@ -1,0 +1,52 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: rebuild-agent-dashboard
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    inputs:
+      branch: feat/observability-dashboard-revamp
+      goal: "Rebuild the Grafana dashboards in charts/leartech-automated-agent/dashboards/\n(currently\
+        \ just agent-runs.json \u2014 pod-centric + substring-based, predating\nthe Plan/AgentRun CRDs,\
+        \ the event\u2192BA remediation loop, and the new\nstructured-JSON logging). Standard + field\
+        \ vocab:\nHub/status/structured-logging-standard.md (snake_case fields:\nloop_hop, event_id, plan,\
+        \ run_id, step, service, phase, pr, repo, tenant).\nAll new panels use Loki `| json | <field>=\u2026\
+        ` (NOT substring greps) since the\nservices now emit JSON (maestro already; controller via the\
+        \ logging-json-\nstandard rollout). Keep a `| json` + line-filter fallback where a stream may\n\
+        not be JSON yet, so panels degrade gracefully rather than show nothing.\n\nDeliver a 3-TIER set\
+        \ of dashboards (extend grafana-dashboards.yaml to mount\nall JSON files in the dashboards/ dir;\
+        \ use template variables $ns, $plan,\n$event_id, $run):\n\nTIER 1 \u2014 PLAN (new, e.g. plans.json\
+        \ \"Leartech \u2014 Plans\"):\n  - Table/rows of recent Plans + phase (from `| json | event=~\"\
+        plan.completed\"`\n    carrying `plan`,`phase`, or plan.step_done) \u2014 plan name, phase, last\
+        \ update.\n  - Per-step timeline for $plan: plan.step_started / plan.step_done with\n    `step`,`phase`\
+        \ \u2014 one row per step, coloured by phase.\n  - Stat: plans Succeeded vs Failed vs Resolved\
+        \ (window).\n\nTIER 2 \u2014 EVENT\u2192BA LOOP (new, the headline, plan-and-loop.json\n\"Leartech\
+        \ \u2014 Event\u2192BA Loop\"):\n  - Loop trace for $event_id: a logs/table panel filtered\n \
+        \   `| json | loop_hop=~\".+\"` ordered by time showing every hop \u2014\n    emit, maestro_receive,\
+        \ maestro_dispatch, consume, ba_spawn,\n    remediation_authored, resolved \u2014 with ts + service\
+        \ + plan. This is the\n    one-glance \"did the release.deploy_failed loop fire + resolve?\" view.\n\
+        \    (Correlate mid-loop hops by `event_id`; emit + resolved carry `plan` not\n    event_id \u2014\
+        \ allow filtering by $plan too.)\n  - release.deploy_failed rate over time (`| json | loop_hop=\"\
+        emit\"` count).\n  - Resolve outcomes: count of `loop_hop=\"resolved\"` vs release.deploy_failed\n\
+        \    emitted (the loop-closure ratio).\n  - A per-hop LOGGED/latency stat row so a missing hop\
+        \ is obvious (ties to\n    scripts/loop-forensics.sh \u2014 same hop vocabulary).\n\nTIER 3 \u2014\
+        \ AGENT RUN (revamp the existing agent-runs.json):\n  - Keep the drill-down (run logs for $run,\
+        \ run_end outcomes, MCP/open_pr\n    activity, errors) but convert the substring panels to `|\
+        \ json`\n    (e.g. run_end via `| json | event=\"run_end\"` with exit_code/turns/cost_usd\n  \
+        \  stat panels; MCP activity via `| json` tool fields; errors via\n    `| json | level=\"error\"\
+        `). Keep it useful as the deepest tier.\n\nValidate every dashboard JSON parses (python json.load)\
+        \ and that\ngrafana-dashboards.yaml mounts them. Keep the chart rendering + smoke green.\nOwn\
+        \ the PR + take gates green.\n"
+      name: dashboard-rebuild
+      repo: leartech-automated-agent
+    name: dashboard-rebuild
+    repo: mikelear/leartech-automated-agent
+  tenant: leartech
+  triggeredBy: human

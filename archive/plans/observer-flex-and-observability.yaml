@@ -1,0 +1,146 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=5
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: observer-flex-and-observability
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/persona-matrix-secret
+      goal: "Materialize a STRUCTURED e2e persona-matrix secret so the arrivals-observer can log authed-UI\n\
+        e2e in as different roles (today only the basic user's creds exist as a secret; platform-admin\n\
+        is seeded in the DB but has no secret, so admin-gated e2e can't authenticate).\n\nCreate secret\
+        \ `auth-service-test-users` (Opaque) with per-persona keys, mirroring the env-var\nnames the seeder\
+        \ + tests already use:\n  USER_EMAIL, USER_PASSWORD, PLATFORM_ADMIN_EMAIL, PLATFORM_ADMIN_PASSWORD\n\
+        SINGLE SOURCE OF TRUTH: the SAME persona creds must feed BOTH the DB seed (setup-auth.sh\nseed_persona_matrix)\
+        \ AND this secret, so they can never drift. Prefer chart-rendering the\nsecret from the same values\
+        \ the client-provisioning Job already uses for USER_*/PLATFORM_ADMIN_*\n(staging test creds are\
+        \ non-sensitive, e.g. Test123!); if the existing basic secret\n`auth-service-test-user` is an\
+        \ ESO ExternalSecret from ClusterSecretStore `leartech-secrets`,\nmirror that pattern instead\
+        \ with ONE remote key holding all persona creds. Whichever you pick,\ndocument why it's single-source.\n\
+        - Gate it behind a values flag; render ONLY in staging/preview, never production (mirror the\n\
+        \  existing prod refusal of --seed-test-user).\n- Update the client-provisioning-job env wiring\
+        \ so USER_*/PLATFORM_ADMIN_* all source from the\n  new `auth-service-test-users` secret (optional:true),\
+        \ keeping the seeder script unchanged\n  (it already reads those env vars).\n- Keep the legacy\
+        \ `auth-service-test-user` secret working during migration (don't break auth-ui).\nHeavy local\
+        \ chart-lint + a helm-template unit test asserting the secret renders with all 4 keys\nin staging\
+        \ and is ABSENT in production. Open PR, get both clusters' gates green, STOP at\nAwaitingReview.\n"
+      name: observer-persona-secret
+      repo: leartech-auth-service
+    name: persona-secret
+    repo: mikelear/leartech-auth-service
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/per-service-pack-resources-env
+      goal: "Make the Observer's test-pack dispatch flexible per-service and per-pack (today resources\
+        \ are a\nsingle GLOBAL default \u2014 512Mi/2Gi via DISPATCH_RESOURCES_JSON \u2014 so a heavy\
+        \ pack like the portal\nend2end-ui, Playwright + multiple Chromium workers, OOMKills on high-CPU\
+        \ nodes with no way to\nask for more; and env is per-service only).\n\nRESOURCES (the proper fix\
+        \ \u2014 NOT a worker cap):\n- Add `Resources *corev1.ResourceRequirements` to BOTH ServiceConfig\
+        \ and TestPack (internal/config\n  config structs), thread through the watcher (Arrival.spec)\
+        \ + CRD schema (crd-arrival.yaml,\n  x-kubernetes-preserve-unknown-fields) + controller decode\
+        \ + dispatch job build.\n- Merge precedence in dispatch: pack.Resources > service.Resources >\
+        \ global default. Unit-test the\n  precedence.\nENV per-pack:\n- Add `Env []corev1.EnvVar` to\
+        \ TestPack (service-level Env already exists). Merge order in the\n  Job: standard env \u2192\
+        \ service env \u2192 pack env (last wins). Unit-test the layering.\n- Add a reusable auth-personas\
+        \ env bundle so any authed UI can reference USER_*/PLATFORM_ADMIN_*\n  from `auth-service-test-users`\
+        \ without copy-paste (a Helm helper in the observer chart and/or a\n  documented services-map\
+        \ snippet).\nKeep everything backward-compatible (services with no Resources/pack-Env behave exactly\
+        \ as today).\nHeavy local unit tests (config parse, precedence, env layering, CRD round-trip).\
+        \ Open PR, drive\nboth clusters green, STOP at AwaitingReview.\n"
+      name: observer-resources-env
+      repo: leartech-arrivals-observer
+    name: observer-resources-env
+    repo: mikelear/leartech-arrivals-observer
+  - agentType: leartech-agent-go
+    dependsOn:
+    - observer-resources-env
+    inputs:
+      branch: feat/structured-logging-metrics-dashboard
+      goal: "Make the Observer introspectable \u2014 this debug was painful because we couldn't easily\
+        \ see what\nhappened (logging predates our structured standard; pack-job pods GC before we can\
+        \ read logs; no\ndashboard). Bring it up to the platform standard.\n\nCONFIRMED BASELINE (2026-08-03,\
+        \ via live Loki): the observer DOES ship logs to Loki\n(`{app=\"leartech-arrivals-observer\"}`)\
+        \ but in zerolog CONSOLE format with ANSI color codes\n(e.g. \"11:18AM INF request client_ip=\u2026\
+        \"), NOT JSON \u2014 so `| json` fails and the logs aren't\nstructured-queryable. That's the core\
+        \ gap to fix.\n\nLOGGING: adopt the platform structured-logging standard (as in leartech-plan-api\n\
+        internal/logging/logging.go): JSON output toggled by LOG_FORMAT=json in-cluster (console for\n\
+        local), stamp service/version/cluster on every record. Replace the hardcoded zerolog\nConsoleWriter.\
+        \ Add explicit arrival-lifecycle EVENT fields so one arrival is traceable in Loki\n(MIRROR the\
+        \ automated-agent's proven event= convention \u2014 event=\"run_start\"/\"run_end\" with a\n`run_id`\
+        \ ambient field): emit event= for arrival_created, arrival_pending, arrival_testing,\npack_dispatched,\
+        \ pack_result, arrival_passed, arrival_failed, arrival_timeout \u2014 each with\nstructured fields\
+        \ arrival, service, version, pack, phase. Target query:\n`{app=\"leartech-arrivals-observer\"\
+        } | json | arrival=\"<x>\" | event=~\"arrival_.*|pack_.*\"`.\nMETRICS (/metrics currently exposes\
+        \ nothing custom): add Prometheus\narrival_finalized_total{phase,service}, pack_duration_seconds{service,pack}\
+        \ (histogram),\npack_result_total{status,service}, job_oom_total{service}.\nPACK-JOB LOGS: stop\
+        \ losing ephemeral pack pod logs \u2014 either add a lightweight log-forward\nsidecar to the pack\
+        \ Job, or have the runner upload logs.jsonl to the result-store bucket beside\nresults.json, labelled\
+        \ by arrival+pack, so a failed pack is debuggable after pod GC (the exact\npain this session \u2014\
+        \ the automated-agent dashboards already solve this for agent pods, \"survives\npod GC \u2014\
+        \ durable replacement for kubectl logs\").\nGRAFANA DASHBOARD as code \u2014 MIRROR THE PROVEN\
+        \ automated-agent PATTERN (do NOT invent a new one):\nthe automated-agent ships Loki-backed dashboards\
+        \ as chart ConfigMaps labelled\n`jenkins-x.io/grafana-dashboard: \"1\"` (NOT `grafana_dashboard`)\
+        \ with annotation\n`grafana_folder: \"Leartech Agents\"` (the JX Grafana sidecar discovers them;\
+        \ deployed live in\njx-staging as leartech-automated-agent-dashboard-*). Copy that exact label/annotation/datasource\n\
+        shape (datasource {type:loki, uid:loki}; line-prefilter `|~` before `| json` for perf +\ngraceful\
+        \ non-JSON degradation; a template var for namespace). Ship an \"Arrivals / Gate Health\"\ndashboard\
+        \ (folder \"Leartech Agents\" or a new \"Leartech QA\"): arrival pass/fail rate per service,\n\
+        pack duration p99, OOM/error counts, a recent-arrivals table, gate verdicts over time, plus a\n\
+        \"survives pod GC\" pack-logs panel. Reference the automated-agent chart's dashboard templates\
+        \ as\nthe template.\nHeavy local tests (log field assertions, metric registration, dashboard JSON\
+        \ validity). Open PR,\ndrive both clusters green, STOP at AwaitingReview.\n"
+      name: observer-observability
+      repo: leartech-arrivals-observer
+    name: observer-observability
+    repo: mikelear/leartech-arrivals-observer
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - persona-secret
+    - observer-resources-env
+    inputs:
+      action: chart-config
+      cluster: gcp
+      goal: "Wire the GCP Observer (helmfiles/jx-staging/configs/leartech-arrivals-observer.yaml \u2014\
+        \ SOURCE\nonly, never config-root) to use the new persona secret + per-service resources for the\
+        \ portal:\n- Add PLATFORM_ADMIN_EMAIL/PLATFORM_ADMIN_PASSWORD (valueFrom secretKeyRef\n  auth-service-test-users,\
+        \ optional:true) to the leartech-ship-proven-portal service `env` (keep\n  the existing USER_*/HYDRA_ADMIN_URL\
+        \ entries; prefer the reusable auth-personas bundle if the\n  observer change added one).\n- Set\
+        \ per-service (or the end2end-ui pack) `resources` for leartech-ship-proven-portal to give\n \
+        \ the heavy Playwright pack headroom (requests memory 1Gi, limits memory 4Gi) so it stops\n  OOMKilling\
+        \ on GCP's larger nodes.\n- If the auth-service persona secret needs a values flag enabled per-cluster\
+        \ to render, enable it\n  in the GCP staging config too.\nOpen ONE PR for review.\n"
+      service: leartech-arrivals-observer
+    name: wire-gcp
+    repo: mikelear/jx-build-cluster-gsm
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - persona-secret
+    - observer-resources-env
+    inputs:
+      action: chart-config
+      cluster: az
+      goal: 'Same as wire-gcp but for AZ (jx-build-cluster-akv,
+
+        helmfiles/jx-staging/configs/leartech-arrivals-observer.yaml): add PLATFORM_ADMIN_* env (from
+
+        auth-service-test-users) to the leartech-ship-proven-portal entry (AZ stagingUrl
+
+        https://leartech-ship-proven-portal-jx-staging.az.leartech.com), set the portal end2end-ui
+
+        resources (req 1Gi / lim 4Gi), and enable the persona-secret values flag for AZ staging if
+
+        needed. Edit SOURCE only. Open ONE PR for review.
+
+        '
+      service: leartech-arrivals-observer
+    name: wire-az
+    repo: mikelear/jx-build-cluster-akv
+  tenant: leartech
+  triggeredBy: human

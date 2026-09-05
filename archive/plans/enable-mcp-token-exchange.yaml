@@ -1,0 +1,62 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: enable-mcp-token-exchange
+  namespace: jx-staging
+spec:
+  paused: true
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/mcp-client-token-exchange-grant
+      goal: "Enable RFC 8693 token-exchange for the leartech-mcp-servers s2s CONFIDENTIAL client in\n\
+        Hydra (prerequisite for leartech-mcp-servers #50's forwarder token-exchange). The MCP\nforwarder\
+        \ authenticates the exchange call to Hydra using its own s2s client_id/secret and\nrequests a\
+        \ token with audience=leartech-plan-api. For Hydra to allow that, the MCP's s2s\nOAuth client\
+        \ must have:\n  1. grant_types including `urn:ietf:params:oauth:grant-type:token-exchange`\n \
+        \ 2. audience allow-list including `leartech-plan-api`\nFind how auth-service registers the MCP\
+        \ s2s client (createHydraOAuthClients / the s2s\nclient definition / an OAuth2Client CR) and add\
+        \ BOTH. Keep existing grants/audiences.\nDo NOT weaken other clients. If Hydra itself needs the\
+        \ token-exchange grant enabled\nglobally (oauth2 config), do that too. Open the PR and get the\
+        \ gates GREEN (stop at\nAwaitingReview \u2014 do NOT poll for the merge). Note in the PR the exact\
+        \ client_id affected.\n"
+      name: enable-mcp-token-exchange-authsvc
+      repo: leartech-auth-service
+    name: authsvc-client
+    repo: mikelear/leartech-auth-service
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - authsvc-client
+    inputs:
+      action: chart-config
+      cluster: gcp
+      goal: "GCP (jx-build-cluster-gsm) \u2014 edit helmfiles SOURCE only (never config-root/). In the\n\
+        leartech-mcp-servers config, turn ON the token-exchange (values from #50):\n  tokenExchange.enabled:\
+        \ true\n  planApiAudience: leartech-plan-api     # (default; confirm the exact value key from\
+        \ #50)\n  tokenExchange.tokenURL: \"\"             # empty derives <Hydra>/oauth2/token\nand ensure\
+        \ the MCP s2s client creds (auth.s2s.externalSecret / s2s.serverURL per #50) are\nwired so the\
+        \ exchanger can authenticate to Hydra. Confirm the exact value paths against\ncharts/leartech-mcp-servers/values.yaml\
+        \ (#50 added them). Open ONE PR for review.\n"
+      service: leartech-mcp-servers
+    name: flip-gcp
+    repo: mikelear/jx-build-cluster-gsm
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - authsvc-client
+    inputs:
+      action: chart-config
+      cluster: az
+      goal: "AZ (jx-build-cluster-akv) \u2014 same as flip-gcp but for AZ: enable tokenExchange.enabled=true\n\
+        + planApiAudience=leartech-plan-api + wire the s2s creds, using the AZ Hydra\n(hydra-jx-staging.az.leartech.com)\
+        \ for the derived token URL if a value is needed. Edit\nhelmfiles SOURCE only. Open ONE PR for\
+        \ review.\n"
+      service: leartech-mcp-servers
+    name: flip-az
+    repo: mikelear/jx-build-cluster-akv
+  tenant: leartech
+  triggeredBy: human

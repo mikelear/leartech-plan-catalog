@@ -1,0 +1,67 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Succeeded, az=Paused
+# AgentRuns owned: gcp=5, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: controller-consume-pr-events
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/consume-pr-lifecycle-events
+      goal: "Let a Maestro PR-lifecycle event WAKE the Plan reconciler, so a merged PR is noticed immediately\
+        \ instead of on the next 15-second poll. The event is a trigger, never a fact.\nFOLLOW THE EXISTING\
+        \ PATTERN EXACTLY. internal/controller/ba_event_adapter.go plus ba_event_consumer_server.go already\
+        \ implement a Maestro consumer in this repo: a handler registered on a maestro.Registry, served\
+        \ by MaestroConsumerServer on :8082 at POST /consume_event, added via mgr.Add(), and non-leader-elected\
+        \ because duplicate deliveries are made harmless by deterministic naming. Register the new handlers\
+        \ on the SAME registry \u2014 the server's own comment says adding a second event kind means registering\
+        \ another handler and that the server does not care. Do not stand up a second server or a second\
+        \ port.\nTHE TWO EVENTS: pr.merged and pr.closed_unmerged. They map 1:1 onto the PROutcomeMerged\
+        \ and PROutcomeClosedUnmerged values already defined in seams.go. Do not invent events for anything\
+        \ else \u2014 the step state machine cannot distinguish more than \"open\", \"merged\" and \"\
+        closed unmerged\", so a broader GitHub firehose would be noise. Expect annotations carrying at\
+        \ least the repo and the PR number; define the annotationKeys you require and document them, because\
+        \ Maestro rejects announcements whose annotations do not match what the consumer registered.\n\
+        THE HANDLER MUST NOT WRITE THE OUTCOME. Resolve which Plan (and step) owns that repo+PR, then\
+        \ trigger a reconcile of that Plan \u2014 an event-channel source or an equivalent enqueue. The\
+        \ reconcile then goes through the EXISTING PROutcomeFetcher / pr_context_mcp.go path and re-reads\
+        \ the truth from GitHub. Changing PROutcomeFetcher, pr_context_mcp.go or the _OUTCOME_TRANSITIONS\
+        \ table is out of scope for this change; if you find yourself editing them, stop and explain why\
+        \ in the PR description.\nDO NOT CHANGE RequeueAfter. It stays at 15 seconds in this PR. The poll\
+        \ is the self-healing backstop and it must keep working unchanged until a producer is live and\
+        \ proven. Lowering it is a separate, later change.\nUNKNOWN PR IS NOT AN ERROR. An event for a\
+        \ repo+PR this cluster has no Plan for is normal \u2014 both clusters see the same GitHub webhooks.\
+        \ Log it at debug and return success so Maestro settles the event; do not 5xx, or you will generate\
+        \ retries and a level-1 alert for every unrelated PR in the org.\nCHART: add the two events to\
+        \ the consumes: stanza of charts/leartech-orchestrator-controller/templates/maestro-eventregistration.yaml,\
+        \ alongside the existing plan.step.escalate entry. The baseURL is already the consumer port; confirm\
+        \ rather than assume, and leave the produces: list untouched in this PR.\nISOLATE TESTING: unit\
+        \ tests with the controller-runtime fake client, mirroring ba_event_adapter_test.go. Assert that\
+        \ a pr.merged event for a known repo+PR enqueues a reconcile of the right Plan; that an event\
+        \ for an unknown PR is a logged no-op returning success; that a malformed or annotation-missing\
+        \ event does not panic; and that the handler never mutates step status directly. Add a chart-render\
+        \ test asserting both events appear in the consumes: stanza, in the style of the existing chart_*_test.go\
+        \ files. No cluster required.\nLOGGING TO VERIFY: emit a loop_hop line on receipt, following the\
+        \ contract in loop_logging.go and the snake_case event_id convention its comments describe, so\
+        \ a PR merge can be traced webhook -> Maestro -> reconcile in Loki. Read that file before choosing\
+        \ key names \u2014 it is explicit about not mixing camelCase and snake_case spellings of the same\
+        \ correlation id in one record.\nDone = PR merged (open via open_pr, drive gates green)."
+      name: pr-event-consumer
+      repo: mikelear/leartech-orchestrator-controller
+    kind: pr
+    name: pr-event-consumer
+  - dependsOn:
+    - pr-event-consumer
+    kind: check
+    name: pr-event-consumer-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.pr-event-consumer.pr}
+      repo: mikelear/leartech-orchestrator-controller
+      service: leartech-orchestrator-controller
+  triggeredBy: plan-catalog-internal-services

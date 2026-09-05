@@ -1,0 +1,38 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-planapi-agenttypes-rbac
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/sa-agenttypes-rbac
+      goal: "plan-api's ServiceAccount lacks RBAC to read AgentType CRDs, so create_plan fails with 400\n\
+        when it validates a step's agentType (proven live: MCP create_plan \u2192 \"agenttypes.agent.\n\
+        leartech.io ... is forbidden: User system:serviceaccount:jx-staging:leartech-plan-api\ncannot\
+        \ get resource agenttypes in API group agent.leartech.io at the cluster scope\").\nThe auth chain\
+        \ itself is FIXED (token validated, 401 gone) \u2014 this RBAC is the last gap.\n\nAdd the RBAC\
+        \ to the leartech-plan-api Helm chart:\n- AgentType is looked up at CLUSTER scope, so add a ClusterRole\
+        \ granting\n  get/list/watch on `agenttypes` in apiGroup `agent.leartech.io`, plus a ClusterRoleBinding\n\
+        \  to the plan-api ServiceAccount (namespace jx-staging / release namespace). If the chart\n \
+        \ already has an rbac template + serviceAccount, extend it; keep it gated behind the same\n  serviceAccount.create\
+        \ / rbac.create values pattern the chart already uses. Name it clearly\n  (e.g. <release>-agenttypes-reader).\
+        \ Least-privilege: agenttypes read-only only \u2014 do NOT\n  grant broad cluster access.\n- Confirm\
+        \ the SA name the Deployment uses matches the binding subject.\n- If the chart lacks an rbac.yaml\
+        \ template, add one; make it toggleable (rbac.create,\n  default true) so kind/preview can disable\
+        \ if needed.\n\nVerify by helm template that the ClusterRole+binding render and bind the correct\
+        \ SA.\nLean diff. Own the PR, drive BOTH clusters green THROUGH TO MERGE \u2192 release \u2192\
+        \ deploy.\n(After deploy, MCP create_plan should CREATE a real Plan \u2014 re-test with a fresh\
+        \ login.)\n"
+      name: fix-planapi-agenttypes-rbac
+      repo: leartech-plan-api
+    name: rbac
+    repo: mikelear/leartech-plan-api
+  tenant: leartech
+  triggeredBy: human

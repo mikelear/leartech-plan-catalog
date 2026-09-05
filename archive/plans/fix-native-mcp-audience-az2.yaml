@@ -1,0 +1,31 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-native-mcp-audience-az2
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: chart-config
+      cluster: az
+      goal: "Native MCP connector audience fix for AZ (parity with GCP gsm #1242, already merged).\nIn\
+        \ the AZ auth-service config (helmfiles/jx-staging/configs/leartech-auth-service.yaml,\nedit SOURCE\
+        \ only, never config-root/), add the AZ public MCP host\n  https://leartech-mcp-servers-public-jx-staging.az.leartech.com\n\
+        to the value feeding AUTH_USER_TOKEN_DEFAULT_AUDIENCES (currently renders\nleartech-orchestrator,\
+        \ leartech-auth-service, leartech-plan-api). KEEP the existing\nentries; append the mcp host.\
+        \ WHY: a user-login token's aud = userTokenDefaultAudiences\n\u2229 the DCR client's allowed audiences;\
+        \ the DCR allow-list has the mcp-host but the\nuser-token default does not, so the intersection\
+        \ drops it \u2192 the MCP rejects native\nconnector tokens at initialize. You MUST actually edit\
+        \ the file and open ONE PR \u2014 the\nprevious run completed without producing a PR. Verify your\
+        \ diff is non-empty before finishing.\n"
+      service: leartech-auth-service
+    name: az
+    repo: mikelear/jx-build-cluster-akv
+  tenant: leartech
+  triggeredBy: human
