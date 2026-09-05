@@ -1,0 +1,51 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-ssr-ship-proven-preview
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: feat/ssr-prerender-seo
+      goal: "Continue on the EXISTING branch feat/ssr-prerender-seo (PR #6). A prior agent added\nSSR/prerender\
+        \ + SEO + multi-domain + envsubst-canonical but its PREVIEW POD NEVER\nBECAME HEALTHY: /health\
+        \ never returned 200 within 10 min on BOTH clusters, so the\npreview-dependent checks all FAILED\
+        \ (pr, end2end, end2end-ui, seo-preview). The\nnon-preview gates (lint, test, ai-review, image-scan,\
+        \ security-scan) are already\nGREEN, so the code compiles and builds \u2014 the failure is at\
+        \ CONTAINER RUNTIME /\nserving. This is a real regression, NOT a flake; /retest will not fix it.\n\
+        \nA SIBLING PR proves the correct approach works: leartech-angular-service-template\nPR #65 (branch\
+        \ agent/add-ssr-prerender-seo) applied the SAME SSR + static outputMode\n+ per-route nginx serving\
+        \ + __CANONICAL_HOST__ envsubst pattern and its preview came\nup HEALTHY \u2014 it PASSED end2end,\
+        \ end2end-ui AND seo-preview. READ that template PR's\ndiff first (Dockerfile, nginx config, entrypoint/envsubst,\
+        \ chart deployment/health\nprobe, angular.json outputPath) and mirror whatever it did differently.\n\
+        \nDIAGNOSE the container (do not guess): build the production image locally and RUN it\n(docker\
+        \ run), then curl http://localhost:<port>/health and /. Likely culprits \u2014 check\neach:\n\
+        1. envsubst entrypoint: if the entrypoint runs `envsubst` then must still `exec\n   nginx -g 'daemon\
+        \ off;'` (a broken/one-shot entrypoint that exits => pod not\n   Ready). Ensure it substitutes\
+        \ ONLY __CANONICAL_HOST__ (not $ in nginx.conf's own\n   vars \u2014 use `envsubst '$CANONICAL_HOST'`\
+        \ allow-list or a placeholder token, else it\n   mangles nginx `$uri`/`$host`). This is the most\
+        \ likely break.\n2. nginx config validity: `nginx -t` must pass in the image; the per-route\n\
+        \   try_files ($uri -> $uri/index.html -> /index.html) block must be syntactically\n   valid.\n\
+        3. /health route: static prerender output may not include /health. The nginx server\n   MUST answer\
+        \ /health with 200 (a `location = /health { return 200 'ok'; }` or a\n   served health file) regardless\
+        \ of prerendered routes \u2014 the readiness/liveness\n   probe hits it.\n4. static output path:\
+        \ confirm nginx `root` points at the actual static build output\n   dir (Angular 20 static outputMode\
+        \ emits to browser/ or similar \u2014 verify the\n   Dockerfile COPY path matches).\n5. container\
+        \ port vs chart probe port: the Deployment health probe port/path must\n   match what nginx listens\
+        \ on.\n\nFix the ROOT cause, keep the diff lean, do NOT undo the SSR/SEO/multi-domain work.\n\
+        Verify locally that the container serves /health=200 AND a prerendered route with\nreal content\
+        \ BEFORE pushing. Then push to feat/ssr-prerender-seo, OWN PR #6, and\ndrive BOTH clusters' preview-stage\
+        \ gates GREEN (pr, end2end, end2end-ui, and the\nseo-preview crawlability check) THROUGH TO MERGE.\
+        \ Do not sit in a passive poll loop \u2014\nif a check fails, read its log/comment and iterate.\n"
+      name: fix-ssr-ship-proven-preview
+      repo: leartech-ship-proven-website
+    name: fix-preview
+    repo: mikelear/leartech-ship-proven-website
+  tenant: leartech
+  triggeredBy: human

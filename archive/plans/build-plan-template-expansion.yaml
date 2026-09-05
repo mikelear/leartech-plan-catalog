@@ -1,0 +1,53 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: build-plan-template-expansion
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/plan-template-expansion
+      goal: "Implement Template Plans \u2014 the `use:` one-line include the Plan Controller expands INLINE\n\
+        at plan init. A concrete Plan references a Template Plan in one line; the controller inlines\n\
+        the template's steps and runs them as a normal flat DAG (a controller does NOT spawn another\n\
+        controller). Design: ~/leartech/Hub/status/plan-templates-and-triggers.md.\n\nCHANGES (grounded\
+        \ in api/v1alpha1/plan_types.go \u2014 PlanSpec.Steps []PlanStep):\n1. CRD: add a new `PlanTemplate`\
+        \ type (api/v1alpha1) \u2014 spec.params ([]{name,required}) +\n   spec.steps ([]PlanStep, same\
+        \ shape as a Plan). Add to `PlanStep` two optional fields:\n   `Use string` (json:\"use,omitempty\"\
+        ) = template name, and `With map[string]string`\n   (json:\"with,omitempty\") = params. Regenerate\
+        \ deepcopy (make generate) + the CRD YAML\n   (make manifests) + the chart CRDs.\n2. EXPANSION\
+        \ PASS (the only new reconcile logic): a DETERMINISTIC, PURE function\n   expand(spec.Steps, templates)\
+        \ -> []PlanStep, run at plan init. For each step with `Use`:\n   fetch the PlanTemplate CR by\
+        \ name; substitute `With` params into the template steps\n   (incl. Inputs RawExtension); NAMESPACE\
+        \ the expanded step names as `<use>.<tmplStep>`;\n   rewire deps \u2014 the use-step's own dependsOn\
+        \ -> the template's ENTRY steps (no internal\n   deps); anything that dependsOn the use-step ->\
+        \ the template's TERMINAL step(s) (nothing\n   internal depends on them; multiple terminals =\
+        \ fan-in); inline. SNAPSHOT the expanded\n   steps into status at init so a later template edit\
+        \ can't mutate a running plan.\n   Everything downstream (depsReady/spawn/fanIn/anti-stomp/rollup)\
+        \ runs UNCHANGED on the\n   expanded steps.\n3. GOTCHAS to handle: 63-byte AgentRun-name limit\
+        \ \u2014 namespaced names + <plan>-<step>-<attempt>\n   must stay short (hash if needed) or the\
+        \ AgentRun never starts; unknown/missing template ->\n   clear StepFailed/plan error, not a panic;\
+        \ triggeredWhen across the boundary; idempotent\n   (same input -> identical expansion).\n\nTEST-HEAVY\
+        \ (Mike's steer \u2014 prove it working locally BEFORE the PR): table-driven /\ngolden-file unit\
+        \ tests where each case = (Plan with use: + PlanTemplate fixtures) -> expected\nexpanded []PlanStep.\
+        \ Ship a library of example Template Plan fixtures in testdata (that also\nseed the real template\
+        \ library): release-shepherd + edge cases \u2014 single include; multiple\nincludes; use-step\
+        \ with own dependsOn (entry wiring); downstream dependsOn a use-step\n(terminal wiring); multi-terminal\
+        \ fan-in; param substitution into Inputs; 63-byte-limit\n(assert no overflow); failed/cancelled\
+        \ expanded step blocks downstream; idempotency; missing\ntemplate error. Add envtest coverage\
+        \ for a Plan with a `use:` ref expanding + spawning. All\nGREEN locally (unit + envtest) first.\n\
+        \nAlso add the FIRST template as a committed fixture/manifest: `release-shepherd` (params\nservice,\
+        \ repo; 5 steps release-fired/promote-open/verify-gate/boot-deployed/health) \u2014 mirror\nexamples/templates/release-shepherd.yaml\
+        \ from the automated-agent repo.\n\nOpen the PR, drive BOTH clusters green, STOP at AwaitingReview.\n"
+      name: build-plan-template-expansion
+      repo: leartech-orchestrator-controller
+    name: expand
+    repo: mikelear/leartech-orchestrator-controller
+  tenant: leartech
+  triggeredBy: human

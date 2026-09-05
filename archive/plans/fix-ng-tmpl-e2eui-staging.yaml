@@ -1,0 +1,53 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-ng-tmpl-e2eui-staging
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: fix/postdeploy-e2eui-staging-context
+      goal: "The end2end-ui (Playwright) suite PASSES at PR time (against the PR preview URL) but\nFAILS\
+        \ as a POST-DEPLOY arrival test against the DEPLOYED jx-staging instance\n(Arrival leartech-angular-service-template-0-0-39/40-jx-staging:\
+        \ phase=Failed,\ntest \"end2end-ui\" = Failed; end2end (non-UI) PASSED). This blocks the cluster-wide\n\
+        leartech-gate, which blocks all promote PRs incl leartech-ship-proven-website. Fix so\nthe post-deploy\
+        \ end2end-ui PASSES against staging, WITHOUT weakening the checks.\n\nFIRST, diagnose (do NOT\
+        \ guess):\n1. Understand HOW the suite is run in each context. Read .lighthouse/jenkins-x/\n \
+        \  (the PR-time end2end-ui step) AND how the ARRIVAL/test-pack reruns it post-deploy\n   (search\
+        \ the repo + chart for the e2e-ui test-pack / arrival config; the arrival\n   job was `ar-<hash>-end2end-ui`).\
+        \ Identify what BASE URL / target host / env vars\n   each context passes (PR preview host vs\
+        \ the in-cluster staging Service/ingress\n   `leartech-angular-service-template` / `...-jx-staging.jx.leartech.com`).\n\
+        2. Fetch the actual failure: the arrival stores artifacts in GCS\n   (gs://test-artifacts-product-first/...\
+        \ under the service/version) and/or the\n   results.json the gate reads. Get the concrete Playwright\
+        \ failure (which spec,\n   selector, timeout, or wrong URL).\n\nLIKELY ROOT CAUSE (Mike's hypothesis\
+        \ \u2014 verify): the SSR change updated the e2e-ui\nspecs to pass against the PREVIEW context\
+        \ but they hardcode/assume the preview URL or\npreview-only behaviour, so they break against staging.\
+        \ Typical fixes:\n- Parameterise the target: the suite must read its base URL from the env var\
+        \ the\n  test-pack provides (e.g. BASE_URL / APP_URL / E2E_BASE_URL / PREVIEW_URL \u2014 match\n\
+        \  what the arrival job actually sets), NOT a hardcoded preview host. Make it work for\n  BOTH\
+        \ the PR preview host AND the staging Service/ingress.\n- SSR/prerender timing: assertions that\
+        \ assumed CSR (wait for empty app-root then\n  content) may now see prerendered content immediately,\
+        \ or hydration changes event\n  timing. Make assertions render-mode-agnostic (assert on final\
+        \ visible content with\n  proper awaits), and don't assert on preview-only wildcard-host specifics.\n\
+        - Ensure every route/endpoint the suite hits actually exists + serves on the staging\n  deploy\
+        \ (per-route prerendered index.html + /health), matching the nginx serving.\n\nALSO HARDEN (chronic\
+        \ flake): this template's post-deploy e2e-ui has failed on many\nprior versions (0.0.18/21/22/24/39).\
+        \ Add sane waits/retries for genuinely async bits\nand remove brittle fixed sleeps \u2014 but\
+        \ do NOT mask a real failure.\n\nVERIFY BOTH CONTEXTS before merge: run the suite against a locally-served\
+        \ production\nbuild (SSR static output) AND reason through the staging arrival invocation. The\n\
+        acceptance bar is: PR-time end2end-ui green AND the post-deploy arrival end2end-ui\nwill pass\
+        \ against the deployed staging instance. Keep the diff lean. Own the PR,\ndrive BOTH clusters'\
+        \ gates green THROUGH TO MERGE. After merge a new template version\nreleases; its arrival must\
+        \ go green, which clears leartech-gate and unblocks the\nship-proven promote PRs.\n"
+      name: fix-ng-tmpl-e2eui-staging
+      repo: leartech-angular-service-template
+    name: fix-e2eui
+    repo: mikelear/leartech-angular-service-template
+  tenant: leartech
+  triggeredBy: human

@@ -1,0 +1,58 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Succeeded, az=Paused
+# AgentRuns owned: gcp=5, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: plan-api-resubmit-semantics
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/resubmit-semantics
+      goal: "Make a re-submitted Plan whose content has changed stop being a silent no-op, without ever\
+        \ mutating a Plan that is running.\nCONFIRM THE PREMISE FIRST. In internal/plans/handler.go find\
+        \ where apierrors.IsAlreadyExists produces the 409, and confirm nothing compares the submitted\
+        \ spec against the existing CR. Read the header of leartech-plan-catalog cmd/plan-submit/main.go,\
+        \ which documents 409-as-success and explains WHY \u2014 do not treat that as a bug to delete;\
+        \ it exists so a full-directory submit cannot resurrect a Plan a human deleted. If plan-api already\
+        \ compares specs, STOP and report that.\nDECIDE THE SEMANTICS AND ARGUE FOR THEM. There are at\
+        \ least three defensible answers and you must pick one and justify it in the PR description, not\
+        \ implement all three: replace the CR when the submitted spec differs and the Plan is safely replaceable;\
+        \ reject with a distinct status and a message naming what differs; or accept but record the divergence\
+        \ somewhere a human sees. What is NOT acceptable is the current outcome, where \"identical re-submit\"\
+        \ and \"the brief was rewritten\" are indistinguishable and both report success.\nNEVER TOUCH\
+        \ A RUNNING PLAN. A Plan whose phase is not terminal and not paused has steps in flight that were\
+        \ spawned against the existing brief. Swapping its spec is worse than leaving it stale \u2014\
+        \ an agent whose goal changes mid-run has no way to notice. Whatever you build must key on Plan\
+        \ phase, and the safe set must be explicit in the code rather than implied.\nA DIFFERENCE MUST\
+        \ BE VISIBLE WITHOUT GREPPING A CR. However you resolve it, the submitting side must be able to\
+        \ tell that a re-submit changed nothing, changed something, or was refused. Today it cannot, and\
+        \ the failure was found only because someone happened to grep a CR for a phrase from the newest\
+        \ amendment. State in the PR description what a caller now sees in each of those three cases.\n\
+        NOT IN SCOPE. Do not change the injection policy, do not change plan-submit in the other repo\
+        \ as part of this change (say what it should do, in the PR description, and leave it to a follow-up),\
+        \ and do not add a Plan-versioning scheme \u2014 this is about making one existing decision visible,\
+        \ not introducing a new concept.\nISOLATE TESTING: table-driven Go tests with the controller-runtime\
+        \ fake client, in the style of the existing handler tests. Cover: an identical re-submit; a re-submit\
+        \ whose goal differs; the same against a Paused plan, a terminal plan and a Running plan; and\
+        \ that a Running plan's spec is never modified whatever the difference. Assert on the response\
+        \ the caller receives, not only on cluster state. Non-negative coverage delta.\nDone = PR merged\
+        \ (open via open_pr, drive gates green)."
+      name: resubmit-semantics
+      repo: mikelear/leartech-plan-api
+    kind: pr
+    name: resubmit-semantics
+  - dependsOn:
+    - resubmit-semantics
+    kind: check
+    name: resubmit-semantics-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.resubmit-semantics.pr}
+      repo: mikelear/leartech-plan-api
+      service: leartech-plan-api
+  triggeredBy: plan-catalog-internal-services

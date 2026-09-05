@@ -1,0 +1,63 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=3
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-planapi-cors
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/cors-allowed-origins
+      goal: "plan-api is called cross-origin from browser UIs (the ShipProven portal, auth-ui, etc.)\n\
+        but has NO CORS handling, so browsers block every request (\"plan-api unreachable from\nbrowser\"\
+        ). Add config-driven CORS middleware.\n\n- Add CORS middleware to the HTTP server (mirror the\
+        \ router/middleware wiring already used\n  for auth). Allowed origins come from CONFIG, never\
+        \ hardcoded: read a new config value\n  (e.g. LEARTECH_CORS_ALLOWED_ORIGINS, comma-separated)\
+        \ via the existing config binding.\n- Allow methods GET/POST/PUT/PATCH/DELETE/OPTIONS, the Authorization\
+        \ + Content-Type\n  headers, and handle OPTIONS preflight (return 204 with the CORS headers).\
+        \ Allow\n  credentials as needed for bearer auth. If the origin list is empty, default to a safe\n\
+        \  closed state (no cross-origin) \u2014 do NOT wildcard '*' with credentials.\n- Public endpoints\
+        \ (/health,/docs,/openapi.json) and the authed /plans* endpoints must all\n  return the CORS headers\
+        \ so the browser can read responses AND complete preflight.\n- Add a unit/httptest test: a request\
+        \ with an allowed Origin gets Access-Control-Allow-Origin\n  echoed back; a disallowed origin\
+        \ does not; OPTIONS preflight returns 204 with the headers.\n- Follow the golden go mk locally\
+        \ (lint + test-coverage 60% floor) before pushing.\nOpen the PR, get both clusters' gates green,\
+        \ STOP at AwaitingReview.\n"
+      name: fix-planapi-cors-code
+      repo: leartech-plan-api
+    name: code
+    repo: mikelear/leartech-plan-api
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - code
+    inputs:
+      action: chart-config
+      cluster: gcp
+      goal: "Set plan-api's CORS allowed origins (GCP) so browser UIs can call it. In the plan-api\nconfig\
+        \ (helmfiles/jx-staging/configs/leartech-plan-api.yaml, edit SOURCE only), set the\nvalue feeding\
+        \ LEARTECH_CORS_ALLOWED_ORIGINS to the GCP frontend origins that call plan-api:\n  https://leartech-ship-proven-portal-jx-staging.jx.leartech.com\n\
+        \  https://leartech-auth-ui-jx-staging.jx.leartech.com\n  https://leartech-auth-admin-ui-jx-staging.jx.leartech.com\n\
+        (comma-separated; add any orch/portal UI origins that consume plan-api). It's a config\nVALUE\
+        \ (env not hardcoded in the chart) \u2014 the Infra config-wiring pattern. Open ONE PR.\n"
+      service: leartech-plan-api
+    name: cfg-gcp
+    repo: mikelear/jx-build-cluster-gsm
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - code
+    inputs:
+      action: chart-config
+      cluster: az
+      goal: "Same as cfg-gcp but for AZ (jx-build-cluster-akv): set LEARTECH_CORS_ALLOWED_ORIGINS in the\n\
+        AZ plan-api config to the AZ frontend origins (\u2026-jx-staging.az.leartech.com for portal,\n\
+        auth-ui, auth-admin-ui). Edit SOURCE only. Open ONE PR.\n"
+      service: leartech-plan-api
+    name: cfg-az
+    repo: mikelear/jx-build-cluster-akv
+  tenant: leartech
+  triggeredBy: human

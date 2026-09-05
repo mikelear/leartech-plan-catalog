@@ -1,0 +1,59 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Cancelled, az=Paused
+# AgentRuns owned: gcp=4, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: agent-log-advertised-tools
+  namespace: jx-staging
+spec:
+  command:
+    reason: 'Work complete and merged as automated-agent#244. Cancelled on the injected deploy-healthy
+      check only: it waits for Deployment jx-staging/leartech-automated-agent, which no longer exists
+      because that repo became image-only today. The injection rule treats requiresRepo as a proxy for
+      deployable, and that proxy is now wrong for this repo. Not marked Succeeded, because the check did
+      not pass. Injection fix deferred deliberately.'
+    uid: cancel-1788036848
+    verb: cancel
+  steps:
+  - agentType: leartech-agent-py
+    inputs:
+      branch: feat/log-advertised-tools
+      goal: "Emit one structured log record at run start naming every MCP server and every tool the agent\
+        \ was allowed to use, so a later reader can compute which advertised tools were never called.\n\
+        CONFIRM THE PREMISE FIRST. In gate/agent/ba_agent.py find the ClaudeAgentOptions construction\
+        \ and confirm `allowed_tools` and `mcp_servers` are set there and are not logged anywhere; check\
+        \ gate/agent/main.py for the same shape. Search the package for any existing emission of the allow-list\
+        \ before adding one. If it is already logged, STOP and report that in the PR description rather\
+        \ than adding a second line.\nCOPY THE EXISTING LOGGING SHAPE, DO NOT INVENT ONE. gate/agent/obslog.py\
+        \ is how this package emits structured records and gate/agent/tool_logging.py is the closest precedent\
+        \ \u2014 same helper, same snake_case field vocabulary, same logger naming. The record must carry\
+        \ the run id so it joins to the rest of the run.\nWHAT THE RECORD MUST MAKE POSSIBLE. A reader\
+        \ with only Loki and one run id must be able to list the advertised MCP servers and the allowed\
+        \ tool names. Field names are yours to choose but they are a wire contract the recorder will key\
+        \ on, so state them in the PR description and keep them stable.\nEMIT IT AT INFO. Not debug. The\
+        \ controller runs at info and a V(1)-equivalent record is the same as no record \u2014 leartech-orchestrator-controller\
+        \ has three separate comments in internal/controller recording exactly that mistake costing weeks.\
+        \ A test must assert the record survives the deployed verbosity, not merely that the call happens.\n\
+        ISOLATE TESTING: pytest, in the style of the existing tests/ suite, with no network and no cluster.\
+        \ Cover: the record is emitted once per run; it contains every advertised server and every allowed\
+        \ tool; it carries the run id; and it is emitted at a level that survives the deployed log configuration.\
+        \ Non-negative coverage delta.\nLOGGING TO VERIFY: include in the PR description the LogQL query\
+        \ that returns the advertised set for a single run id, so the next reader does not have to derive\
+        \ it.\nDone = PR merged (open via open_pr, drive gates green)."
+      name: log-advertised-tools
+      repo: mikelear/leartech-automated-agent
+    kind: pr
+    name: log-advertised-tools
+  - dependsOn:
+    - log-advertised-tools
+    kind: check
+    name: log-advertised-tools-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.log-advertised-tools.pr}
+      repo: mikelear/leartech-automated-agent
+      service: leartech-automated-agent
+  triggeredBy: plan-catalog-internal-services

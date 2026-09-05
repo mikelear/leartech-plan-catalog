@@ -1,0 +1,78 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=3
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-planapi-auth-jwks
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/auth-jwks-from-server-url
+      goal: "plan-api rejects ALL bearer tokens with 401 because its auth validator never\ninitialises.\
+        \ PROVEN live 2026-08-01: the running pod's env has\nLEARTECH_AUTH_SERVER_URL=https://hydra-jx-staging.jx.leartech.com\
+        \ (verified via\n`kubectl get pod -o jsonpath` on the container env), yet at startup the auth\
+        \ init logs:\n  level=error error=\"auth is Required but LEARTECH_AUTH_SERVER_URL is empty: refusing\
+        \ to\n  start with unvalidated (fail-open) middleware\"\n  msg=\"auth: failed to initialise service\
+        \ client \u2014 /plans* will 401 until LEARTECH_AUTH_*\n  config is present and JWKS is reachable\"\
+        \nSo the code that builds the auth validator is NOT reading the LEARTECH_AUTH_SERVER_URL\nenv\
+        \ value that is actually present in the container \u2014 a config-binding / load-order bug\n(e.g.\
+        \ config struct/viper bound to a different key, a config file/ConfigMap taking\nprecedence over\
+        \ env, reading os.Getenv at the wrong time, or the chart setting the env\nunder a name the loader\
+        \ doesn't read). FIND the exact mismatch (grep the error string to\nthe auth-init code, trace\
+        \ how AuthServerURL is populated) and FIX it so the value present\nin LEARTECH_AUTH_SERVER_URL\
+        \ is actually used to build a working JWKS validator against\nHydra's /.well-known/openid-configuration\
+        \ \u2192 jwks_uri.\n\nRequirements:\n- When LEARTECH_AUTH_SERVER_URL is set + reachable, build\
+        \ the OIDC/JWKS validator and\n  validate tokens. Keep the fail-CLOSED behaviour when it is Required\
+        \ but genuinely unset\n  (do NOT regress to fail-open). Prefer deriving JWKS from the auth server\
+        \ URL (the Hydra\n  public URL) \u2014 the bus-common pattern (feedback_auth_middleware_fail_open).\n\
+        - AUDIENCE: accept a token whose `aud` is an ARRAY that CONTAINS\n  LEARTECH_AUTH_AUDIENCE (=leartech-plan-api).\
+        \ The real MCP token carries\n  aud=[\"leartech-plan-api\",\"<mcp-host>\"] + scope leartechapi:mcp:write,\
+        \ iss=Hydra,\n  sub=user-test-platform \u2014 this MUST validate. Do not require exact single-aud\
+        \ match.\n- Ensure the Helm chart exposes the auth server URL as a values-driven env (it already\n\
+        \  renders LEARTECH_AUTH_SERVER_URL, currently empty) so per-cluster config can set it;\n  default\
+        \ optional so previews don't break (feedback_chart_secretref_must_be_optional).\n- TEST (this\
+        \ is why it shipped broken): add a gate-ON test that stands up an httptest\n  JWKS/OIDC stub,\
+        \ sets LEARTECH_AUTH_SERVER_URL to it, and asserts (a) the validator\n  initialises, (b) a token\
+        \ with aud ARRAY containing leartech-plan-api is ACCEPTED on\n  POST /plans, (c) a missing/!bad\
+        \ token is 401. Every prior test used auth Required=false\n  so this class of bug shipped green\
+        \ (feedback_auth_gate_needs_client_and_required_true_test).\nLean diff. Own the PR, drive BOTH\
+        \ clusters green THROUGH TO MERGE \u2192 release \u2192 deploy.\n"
+      name: fix-planapi-auth-jwks
+      repo: leartech-plan-api
+    name: code
+    repo: mikelear/leartech-plan-api
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - code
+    inputs:
+      action: chart-config
+      cluster: gcp
+      goal: "Add/adjust the GCP helmfiles config for leartech-plan-api so the chart renders\nLEARTECH_AUTH_SERVER_URL\
+        \ = the GCP Hydra PUBLIC url (https://hydra-jx-staging.jx.leartech.com,\nsame issuer the auth-service\
+        \ config uses) and keeps AUTH_ENABLED=true + LEARTECH_AUTH_AUDIENCE\n=leartech-plan-api. There\
+        \ is currently NO leartech-plan-api.yaml under\nhelmfiles/jx-staging/configs \u2014 create the\
+        \ minimal one (or set the value if a config exists).\nEdit the helmfiles SOURCE (never config-root/).\
+        \ Open the PR for review (config PRs merge with\nMike's approval).\n"
+      service: leartech-plan-api
+    name: config-gcp
+    repo: mikelear/jx-build-cluster-gsm
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - code
+    inputs:
+      action: chart-config
+      cluster: az
+      goal: "Same as config-gcp but for AZ (jx-build-cluster-akv): set LEARTECH_AUTH_SERVER_URL to the\n\
+        AZ Hydra PUBLIC url (use the AZ cluster's actual Hydra issuer host \u2014 confirm from the AZ\n\
+        auth-service config, do NOT hardcode the GCP host). Keep AUTH_ENABLED=true + audience\n=leartech-plan-api.\
+        \ Edit helmfiles SOURCE only. Open the PR for review.\n"
+      service: leartech-plan-api
+    name: config-az
+    repo: mikelear/jx-build-cluster-akv
+  tenant: leartech
+  triggeredBy: human

@@ -1,0 +1,41 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: remediate-build-ship-proven-portal
+  namespace: jx-staging
+spec:
+  paused: true
+  remediates:
+  - name: build-ship-proven-portal
+    namespace: jx-staging
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: release-health-check
+      cluster: gcp
+      goal: Re-check that the leartech-ship-proven-portal release deployed HEALTHY on the gcp cluster
+        (the original release-monitor failed closed with an empty service/cluster, not because the deploy
+        was unhealthy). Confirm the promote landed and pods are green.
+      name: verify-gcp
+      service: leartech-ship-proven-portal
+    name: verify-gcp
+    repo: mikelear/leartech-ship-proven-portal
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - verify-gcp
+    inputs:
+      action: release-health-check
+      cluster: az
+      goal: 'Re-check that the leartech-ship-proven-portal release deployed HEALTHY on the az cluster.
+        This is the final verification of the brief''s successCriteria: the release re-checks must report
+        healthy for service leartech-ship-proven-portal on both clusters.'
+      name: verify-az
+      service: leartech-ship-proven-portal
+    name: verify-az
+    repo: mikelear/leartech-ship-proven-portal
+  tenant: leartech

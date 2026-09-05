@@ -1,0 +1,45 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: remediate-build-plan-api
+  namespace: jx-staging
+spec:
+  paused: true
+  remediates:
+  - name: build-plan-api
+    namespace: jx-staging
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: release-health-check
+      cluster: gcp
+      goal: Re-run the release health check for service 'plan-api' on cluster gcp with CORRECT inputs.
+        The original build-plan-api 'release-monitor' step failed closed because it was invoked with empty
+        service/cluster. Verify the plan-api release deployed HEALTHY on gcp (image pushed to GAR, jx-promote
+        GitOps PR opened+merged, jx-boot reconciled, pods rolled, /healthz green). If the release has
+        not yet promoted/reconciled, report the actual stage reached.
+      name: release-health-gcp
+      service: plan-api
+    name: release-health-gcp
+    repo: mikelear/leartech-plan-api
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - release-health-gcp
+    inputs:
+      action: release-health-check
+      cluster: az
+      goal: FINAL verification of the brief's successCriteria. Re-run the release health check for service
+        'plan-api' on cluster az with CORRECT inputs (the original release-monitor failed closed on empty
+        service/cluster). Verify the plan-api release deployed HEALTHY on az (image pushed to ACR, jx-promote
+        GitOps PR opened+merged, jx-boot reconciled, pods rolled, /healthz green). Success = release re-checks
+        report healthy for service plan-api on az.
+      name: release-health-az
+      service: plan-api
+    name: release-health-az
+    repo: mikelear/leartech-plan-api
+  tenant: leartech

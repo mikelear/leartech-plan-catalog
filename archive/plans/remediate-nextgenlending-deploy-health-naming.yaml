@@ -1,0 +1,65 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: remediate-nextgenlending-deploy-health-naming
+  namespace: jx-staging
+spec:
+  paused: true
+  remediates:
+  - name: nextgenlending-website-rebuild
+    namespace: jx-staging
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: fix/chart-fullname-align-service-name
+      goal: "ROOT CAUSE: The deploy-health release verifier for this service failed closed even though\
+        \ the app is actually healthy. The verifier keys on the SERVICE NAME (next-generation-lending-website\
+        \ == repo name) and looks up a Kubernetes Deployment of that name in namespace jx-staging. But\
+        \ charts/next-generation-lending-website/values.yaml sets `nameOverride: \"ngl-website\"` and\
+        \ `fullnameOverride: \"ngl-website\"`, so every rendered resource (Deployment, Service, ConfigMaps)\
+        \ is named `ngl-website` instead. The only running Deployment is `ngl-website` (1/1 available,\
+        \ image tag 0.1.0, healthy on both gcp+az) \u2014 but a lookup for a Deployment named `next-generation-lending-website`\
+        \ finds nothing, so the version-aware health check fails. This diverges from the platform convention\
+        \ that a service's Deployment is named after the service/repo.\n\nFIX (at source): In charts/next-generation-lending-website/values.yaml,\
+        \ change `fullnameOverride` (and `nameOverride`) from \"ngl-website\" to \"next-generation-lending-website\"\
+        \ so the rendered Deployment/Service/ConfigMap resource names match the Helm release, repo name,\
+        \ and service name that deploy-health expects. All templates already derive resource names from\
+        \ the fullname/name helpers (see templates/_helpers.tpl and the -config / -nginx configmaps referenced\
+        \ by the deployment volumes), so this single-value change renames every resource consistently\
+        \ \u2014 verify that after your change nothing still hardcodes the literal string `ngl-website`.\n\
+        \nDO NOT CHANGE `service.name` (it stays `next-generation-lending-website`): per the in-file comment\
+        \ it is consumed by the golden ingress template as the ingress HOSTNAME PREFIX and must equal\
+        \ the repo name the JX3 preview pipeline polls; it is independent of the resource name. The resulting\
+        \ fullname is 31 characters, comfortably under the 63-char DNS-label limit (the values file itself\
+        \ notes 34 chars is fine), so this does not reintroduce the DNS-length concern the original override\
+        \ was meant to avoid. Do not touch image.repository/tag, resources, securityContext, or config\
+        \ values. Open a PR with the chart change and a concise description explaining the deploy-health\
+        \ naming mismatch this fixes."
+      name: align-chart-name-to-service
+    name: align-chart-name-to-service
+    repo: mikelear/next-generation-lending-website
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - align-chart-name-to-service
+    inputs:
+      action: deploy-health
+      clusters:
+      - gcp
+      - az
+      goal: 'Verify successCriteria: after the chart-name-alignment PR merges and re-releases + promotes
+        to both clusters, the Deployment for service next-generation-lending-website in namespace jx-staging
+        exists and is healthy (>=1 available replica) running the newly promoted image version, on both
+        gcp and az. This is the deterministic, version-aware re-check that the release is healthy for
+        service mikelear/next-generation-lending-website. Version is derived from promote_status per cluster
+        (do not pin).'
+      name: verify-release-deploy-healthy
+      namespace: jx-staging
+      service: next-generation-lending-website
+    name: verify-release-deploy-healthy
+    repo: mikelear/next-generation-lending-website
+  tenant: leartech

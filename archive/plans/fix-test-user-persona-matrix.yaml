@@ -1,0 +1,82 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=3
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-test-user-persona-matrix
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/test-user-persona-matrix
+      goal: "Turn the single test-user seed into a ROLE-BASED PERSONA MATRIX for e2e permission\ntesting.\
+        \ Today scripts/setup-auth.sh seed_test_user does one psql INSERT into the\nauth_service `users`\
+        \ table with permissions = ARRAY['User']. Roles are that\n`permissions` text[] column; at OAuth\
+        \ consent (internal/handlers/auth.go ~L400) they are\ninjected into the token as claims.ext.Permissions;\
+        \ the ShipProven portal guard shows\nadmin UI (nav-create-plan) only when it contains the PlatformAdmin\
+        \ permission.\n\nCHANGES:\n1. Refactor seed_test_user into a matrix seeder that idempotently UPSERTs\
+        \ these personas\n   (ON CONFLICT (email) DO UPDATE permissions + password_hash):\n     - user\
+        \           \u2192 permissions ARRAY['User']            (basic; negative assertions)\n     - platform-admin\
+        \ \u2192 permissions ARRAY['User','PlatformAdmin']  (full admin flow)\n   CONFIRM the EXACT admin\
+        \ permission string against the codebase (auth.Perm* constants /\n   how the guard + middleware\
+        \ read ext.Permissions) \u2014 use the real constant, do NOT guess.\n   Keep it STAGING/PREVIEW\
+        \ ONLY \u2014 preserve the existing production hard-refusal.\n2. Read each persona's creds from\
+        \ env: USER_EMAIL/USER_PASSWORD (existing) +\n   PLATFORM_ADMIN_EMAIL/PLATFORM_ADMIN_PASSWORD.\
+        \ If a persona's env is unset, fall back to\n   deterministic staging defaults (e.g. platform-admin@leartech.com\
+        \ / a fixed staging\n   password) so seeding works before the secret is populated.\n3. ESO secret\
+        \ (KES is fully decommissioned \u2014 ESO only): in the auth-resources chart\n   (where auth-service-test-user's\
+        \ ExternalSecret already lives), add the platform-admin\n   persona creds to an external-secrets.io/v1\
+        \ ExternalSecret sourced from the\n   `leartech-secrets` ClusterSecretStore (mirror the existing\
+        \ auth-service-test-user\n   ExternalSecret exactly; render in-chart so jx-secret regen doesn't\
+        \ clobber it). Wire the\n   provisioning Job that runs setup-auth.sh to pass PLATFORM_ADMIN_EMAIL/PASSWORD\
+        \ from it.\nAdd/extend a test for the matrix seed. Open the PR, get both clusters' gates green,\
+        \ STOP\nat AwaitingReview.\n"
+      name: persona-matrix-seeder
+      repo: leartech-auth-service
+    name: seeder
+    repo: mikelear/leartech-auth-service
+  - agentType: leartech-agent-ng
+    dependsOn:
+    - seeder
+    inputs:
+      branch: feat/e2e-persona-matrix
+      goal: "Make the real-auth Observer e2e-ui PERSONA-AWARE so it tests permission BOUNDARIES, and\n\
+        fix the current failures (8 authed tests failed only because the single test user is not a\nPlatformAdmin,\
+        \ so admin-gated UI is correctly hidden; sign-in itself WORKS).\n- Log in as the platform-admin\
+        \ persona (process.env.PLATFORM_ADMIN_EMAIL/PASSWORD) for the\n  admin flows: nav-create-plan\
+        \ visible, create a paused plan, it appears in the list.\n- Add a NEGATIVE check: the basic `user`\
+        \ persona (USER_EMAIL/PASSWORD) does NOT see\n  nav-create-plan (proves the guard).\n- Make the\
+        \ plan-detail specs (Frontier/Lifecycle/DAG/Text/Gates) robust to real staging\n  data: as platform-admin,\
+        \ ensure a plan exists (create one) before asserting the detail\n  views, rather than assuming\
+        \ seeded data.\n- Keep real auth (NO mock-auth). Read all creds from process.env (the Observer\
+        \ injects\n  them). Get PR gates green on both clusters, STOP at AwaitingReview.\n"
+      name: persona-matrix-e2e
+      repo: leartech-ship-proven-portal
+    name: e2e
+    repo: mikelear/leartech-ship-proven-portal
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - seeder
+    inputs:
+      action: chart-config
+      cluster: gcp
+      goal: 'Expose the platform-admin persona creds to the portal''s e2e packs. In
+
+        helmfiles/jx-staging/configs/leartech-arrivals-observer.yaml (edit SOURCE only), under the
+
+        leartech-ship-proven-portal service `env`, ADD PLATFORM_ADMIN_EMAIL + PLATFORM_ADMIN_PASSWORD
+
+        from the auth-service-test-users secret (mirror how USER_EMAIL/USER_PASSWORD are wired from
+
+        auth-service-test-user). Keep the existing USER_* + HYDRA_ADMIN_URL entries. Open ONE PR.
+
+        '
+      service: leartech-arrivals-observer
+    name: observer-gcp
+    repo: mikelear/jx-build-cluster-gsm
+  tenant: leartech
+  triggeredBy: human

@@ -1,0 +1,56 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: plan-3-orch-completion
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    budgetIter: 10
+    inputs:
+      base: main
+      branch: agent/repoint-plans-to-platform-state-mcp
+      description: 'Finish the Python->Go Orch migration: point Orch''s remaining DB-backed plan readers
+        at the platform_state MCP (which reads the Plan/AgentRun CRDs), so chat''s plan surface is CONSISTENT
+        and CRD-accurate, then decommission the now-unused plan DB. Read-model + auth already done: orch
+        already calls platform_state MCP for get_plan_state/get_run_state/list_runs (proven live authed),
+        only the list/recovery/REST readers still hit the DB (inconsistent dual surface + stale-view bug).'
+      goal: "In leartech-orchestrator, make the plan surface fully CRD-backed via the platform_state MCP,\
+        \ then\nremove the plan DB. Single coherent PR (atomic \u2014 no half-migrated state). All PR\
+        \ gates green incl a\nREAL ai-review verdict (works via ai-gateway).\n\n## Re-point (gate/orch/chat_tools.py\
+        \ + app/routers/plans.py)\n- Switch `list_plans` and `list_plans_needing_recovery` (and any view/status\
+        \ plan reader) from\n  `app.plan_store` (SQLAlchemy DB) to the platform_state MCP tools (`list_plans`,\
+        \ `get_plan_state`,\n  `list_runs`, `get_run_state`) via the EXISTING build_mcp_http_client /\
+        \ LEARTECH_PLATFORM_MCPS_URL\n  proxy that chat already uses for get_plan_state. Namespace defaults\
+        \ to the orch namespace; support\n  the tenant filter platform_state exposes. The stale-view bug\
+        \ dies here (MCP reads CRDs fresh).\n- REST `app/routers/plans.py`: GET /plans + GET /plans/{id}\
+        \ read from platform_state MCP (or\n  deprecate the DB-backed REST if chat is the surface). POST\
+        \ /plans (create) should create a Plan CR\n  / fire via the agent_api MCP path rather than insert\
+        \ a DB row (the never-done \"init #5\") \u2014 if that\n  is too large, at minimum stop the DB\
+        \ insert and return 501/deprecation, and NOTE it.\n- Keep behaviour: chat \"list my plans\" now\
+        \ returns the CRD plans (incl CRD-fired ones), consistent\n  with get_plan_state.\n\n## Decommission\
+        \ the plan DB (KEEP chat conversations)\n- Remove the plan tables/readers: app/plan_store.py,\
+        \ the OrchestrationPlan model in app/models.py,\n  the PLAN migrations, and the postgres plan\
+        \ DB wiring IF nothing else needs it. CRITICAL: chat\n  CONVERSATIONS (app/chat_store.py + chat_conversations\
+        \ migrations) are SEPARATE and MUST be kept \u2014\n  do not remove chat persistence. If the postgres\
+        \ instance is shared by chat_store, keep the DB but\n  drop only the plan tables/code. Be precise\
+        \ about what's plan-only vs chat.\n- Remove now-dead DB-less-mode plan branches if fully superseded.\n\
+        \n## Tests\n- chat list_plans / recovery now call the platform_state MCP (assert via injected\
+        \ fake MCP client,\n  mirroring the existing get_plan_state proxy test pattern) and return CRD-shaped\
+        \ data; no plan_store\n  imports remain in chat_tools/plans router. chat_store tests still pass\
+        \ (conversations intact).\n- Coverage-delta within tolerance (feedback_ci_coverage_delta_gate);\
+        \ if this is a Python repo the\n  pytest step must have set -e (feedback_pr_pytest_step_must_set_e).\n\
+        \n## Acceptance\n- Orch's plan surface (chat list/recovery + REST) reads the platform_state MCP\
+        \ (CRD-backed), the plan\n  DB is decommissioned, chat conversations preserved, stale-view bug\
+        \ gone. All PR gates green (gcp+az)\n  incl real ai-review. Open a PR. Hold it (do not merge).\n"
+      name: orch-repoint-plans-to-mcp
+      repo: leartech-orchestrator
+    name: orch-repoint-plans-to-mcp
+    repo: mikelear/leartech-orchestrator
+  tenant: platform
+  triggeredBy: session-plan-3-orch-completion-2026-07-18

@@ -1,0 +1,70 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: remediate-shipproven-website-visual
+  namespace: jx-staging
+spec:
+  paused: true
+  remediates:
+  - name: shipproven-website-visual
+    namespace: jx-staging
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: feat/fix-visual-layer-qa-gate
+      goal: "The brand visual-layer change (PR #8, merged & released v0.0.7) is blocked from promotion:\
+        \ the promote-PR `qa-gate` \u2014 which runs the `end2end-ui/` Playwright specs against the DEPLOYED\
+        \ staging/preview URL \u2014 fails PERSISTENTLY on BOTH clusters, while `verify` passes. The GCP\
+        \ promote PR (mikelear/jx-build-cluster-gsm #1407) is stuck red across two commits; the AZ promote\
+        \ (mikelear/jx-build-cluster-akv #1208) already merged. Diagnose and fix AT SOURCE in this repo\
+        \ so the end2end-ui gate goes green.\n\nSTEP 1 \u2014 confirm the exact failing assertion(s).\
+        \ Pull the qa-gate step logs for the promote PR, and/or run the `end2end-ui` specs against a preview/staging\
+        \ deploy \u2014 especially the NEW `end2end-ui/09-visual-layer.spec.ts` and the edited `end2end-ui/07-shipproven-landing.spec.ts`.\
+        \ Do not guess blindly; fix what actually fails.\n\nTwo regressions THIS PR introduced are the\
+        \ prime suspects \u2014 verify each against the deployed site and fix whichever are red:\n\n1)\
+        \ og-default.png 404. The PR added `public/og-default.png`, `og:image`/`twitter:image` meta, and\
+        \ a spec asserting `GET /og-default.png` returns 200 with content-type image/png and >10KB body.\
+        \ Ensure the asset is genuinely built into the served output AND served at the site ROOT by the\
+        \ runtime server (check `angular.json` assets/`public` wiring AND the SSR/Express \u2014 or nginx\
+        \ \u2014 static route; note this app has SSR/prerender history, see plans fix-ssr-ship-proven-preview\
+        \ / fix-ng-tmpl-e2eui-staging). A 404 here fails the gate.\n\n2) `waitUntil: 'networkidle'` +\
+        \ external Google Fonts. index.html now loads fonts from fonts.googleapis.com / fonts.gstatic.com.\
+        \ In the egress-locked staging cluster these external requests never settle, so every test in\
+        \ 09-visual-layer.spec.ts (all share a `networkidle` beforeEach with a 20s timeout) times out\
+        \ \u2192 whole suite red on both clusters. Make the deployed page reach a settled state deterministically\
+        \ IN-CLUSTER \u2014 prefer removing the hard public-CDN egress dependency (self-host/inline Inter\
+        \ + JetBrains Mono, or make the external stylesheet non-blocking) so the site works without egress;\
+        \ if the specs' wait strategy is itself too strict, relax `networkidle` to `domcontentloaded`\
+        \ + explicit locator waits.\n\nPreserve ALL visual-layer intent \u2014 brand tokens (src/styles.scss),\
+        \ the five signature SVGs, and the Verrian attribution \u2014 change ONLY what makes the DEPLOYED\
+        \ end2end-ui gate red. Do NOT weaken the crawlability (08-seo-crawlability) or content (07) contracts.\
+        \ Run `ng test` (unit) AND the `end2end-ui` specs green before pushing."
+      name: fix-visual-layer-qa-gate
+      repo: mikelear/leartech-ship-proven-website
+    name: fix-visual-layer-qa-gate
+    repo: mikelear/leartech-ship-proven-website
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - fix-visual-layer-qa-gate
+    inputs:
+      action: deploy-health
+      clusters:
+      - gcp
+      - az
+      goal: "Verify the brief successCriteria: after the fix merges, re-releases, and the promote qa-gate\
+        \ goes green on both clusters, confirm the deployed leartech-ship-proven-website is the NEW released\
+        \ version AND healthy per cluster (>=1 available replica AND observed image tag == the promoted\
+        \ version) on BOTH gcp and az. Version is derived from promote_status (leave unpinned). Deterministic\
+        \ in-cluster check \u2014 no httpx probe, no kubectl."
+      name: verify-release-healthy
+      namespace: jx-staging
+      repo: mikelear/leartech-ship-proven-website
+      service: leartech-ship-proven-website
+    name: verify-release-healthy
+    repo: mikelear/leartech-ship-proven-website
+  tenant: leartech

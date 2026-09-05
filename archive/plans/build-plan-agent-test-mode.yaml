@@ -1,0 +1,118 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=5
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: build-plan-agent-test-mode
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    inputs:
+      branch: feat/agent-test-mode
+      goal: "Add TEST-MODE to the shared agent entrypoint (gate/agent/ \u2014 the dev agent\nmain.py,\
+        \ infra_agent.py, ba_agent.py share the run path).\n\nBEHAVIOUR: a plan step may pass `inputs.testMode:\
+        \ {finishAs: Succeeded|Failed,\nprOutcome: merged|closed|open|awaiting|none, message?, delaySeconds?}`.\
+        \ When\ntestMode is present AND the guard env LEARTECH_AGENT_TEST_MODE_ALLOWED=true, the\nagent\
+        \ MUST:\n  1. SKIP the LLM/Claude-Agent-SDK loop entirely (no reasoning, no tokens).\n  2. For\
+        \ a PR-backed step, STILL call the REAL open_pr MCP tool (so the\n     PR-capture path is exercised\
+        \ \u2014 this is the historically-buggy bit). The\n     open_pr tool returns a synthetic PR in\
+        \ test-mode (built separately in\n     leartech-mcp-servers) and patches AgentRun.status.targetPR\
+        \ as normal.\n  3. Self-report the directed finish via the existing status-patch path\n     (AGENT_RUN_*\
+        \ / LEARTECH_AGENTRUN_STATUS): set phase per finishAs, keep the\n     targetPR from open_pr; optionally\
+        \ sit Running for delaySeconds first.\n  4. Stamp annotation leartech.io/test-mode=true on the\
+        \ AgentRun.\n  5. Exit 0 for Succeeded, 1 for Failed.\nGUARD (critical): if LEARTECH_AGENT_TEST_MODE_ALLOWED\
+        \ is unset/false, IGNORE\ntestMode completely and run normally \u2014 a stray directive must NEVER\
+        \ no-op a\nreal run. Default the env OFF in the chart.\nAdd unit tests: testMode honored only\
+        \ with the flag; skips the loop; still\nissues the open_pr call for a PR step; self-reports finishAs;\
+        \ ignored when the\nflag is off. Do NOT change real-run behaviour. Own the PR + take gates green.\n"
+      name: agent-test-mode
+      repo: leartech-automated-agent
+    name: agent-test-mode
+    repo: mikelear/leartech-automated-agent
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/mcp-tool-test-mode
+      goal: "Make TEST-MODE a first-class capability of the MCP tool framework (do NOT build\na separate\
+        \ mock server \u2014 test-mode lives IN the real tools, no drift).\n\nFRAMEWORK: thread a standard\
+        \ `test_mode` signal into every tool handler's\ncontext \u2014 sourced from the calling AgentRun's\
+        \ leartech.io/test-mode annotation\n(or an explicit request field), guarded by cluster env\nLEARTECH_MCP_TEST_MODE_ALLOWED\
+        \ (default OFF; a stray test_mode on a prod call is\nignored). Extend the tool-registration seam\
+        \ (SimpleServer/ScopedServer,\ninternal/mcpregistry) with an OPTIONAL per-tool test-mode hook.\n\
+        FIRST IMPLEMENTER \u2014 open_pr (internal/agentapiserver): in test-mode, return a\nSYNTHETIC\
+        \ PR (fake number/URL in a clearly-test range, e.g. pr 999xxxxx / a\ntest-marked URL) and patch\
+        \ AgentRun.status.targetPR EXACTLY as the real path \u2014\nbut make NO GitHub API call. Read\
+        \ tools + create_plan pass through (real).\nAdd tests (test_mode honored only with the flag; open_pr\
+        \ returns synthetic PR +\npatches targetPR + no GitHub call; flag-off = real path). Document the\
+        \ convention\nin the repo (adding a side-effecting tool \u21D2 implement its test-mode branch,\
+        \ same\nparams). Own the PR + gates green.\n"
+      name: mcp-tool-test-mode
+      repo: leartech-mcp-servers
+    name: mcp-tool-test-mode
+    repo: mikelear/leartech-mcp-servers
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/test-mode-mock-proutcome
+      goal: "Add a TEST-MODE PROutcomeFetcher so merge-gating is exercised without a real PR.\nWhen a\
+        \ step's AgentRun carries leartech.io/test-mode=true AND a directed\nprOutcome (surfaced from\
+        \ the testMode directive onto the AgentRun status/anno),\nthe fetcher resolves the SYNTHETIC targetPR\
+        \ to that outcome\n(merged\u2192PROutcomeMerged, closed\u2192PROutcomeClosedUnmerged, open/awaiting\u2192\
+        the open\nphase) instead of polling GitHub. Guarded to test-mode only (real runs use the\nreal\
+        \ fetcher unchanged). This drives deriveStepPhase's merged/closed/open/\nawaiting branches for\
+        \ synthetic PRs. Wire it behind the same\nLEARTECH_..._TEST_MODE gate. Add unit tests for each\
+        \ outcome\u2192StepPhase mapping.\nDo NOT change real-run PR polling. Own the PR + gates green.\n"
+      name: controller-mock-proutcome
+      repo: leartech-orchestrator-controller
+    name: controller-mock-proutcome
+    repo: mikelear/leartech-orchestrator-controller
+  - agentType: leartech-agent-go
+    dependsOn:
+    - agent-test-mode
+    - mcp-tool-test-mode
+    - controller-mock-proutcome
+    inputs:
+      branch: feat/state-machine-conformance-suite
+      goal: "Build an ENVTEST state-machine conformance suite (real controller reconcile\nagainst test-mode-driven\
+        \ Plans, in-process \u2014 no live cluster, no deploy-gating).\nENUMERATE the CRD enums (StepPhase,\
+        \ PROutcome, PlanPhase, AgentRun phase) + the\nemitted events (run.*, plan.step_*, plan.completed,\
+        \ release.deploy_failed) +\nresolve (Spec.Remediates\u2192Resolved) + loop-guard (signature dedupe,\
+        \ depth cap).\nFor each state/outcome, drive a test-mode Plan through the real reconciler and\n\
+        ASSERT the controller's reaction (phase transitions, events, resolve fires,\ndependents block\
+        \ on Failed/Cancelled, etc.).\nCOVERAGE DISCOVERY (the point): iterate each enum's values; FAIL\
+        \ the suite on any\nvalue not exercised by a case (a gap), AND flag any state the controller produces\n\
+        that is NOT in the enumerated set (a surprise we didn't know existed). Make it\nre-runnable in\
+        \ CI. This suite depends on the test-mode primitive (steps 1-3) so\nit can drive real reconciles\
+        \ deterministically. Own the PR + gates green.\n"
+      name: conformance-suite
+      repo: leartech-orchestrator-controller
+    name: conformance-suite
+    repo: mikelear/leartech-orchestrator-controller
+  - agentType: leartech-agent-go
+    dependsOn:
+    - conformance-suite
+    inputs:
+      branch: feat/test-mode-live-self-test
+      goal: "THE RECURSION \u2014 the Plan tests itself, live, over real Maestro. After steps 1-4\nare\
+        \ merged AND deployed (test-mode live on staging), run the conformance suite\nAGAINST THE DEPLOYED\
+        \ test-mode on-cluster.\nHEADLINE CASE \u2014 the full loop over REAL Maestro (the transport the\
+        \ envtest suite\ncan't exercise, and the L1 direct-/consume_event shortcut skipped):\n  a test-mode\
+        \ Plan with a `release-monitor` step finishAs=Failed \u2192\n  controller EMITS release.deploy_failed\
+        \ \u2192 real Maestro \u2192 EventRegistration\n  consumer \u2192 BA AgentRun (test-mode) \u2192\
+        \ BA authors the remediation (real\n  create_plan) \u2192 test-mode remediation steps run \u2192\
+        \ controller flips the failed\n  plan \u2192 Resolved.\nAssert each hop: the announce fired (release-deploy-failed-announced-set),\
+        \ the\nevent round-tripped Maestro\u2192consumer\u2192a BA AgentRun, a draft remediation Plan\
+        \ was\nauthored (paused + remediates), and (driving its verify step to test-mode\nSucceeded) the\
+        \ target flips to Resolved. Plus the key single-state cases the\nenvtest suite covers, confirmed\
+        \ live.\nAdd a re-runnable script (scripts/) + a short report. NOTE: deploy-gated \u2014 first\n\
+        confirm test-mode is deployed (the two-hop for agent-py + the mcp-servers +\ncontroller releases\
+        \ landed) before running; if not yet deployed, report that\nclearly rather than failing spuriously.\
+        \ Idempotent + clean up the test-mode\nPlans/AgentRuns it creates. Own the PR + gates green.\n"
+      name: self-test-live
+      repo: leartech-orchestrator-controller
+    name: self-test-live
+    repo: mikelear/leartech-orchestrator-controller
+  tenant: leartech
+  triggeredBy: human

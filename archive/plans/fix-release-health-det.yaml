@@ -1,0 +1,54 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-release-health-det
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    inputs:
+      branch: fix/deterministic-release-health-check
+      goal: "Make the infra agent's `release-health-check` action produce a DETERMINISTIC\nverdict on\
+        \ a consistent environment. Find the action in the infra agent code\n(the agentType=leartech-agent-infra\
+        \ action handler in this repo \u2014 search for\n\"release-health-check\" / \"release_health\"\
+        \ / \"health_verdict\" / the stage-4\nDeployment+/health verification). Root cause (verified live\
+        \ 2026-07-30): the\ninfra agent has NO kubectl (SA=default, agent-py image), so the current stage-4\n\
+        \"confirm Deployment replicas + /health 200\" relies on the LLM to IMPROVISE how\nto verify \u2014\
+        \ one run curls the ingress /health and PASSES, another concludes\n\"kubectl not available\" and\
+        \ FAILS closed. Same setup, opposite verdicts.\n\nFIX \u2014 make the HTTP /health probe the CODIFIED,\
+        \ PRIMARY, deterministic check\n(it needs no kubectl and demonstrably works):\n1. After the existing\
+        \ deterministic stages (release fired + promote PRs merged\n   all-green \u2014 keep those), the\
+        \ health stage MUST run a fixed procedure, NOT an\n   LLM decision:\n   a. Determine the health\
+        \ URL(s) deterministically: accept an optional\n      `healthUrl` / `host` input if provided;\
+        \ otherwise DISCOVER the ingress\n      host(s) from the merged GitOps YAML (the promote PRs /\
+        \ the service's\n      Ingress in jx-build-cluster-gsm/akv) \u2014 the same source the passing\
+        \ run\n      used. Probe BOTH cluster hosts when both exist (GCP + AZ), as the passing\n     \
+        \ run did.\n   b. HTTP GET `<host><healthPath>` (healthPath defaults /health) with retries +\n\
+        \      backoff within budgetMinutes; treat a transient 502/503 while jx-boot\n      reconciles\
+        \ as \"retry\", not fail (the passing run saw GCP 502 -> 200).\n   c. Verdict = PASS iff every\
+        \ required host returns 200 within budget; else FAIL\n      with a specific reason. This must\
+        \ be scripted Python (requests/httpx with\n      set -e-style error handling), NOT left to the\
+        \ model to carry out ad hoc.\n2. kubectl is now OPTIONAL: if present, use `kubectl rollout status`\
+        \ as an\n   ADDITIONAL corroborating signal, but NEVER let its absence cause a FAIL \u2014 the\n\
+        \   HTTP probe is authoritative. Remove any \"kubectl unavailable => FAIL\" path.\n3. Keep the\
+        \ existing structured logging (event=health_verdict, verdict, exit_code)\n   and the fail-closed\
+        \ philosophy for GENUINE failures (release not fired, promote\n   not merged, or /health never\
+        \ 200 within budget) \u2014 but a missing tool must not\n   be a genuine failure.\n\nTESTS: add\
+        \ unit tests that pin determinism \u2014 given (release fired + promotes\nmerged + a stubbed HTTP\
+        \ endpoint returning 200) the verdict is PASS with NO\nkubectl; given the endpoint returning 502\
+        \ then 200, it retries then PASSES;\ngiven persistent non-200, it FAILS with a clear reason. Assert\
+        \ the verdict does\nNOT depend on kubectl availability. Extend end2end if the action is exercised\
+        \ there.\n\nDo NOT change create-repo / register-source-config / scaffold-pr / smoke-pr\nbehaviour.\
+        \ Own the PR + drive BOTH clusters' gates green THROUGH TO MERGE so it\nreleases and the deterministic\
+        \ check is live for the next build.\n"
+      name: fix-release-health-check-determinism
+      repo: leartech-automated-agent
+    name: health-check
+    repo: mikelear/leartech-automated-agent
+  tenant: leartech
+  triggeredBy: human

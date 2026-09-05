@@ -1,0 +1,33 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: az
+# Phase: az=Paused
+# AgentRuns owned: az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: e2e-portal-demo-6laga2
+  namespace: jx-staging
+spec:
+  paused: true
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: main
+      goal: e2e-portal-demo scaffold step (paused, never runs)
+      name: scaffold
+      repo: mikelear/demo-repo
+    kind: pr
+    name: scaffold
+    repo: mikelear/demo-repo
+  - dependsOn:
+    - scaffold
+    kind: check
+    name: scaffold-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.scaffold.pr}
+      repo: mikelear/demo-repo
+      service: demo-repo
+  tenant: acme
+  triggeredBy: user-test-platform-admin

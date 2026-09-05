@@ -1,0 +1,41 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-planapi-authurl-value
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/auth-serverurl-as-value
+      goal: "Make plan-api's auth server URL a CONFIG VALUE, not a secret. Today the chart\n(charts/leartech-plan-api/templates/deployment.yaml\
+        \ ~line 70) renders\nLEARTECH_AUTH_SERVER_URL from a secretKeyRef ({{ .Values.auth.secretName\
+        \ }} key\nBASE_URL). That's the wrong model \u2014 the Hydra issuer/JWKS URL is PUBLIC, non-sensitive\n\
+        config, and sourcing it from an (empty/unsynced) secret is why plan-api 401s even though\nthe\
+        \ code fix (#6) now reads the env correctly. The per-cluster helmfiles config (gsm\n#1231 already\
+        \ sets auth.serverUrl for GCP) can't take effect because the chart reads the\nsecret, not the\
+        \ value.\n\nChange the chart so LEARTECH_AUTH_SERVER_URL is a values-driven PLAIN env:\n  - name:\
+        \ LEARTECH_AUTH_SERVER_URL\n    value: {{ .Values.auth.serverUrl | default \"\" | quote }}\nAdd\
+        \ `auth.serverUrl: \"\"` to charts/leartech-plan-api/values.yaml (documented: the Hydra\nPUBLIC\
+        \ issuer/JWKS base URL; supplied per-cluster by the helmfiles config \u2014 the chart must\nNOT\
+        \ hardcode an env-specific URL). Keep LEARTECH_AUTH_CLIENT_SECRET as the secretKeyRef\n(genuinely\
+        \ secret). LEARTECH_AUTH_CLIENT_ID may also move to a value (public client id) \u2014\nyour call,\
+        \ but serverUrl is the must-fix. Preserve the fail-CLOSED-when-Required stance\nand the preview/not-yet-synced\
+        \ belts-and-braces (empty serverUrl + Required must not crash\nthe pod on previews \u2014 keep\
+        \ the existing safety). Ensure the code still reads\nos.Getenv(\"LEARTECH_AUTH_SERVER_URL\") (it\
+        \ does after #6).\n\nAdd/adjust a chart-render test (helm template) asserting that when auth.serverUrl\
+        \ is set,\nLEARTECH_AUTH_SERVER_URL renders as a plain value (no secretKeyRef) equal to it. Lean\
+        \ diff.\nOwn the PR, drive BOTH clusters green THROUGH TO MERGE \u2192 release. (After it deploys,\
+        \ gsm\n#1231's auth.serverUrl value is consumed \u2192 plan-api validates tokens; a matching AZ\
+        \ config\nis still needed.)\n"
+      name: fix-planapi-authurl-value
+      repo: leartech-plan-api
+    name: chart
+    repo: mikelear/leartech-plan-api
+  tenant: leartech
+  triggeredBy: human

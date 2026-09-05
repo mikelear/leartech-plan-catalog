@@ -1,0 +1,48 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: harden-agentrun-terminal
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/agentrun-terminal-corruption
+      goal: "Fix a recurring AgentRun-corruption bug in the AgentRun reconciler\n(internal/controller/agentrun_controller.go).\
+        \ Symptom (seen TWICE \u2014\nagent-test-mode and rebuild-agent-dashboard): a run whose agent\
+        \ pod actually\nFINISHED (exit 0, logged run_end) and reported status.targetPR nonetheless\nends\
+        \ phase=Failed with an EMPTY status.message and NIL status.completionTime.\nThat is NOT the normal\
+        \ finish() path (finish(Failed) always sets a message),\nso it comes from a partial/interrupted\
+        \ reconcile \u2014 a leader-election lease\nflap (\"Error retrieving lease lock\" around the completion),\
+        \ a dead-runner /\nretry-cap mis-fire, or a status patch racing the flap \u2014 leaving the object\
+        \ in\nan inconsistent terminal state. Transient apiserver errors are SUPPOSED to\nrequeue, so\
+        \ a completing run must never settle Failed like this.\n\nINVESTIGATE first: trace every path\
+        \ that can set phase=Failed\n(finish(Failed), detectAndRecoverDeadRunners / retry-cap \"unrecoverable\"\
+        ,\nany status-patch), and find which can produce Failed WITHOUT a message /\ncompletionTime, or\
+        \ can fire while the Job/pod actually succeeded.\n\nIMPLEMENT these invariants (behaviour-preserving\
+        \ for genuine failures):\n1. EVERY terminal write is atomic + complete: a Failed (or any terminal)\n\
+        \   transition MUST set status.completionTime AND a non-empty status.message\n   (a reason). Never\
+        \ persist Failed with an empty message.\n2. COMPLETING-RUN GUARD: do not transition an AgentRun\
+        \ to Failed when the run\n   has evidence it completed successfully \u2014 specifically when status.targetPR\n\
+        \   is set OR the child Job/pod terminated with success (exit 0). In that case\n   settle Succeeded\
+        \ (or, if truly ambiguous, a Failed WITH a clear diagnostic\n   message \u2014 never empty). A\
+        \ dead-runner/retry-cap pass must re-check the\n   Job/pod's real terminal state before declaring\
+        \ the run dead.\n3. TRANSIENT ERRORS REQUEUE, never corrupt: a lease-lock / apiserver GET\n  \
+        \ error (or a lost-leadership blip) mid-completion must return an error to\n   requeue, NOT write\
+        \ a partial terminal status. Guard the terminal write so\n   a partial reconcile can't leave phase=Failed\
+        \ with the rest unset.\n\nAdd unit tests reproducing the corruption pattern: an AgentRun whose\
+        \ pod\nsucceeded + targetPR is set, subjected to a dead-runner/retry pass and/or a\ntransient\
+        \ error \u2014 assert it settles Succeeded (or a Failed WITH message +\ncompletionTime), and NEVER\
+        \ Failed-with-empty-message/nil-completionTime.\nDo NOT change genuine-failure behaviour (a real\
+        \ crash/NotFound still Fails,\nbut WITH a reason + completionTime). Own the PR + take gates green.\n"
+      name: harden-agentrun-terminal
+      repo: leartech-orchestrator-controller
+    name: harden-terminal
+    repo: mikelear/leartech-orchestrator-controller
+  tenant: leartech
+  triggeredBy: human

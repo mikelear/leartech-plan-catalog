@@ -1,0 +1,20 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: e2e-portal-demo-7qz02b
+  namespace: jx-staging
+spec:
+  paused: true
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: main
+    name: scaffold
+    repo: mikelear/demo-repo
+  tenant: acme
+  triggeredBy: user-test-platform-admin

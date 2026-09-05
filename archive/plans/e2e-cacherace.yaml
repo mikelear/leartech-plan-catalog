@@ -1,0 +1,32 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=5
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: e2e-cacherace
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: test/e2e-cacherace
+      goal: "Make a trivial no-op change (or an empty commit) and open a PR via the open_pr tool. Change\
+        \ no real logic \u2014 this is an infrastructure test of the release/verify chain."
+      name: empty-commit
+      repo: mikelear/leartech-qa-canary
+    kind: pr
+    name: empty-commit
+    repo: mikelear/leartech-qa-canary
+  - dependsOn:
+    - empty-commit
+    kind: check
+    name: empty-commit-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.empty-commit.pr}
+      repo: mikelear/leartech-qa-canary
+      service: leartech-qa-canary
+  triggeredBy: user-test-platform

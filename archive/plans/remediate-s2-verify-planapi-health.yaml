@@ -1,0 +1,38 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: remediate-s2-verify-planapi-health
+  namespace: jx-staging
+spec:
+  paused: true
+  remediates:
+  - name: s2-verify-planapi
+    namespace: jx-staging
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: deploy-health
+      clusters:
+      - gcp
+      - az
+      goal: "Deterministically verify the brief's successCriteria for leartech-plan-api. DIAGNOSIS: the\
+        \ s2-verify-planapi 'verify-release-passed' step failed as a FALSE-NEGATIVE \u2014 release-pipeline-status\
+        \ was invoked with empty service='' and cluster='' and the AgentRun crashed (BackoffLimitExceeded),\
+        \ so it failed closed with no target to check. There is NO source-level release defect: at authoring\
+        \ time the release fired (tag v0.0.15-az, published 2026-08-08T19:04:32Z, before the 19:14:27Z\
+        \ failure event), the jx-promote PRs merged on BOTH clusters (gcp #1360 -> 0.0.16, az #1161 ->\
+        \ 0.0.15), and the jx-staging deployment is 2/2 available running 0.0.16 with version_match=true.\
+        \ This step re-confirms that end state via leartech-k8s.deploy_health across both clusters. Version\
+        \ is intentionally omitted so deploy-health derives the promoted version per-cluster (the gcp/az\
+        \ version skew is the expected multi-cluster release-race pattern, not a fault)."
+      name: verify-deploy-healthy
+      namespace: jx-staging
+      service: leartech-plan-api
+    name: verify-deploy-healthy
+    repo: mikelear/leartech-plan-api
+  tenant: leartech

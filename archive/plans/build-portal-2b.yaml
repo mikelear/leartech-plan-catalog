@@ -1,0 +1,45 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: build-portal-2b
+  namespace: jx-staging
+spec:
+  paused: true
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: feat/portal-2b-design
+      goal: "Portal Phase-2 increment 2: make the ShipProven portal FAITHFUL to the design mock and\n\
+        complete all 5 views, driven by REAL plan-api data. Increment 1 already merged (portal\n0.0.2):\
+        \ auth/OIDC login wiring + Plans list + plan-detail scaffold + routes/models for the\n5 views.\
+        \ Do NOT rebuild that \u2014 POLISH + COMPLETE it. plan-api auth is now fixed\n(fix-planapi-auth-jwks),\
+        \ so the browser's direct plan-api calls return real data \u2014 build\nand verify against it.\n\
+        \nDESIGN FIDELITY (the main ask \u2014 the shipped 0.0.2 looks white/auth-ui-like, NOT the mock):\n\
+        - READ the mock and port it faithfully: ~/leartech/automated-agent-design/docs/plan-viz.html\n\
+        \  (in leartech-automated-agent-design). Match its palette, typography, spacing, layout,\n  and\
+        \ the overall look/feel \u2014 colours especially (the current styles.scss light palette\n  does\
+        \ not match). Get as CLOSE as possible to the mock.\n- Make the LANDING (/plans) a proper designed\
+        \ screen (the Frontier view per the mock), not\n  a plain list.\n\nFIVE VIEWS (complete + populate\
+        \ each from the SDK DTO): Frontier, Lifecycle grid, DAG,\nText, PR-gates \u2014 render every state\
+        \ the DTO carries (Plan.phase, Step.stepPhase, AgentRun\nagentPhase when != stepPhase, prOutcome,\
+        \ derived stranded/frozen-lane/az\u2260gcp gate-split,\nconditions[], decisions[], timestamps,\
+        \ message; gates from GET /plans/:name/steps/:step/\ngates, null history \u2192 \"\u2013\", never\
+        \ fabricate). Plus the Create-Plan form (admin-gated).\n\nE2E-UI (aggressive, doubles as the USER\
+        \ DEMO \u2014 now runnable): the ng image has Chromium;\nrun `npm ci --legacy-peer-deps && npm\
+        \ test` locally + meet the 60% coverage floor before\npushing (feedback_ng_agent_cannot_run_ng_test_no_browser).\
+        \ Playwright: log in \u2192 walk all 5\nviews on real/seeded plans \u2192 create a Plan \u2192\
+        \ verify it appears; write it as a coherent\nnarrated walkthrough. MUST be valid in BOTH contexts\
+        \ (PR preview + post-deploy staging\narrival) \u2014 base URL from env, render-mode-agnostic (feedback_e2e_must_pass_in_all_contexts).\n\
+        Keep iterating e2e-ui toward the mock look/feel.\n\nLean diff (no vendor). Own the PR, drive BOTH\
+        \ clusters' gates green (incl end2end-ui)\nTHROUGH TO MERGE \u2192 release \u2192 live.\n"
+      name: build-portal-2b
+      repo: leartech-ship-proven-portal
+    name: design
+    repo: mikelear/leartech-ship-proven-portal
+  tenant: leartech
+  triggeredBy: human

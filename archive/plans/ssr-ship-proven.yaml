@@ -1,0 +1,94 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: ssr-ship-proven
+  namespace: jx-staging
+spec:
+  paused: true
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: feat/ssr-prerender-seo
+      goal: "The ShipProven marketing site (Angular 20, already live) is a plain CSR SPA:\n`ng build`\
+        \ ships an empty <app-root>, so crawlers / social scrapers / AI fetchers\nsee NO content, and\
+        \ there's no robots.txt/sitemap/SEO meta. Make it a REAL,\ncrawlable website via prerender (SSG)\
+        \ + SEO \u2014 WITHOUT changing the deploy model\n(must stay static-hostable; NO runtime Node\
+        \ server). This mirrors the shared\ntemplate initiative leartech-angular-service-template-add-ssr-prerender-seo\
+        \ \u2014 if\nthat PR has already merged, read it and copy its approach; otherwise apply the\n\
+        same changes directly here. Do NOT restyle or rewrite the marketing copy/content.\n\nRead first\
+        \ (no edits): package.json (Angular ^20; use `npm install --legacy-peer-deps`),\nangular.json\
+        \ (build target, outputPath, assets/public), src/main.ts, src/app/\napp.config.ts, src/app/app.routes.ts,\
+        \ the landing components, src/index.html,\nthe Dockerfile / nginx serving config, and .lighthouse/jenkins-x/\
+        \ (the preview +\nend2end-ui pipeline).\n\nChanges:\n1. SSR/prerender scaffolding, STATIC output:\
+        \ `ng add @angular/ssr`; set\n   `outputMode: \"static\"` on the build target (prerendered static\
+        \ files, NO\n   runtime server). Use the server-routing API matching the installed @angular/ssr.\n\
+        2. Per-route render modes: src/app/app.routes.server.ts. This is a pure marketing\n   site \u2192\
+        \ set ALL routes to RenderMode.Prerender. (No Client/app routes needed;\n   do NOT use RenderMode.Server.)\n\
+        3. SEO: src/app/core/seo/seo.service.ts (Title + Meta: title, description, OG\n   title/description/type/url/image/site_name,\
+        \ Twitter card, canonical \u2014 SSR-safe,\n   guard any document access with isPlatformBrowser/DOCUMENT)\
+        \ +\n   app-title-strategy.ts (TitleStrategy reading route.data title/description/image,\n   registered\
+        \ in app.config providers). Add title+description to each route's data\n   using the site's REAL\
+        \ section copy (hero/problem/how-it-works/team/pricing/etc.).\n   Add unit specs for both (keep\
+        \ coverage at/above the gate).\n4. Static SEO assets: public/robots.txt (allow all + Sitemap:\
+        \ reference,\n   placeholder host commented as consumer-set), public/sitemap.xml (site's real\n\
+        \   routes, placeholder host), and src/index.html head defaults (html lang, default\n   description,\
+        \ og:site_name, twitter:card, theme-color, Organization JSON-LD).\n5. SSR-safety: grep components/services\
+        \ for window/document/localStorage/navigator\n   and guard them. IF this site uses provideLeartechAuth\
+        \ / an EnvironmentService\n   APP_INITIALIZER that fetches /api.conf.json, guard it to no-op when\n\
+        \   !isPlatformBrowser so prerender doesn't hang on the fetch (marketing prerender\n   needs no\
+        \ runtime config).\n6. STATIC SERVING (per-route index.html): update the Dockerfile/nginx static-server\n\
+        \   to try `$uri` -> `$uri/index.html` -> fallback `/index.html`, so deep-linked\n   prerendered\
+        \ routes serve their OWN html (SPA-fallback alone would defeat SEO).\n6b. MULTI-DOMAIN + CANONICAL\
+        \ (chart-driven, deploy-time): a site can be served on\n   MULTIPLE domains and the domain is\
+        \ a DEPLOY value, not a build constant. Make the\n   chart take `ingress.hosts` as a LIST (bind\
+        \ + TLS per host; single-host default for\n   back-compat) AND a single `seo.canonicalHost` value\
+        \ (with multiple domains you MUST\n   declare ONE canonical \u2014 canonical/og:url/sitemap/robots\
+        \ host \u2014 or crawlers see\n   duplicate content). Reconcile with static prerender: emit a\
+        \ placeholder token\n   (`__CANONICAL_HOST__`) for canonical/og:url/sitemap.xml/robots.txt at\
+        \ build, and\n   have the static server (nginx init / entrypoint envsubst) substitute the chart's\n\
+        \   `seo.canonicalHost` at container start. One static artifact, correct per-deploy SEO\n   URLs.\
+        \ (In preview values, set seo.canonicalHost so the check below can assert it.)\n7. PREVIEW CRAWLABILITY\
+        \ CHECK \u2014 DEDICATED Tekton step + markdown PR comment: add a\n   `seo-preview` step to .lighthouse/jenkins-x/pullrequest.yaml\
+        \ (runs AFTER preview\n   deploy) so it is its OWN GitHub status check AND posts a nice markdown\
+        \ PR comment\n   (like the ai-review verdict), not just folded into e2e-ui. After the asserts,\
+        \ POST\n   a \"\U0001F50E Crawlability / SEO preview\" comment (gh/GitHub API, bot token): a table\
+        \ of\n   per-route content \u2713/\u2717, SEO tags found, robots/sitemap served, PASS/FAIL verdict,\n\
+        \   updated in place on re-runs. Core asserts BLOCK the gate. REUSE the existing\n   e2e-ui/Playwright\
+        \ GCS-artifact + PR-comment mechanism (that step already uploads\n   artifacts to GCloud + comments\
+        \ links) \u2014 store the raw fetched HTML per route as\n   GCS artifacts and link them from the\
+        \ comment. The step\n   (Playwright `request` API / raw fetch, NO JS = the crawler view) runs\
+        \ against\n   the deployed PR preview URL: GET `/` + a marketing sub-route as RAW HTML \u2192\
+        \ assert\n   real content present (not empty <app-root>); deep-link the sub-route \u2192 its OWN\n\
+        \   content (catches serving misconfig); assert SEO tags + JSON-LD present in the\n   served HTML;\
+        \ GET /robots.txt + /sitemap.xml \u2192 200. PREVIEW CAVEAT: the preview\n   runs on the WILDCARD\
+        \ preview host, so canonical/og:url/sitemap absolute URLs\n   carry the placeholder/prod domain,\
+        \ NOT the preview host \u2014 assert they are\n   PRESENT + well-formed absolute URLs, do NOT\
+        \ assert they equal the preview URL.\n   Make the content/serving/tag-presence/robots-sitemap\
+        \ asserts BLOCKING.\n\nAcceptance: production build is static (no Node server); the built + SERVED\
+        \ landing\nHTML contains the real hero/heading content (not empty <app-root>) \u2014 proven by\
+        \ the\npreview crawlability check against the PR preview URL; robots.txt + sitemap.xml\nserved;\
+        \ per-route title/description set; prerender completes without an\n/api.conf.json server-side\
+        \ fetch; lint/type-check/build/test green (coverage held).\nKeep the diff LEAN (no vendor). Own\
+        \ the PR + drive BOTH clusters' gates green\n(incl. the new preview crawlability check + end2end-ui)\
+        \ THROUGH TO MERGE.\n"
+      name: ssr-ship-proven
+      repo: leartech-ship-proven-website
+    name: add-ssr
+    repo: mikelear/leartech-ship-proven-website
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - add-ssr
+    inputs:
+      action: release-health-check
+      budgetMinutes: 60
+      healthPath: /health
+      namespace: jx-staging
+      service: leartech-ship-proven-website
+    name: release-check
+  tenant: leartech
+  triggeredBy: human

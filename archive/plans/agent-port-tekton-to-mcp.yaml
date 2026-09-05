@@ -1,0 +1,39 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: agent-port-tekton-to-mcp
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    budgetIter: 10
+    inputs:
+      base: main
+      branch: agent/port-tekton-to-mcp
+      goal: "Migrate the agent's in-process tekton shim to the real remote MCP. The Go leartech-mcp-servers\
+        \ `tekton` server (mounted at /mcp/tekton) now exposes ALL the tools gate/mcp_servers/tekton.py\
+        \ reimplements via kubectl: list_pipelineruns_for_pr, step_status, step_logs, cancel_pipelinerun,\
+        \ cancel_superseded_for_pr, wait_first_failure (verified live on the deployed MCP). Do the port:\
+        \ (1) In gate/mcp_servers/remote.py, add to REMOTE_MCPS: 'leartech-tekton' -> '/mcp/tekton' (so\
+        \ build_remote_mcp_servers registers it as an authed remote MCP, same as leartech-pr-context).\
+        \ (2) In gate/agent/main.py AND gate/agent/initiative.py, replace the mcp__leartech-tekton__*\
+        \ tool names in MCP_ALLOWED_TOOLS (+ INITIATIVE_TEKTON_TOOLS) to point at the remote server, and\
+        \ REMOVE the in-process build_tekton_server() entry from the mcp_servers dict. (3) The two tools\
+        \ that are agent-LOCAL and must NOT move to the MCP \u2014 classify_step_failure (LLM-based failure\
+        \ classification via gate.agent.step_failure_diagnosis) and rebase_branch_on_base (git ops on\
+        \ the cloned workspace) \u2014 relocate them out of gate/mcp_servers/tekton.py into a small in-process\
+        \ helper server (e.g. gate/mcp_servers/agent_local.py with build_agent_local_server exposing just\
+        \ those two), keep them wired in mcp_servers, and update the prompt/tool-allowlist names accordingly.\
+        \ (4) DELETE gate/mcp_servers/tekton.py and its tests. Do NOT touch pipeline_server.py, criteria_server.py,\
+        \ or artifacts_server.py (separate phases / keep-local). (5) Run the full test suite green (uv\
+        \ run pytest). Ruff + mypy clean. Open the PR via the open_pr MCP tool (namespace=$AGENT_RUN_NAMESPACE).\n"
+      name: port-tekton-shim-to-remote-mcp
+      repo: leartech-automated-agent
+    name: port-tekton-shim-to-remote-mcp
+    repo: mikelear/leartech-automated-agent
+  triggeredBy: mcp-shim-migration-phase-2-tekton

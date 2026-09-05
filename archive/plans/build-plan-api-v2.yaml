@@ -1,0 +1,71 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=2
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: build-plan-api-v2
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/plan-read-api-v2
+      goal: "Build the read + guarded-write Plan/AgentRun HTTP API for the ShipProven portal\non leartech-plan-api\
+        \ (scaffolded Go service). A PRIOR attempt (branch\nfeat/plan-read-api, PR #2 \u2014 now CLOSED)\
+        \ committed the Go vendor/ dir \u2192 a\n+1,982,063-line / 4,956-file PR that broke ai-review\
+        \ (GitHub diff 406 too_large,\n>300 files) and left pr/test red. DO NOT repeat that. Start from\
+        \ a FRESH branch.\n\nHARD RULES to keep the PR reviewable:\n1. NEVER commit vendor/. Add `vendor/`\
+        \ to .gitignore. Do NOT run `go mod vendor`\n   (or if you must vendor locally, never commit it).\n\
+        2. Import the PRIVATE module github.com/mikelear/leartech-orchestrator-controller/\n   api/v1alpha1\
+        \ via modules, NOT vendoring: set GOPRIVATE=github.com/mikelear/*\n   and rely on the build's\
+        \ GitHub auth (the estate's private-module pattern). Add\n   the require to go.mod + go.sum only.\n\
+        3. Do NOT commit generated trees or large binaries. docs/swagger.json + swagger.yaml\n   (from\
+        \ swag) are fine (small). Keep the whole PR well under GitHub's 300-file\n   diff cap.\n\nAlso\
+        \ STRIP the DB (this service is DB-LESS \u2014 reads/writes CRDs via the k8s client):\ndelete\
+        \ DATABASE_URL + the db secretKeyRef from the chart, delete the migrations\nJob/init + migrations/\
+        \ dir, remove pgx/db from cmd/server + internal + config. This\nfixes the CreateContainerConfigError\
+        \ the scaffold hit.\n\nThen implement (read + guarded create):\n- GET /plans, GET /plans/:name,\
+        \ POST /plans, keep /health + /healthz.\n- Use a controller-runtime client.Client (scheme registers\
+        \ v1alpha1), list/get for\n  reads, create for POST. SINGLE CLUSTER (pod's own cluster; no cross-cluster\
+        \ kubeconfig).\n- Map the CRD to a STABLE portal DTO carrying EVERY state the 5-view screen needs:\n\
+        \  Plan: name, phase(Pending|Running|Paused|Succeeded|Failed|Cancelled), tenant,\n    triggeredBy,\
+        \ paused, startTime, completionTime, message, conditions[], decisions[], steps[].\n  Step: name,\
+        \ agentType, repo, dependsOn[], hold, fanIn,\n    stepPhase(Pending|Running|AwaitingReview|AwaitingApproval|Succeeded|Failed|Cancelled),\n\
+        \    agentPhase(Pending|Queued|Running|Iterating|Succeeded|Failed|Cancelled),\n    agentRunName,\
+        \ pr, headBranch, prOutcome(opened|awaiting_review|merged|closed_unmerged), retryCount.\n- GATES\
+        \ endpoint GET /plans/:name/steps/:step/gates behind a GatesSource INTERFACE\n  (GitHubAdapter\
+        \ now: check-runs + parse ai-review comment; duration/history null \u2192\n  UI \"\u2013\"; GH\
+        \ bot token optional). A ResultsStoreAdapter is the durable follow-up.\n- WRITE guardrails on\
+        \ POST /plans: validate agentType exists + inputs vs\n  AgentType.InputSchema + dependsOn no-cycles;\
+        \ default spec.paused=true; triggeredBy\n  from the authed caller; require a plans:create scope/PlatformAdmin\
+        \ (403 else); audit log.\n- AUTH: gate /plans* via github.com/mikelear/leartech-go-common/pkg/auth\n\
+        \  ServiceClient.Middleware(...) (RFC 8707 audience leartech-plan-api), flag-gated +\n  fail-CLOSED,\
+        \ with a gate-ON httptest JWKS test.\n- RBAC: chart Role/ClusterRole granting the SA get/list/watch\
+        \ on agentruns+agenttypes\n  and get/list/watch/create on plans (NO update/delete/patch). Wire\
+        \ the SA (not default).\n- SDK PUBLISH: swaggo annotations + `swag init` \u2192 docs/swagger.json\
+        \ via Makefile, and\n  add the openapi-generation task to .lighthouse/jenkins-x/release.yaml\n\
+        \  (SwaggerServiceName: PlanApi, OutputLanguages \"angular typescript go\") \u2192\n  publishes\
+        \ @mikelear/leartech-plan-api-angular. Mirror leartech-auth-service.\n\nTESTS: CRD\u2192DTO mapping\
+        \ for every stepPhase/prOutcome/planPhase; /health=200 no DB;\nPOST /plans validation + paused-default\
+        \ + create-scope 403. Keep chart render + smoke green.\nOpen the PR (open_pr), OWN it, drive BOTH\
+        \ clusters' gates green (incl. ai-review \u2014\nwhich will now work because the diff is small)\
+        \ THROUGH TO MERGE.\n"
+      name: plan-api-build-v2
+      repo: leartech-plan-api
+    name: build-api
+    repo: mikelear/leartech-plan-api
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - build-api
+    inputs:
+      action: release-health-check
+      budgetMinutes: 60
+      healthPath: /health
+      namespace: jx-staging
+      service: leartech-plan-api
+    name: release-check
+  tenant: leartech
+  triggeredBy: human

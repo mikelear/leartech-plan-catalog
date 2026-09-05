@@ -1,0 +1,55 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=2
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: update-ship-proven-website-v2
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: feat/self-directing-mechanism
+      goal: "The ShipProven marketing site is ALREADY built + live in this repo (Angular).\nThe approved\
+        \ copy has gained ONE new mechanism card in the \"How it works\"\nsection (section 3), and it\
+        \ must be added, matching the existing site's\nstructure/style for the other 3.x mechanism cards\
+        \ (3.1 Pipeline-as-judge,\n3.2 Multi-provider consensus review, 3.3 Compounding memory / Scrum-Master\n\
+        loop, 3.4 Gateway moat). Insert it as \xA73.5, BEFORE the closing \"composable,\nnot monolithic\"\
+        \ principle (which stays last in the section). British English,\nconfident + precise, NO hype,\
+        \ verbatim where the copy gives headline/body.\n\nNEW CONTENT (add verbatim):\n\u2014 Card title\
+        \ / section: \"3.5 Self-directing & self-improving\"\n\u2014 Headline: \"It creates its own work\
+        \ \u2014 and upgrades itself \u2014 but still can't\n  bypass the gate.\"\n\u2014 Body: \"The\
+        \ organisation doesn't just execute the Plans it's given; it\n  *creates* them. The Infra agent\
+        \ monitors cluster health and turns what it\n  sees into new Plans; the Scrum-Master agent turns\
+        \ each retrospective into\n  Plans that improve the system itself \u2014 down to upgrading the\
+        \ agents' own\n  tooling (for example, adding tooling that verifies code locally on the\n  cluster\
+        \ before a full PR run). And every one of those self-generated changes\n  still has to pass the\
+        \ same ungameable pipeline and consensus review as\n  anything else. That's the combination enterprises\
+        \ and investors both want:\n  full autonomy and full control at once \u2014 a system that improves\
+        \ itself\n  without ever being trusted to police itself.\"\n\nRender it consistently with the\
+        \ existing 3.x cards. Emphasise the closing\nline (\"full autonomy and full control at once \u2026\
+        \ without ever being trusted to\npolice itself\") the way the other cards emphasise their key\
+        \ takeaway. Ensure\nthe section still ends with the \"composable, not monolithic\" principle after\n\
+        this new 3.5 card. Do a light reconcile pass so the How-it-works section reads\ncleanly with the\
+        \ new card in sequence. Keep the app buildable + the /health +\napi.conf.json wiring intact. Update/extend\
+        \ the e2e-ui (Playwright) so the new\n\xA73.5 section renders. Open the PR (open_pr), OWN it,\
+        \ drive BOTH clusters' gates\ngreen (incl. end2end-ui) THROUGH TO MERGE.\n"
+      name: ship-proven-website-content-update-v2
+      repo: leartech-ship-proven-website
+    name: content-update
+    repo: mikelear/leartech-ship-proven-website
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - content-update
+    inputs:
+      action: release-health-check
+      budgetMinutes: 60
+      healthPath: /health
+      namespace: jx-staging
+      service: leartech-ship-proven-website
+    name: release-check
+  tenant: leartech
+  triggeredBy: human

@@ -1,0 +1,88 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: build-plan-api-code
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/plan-read-api
+      goal: "leartech-plan-api was scaffolded from leartech-go-service-template but the real\ncode was\
+        \ never built and the scaffold deploy is BROKEN: it has a mandatory\nDATABASE_URL secretKeyRef\
+        \ (optional:false) \u2192 CreateContainerConfigError, 0\nready, /health 503. This service is READ-ONLY\
+        \ and DB-LESS \u2014 it reads the\nPlan/AgentRun CRDs via the k8s client, NOT a database.\n\n\
+        STEP 0 \u2014 REMOVE the database dependency entirely (this alone fixes the deploy):\ndelete DATABASE_URL\
+        \ + the db secretKeyRef from the chart, delete the migrations\nJob/init + migrations/ dir, remove\
+        \ pgx/db wiring from cmd/server + internal, and\ndrop the DB from config. After this, `helm template`\
+        \ renders NO mandatory\nsecretKeyRef and /health returns 200 with no DB.\n\nThen build the read-only\
+        \ Plan/AgentRun HTTP API for the ShipProven portal. This\nis the FIRST service to front these\
+        \ CRDs. Use the REAL conventions (verified \u2014\ndo not invent):\n\nCRD TYPES (import, do NOT\
+        \ re-declare):\n  import \"github.com/mikelear/leartech-orchestrator-controller/api/v1alpha1\"\
+        \nImportable api/v1alpha1 package (group agent.leartech.io). Add to go.mod;\nPRIVATE module \u2192\
+        \ GOPRIVATE=github.com/mikelear/*. Use a controller-runtime\nclient.Client (scheme registers v1alpha1),\
+        \ list/get only. SINGLE CLUSTER: read\nthe pod's own cluster (no cross-cluster kubeconfig).\n\n\
+        ENDPOINTS (read + GUARDED create): GET /plans, GET /plans/:name, POST /plans,\nkeep /health +\
+        \ /healthz.\nMap the CRD to a STABLE portal DTO (do NOT leak raw k8s objects) carrying EVERY\n\
+        state the 5-view screen needs:\n  Plan: name, phase(Pending|Running|Paused|Succeeded|Failed|Cancelled),\
+        \ tenant,\n        triggeredBy, paused, startTime, completionTime, message,\n        conditions[](type,status,reason,message),\
+        \ decisions[](bounded), steps[].\n  Step: name, agentType, repo, dependsOn[], hold, fanIn,\n \
+        \       stepPhase(Pending|Running|AwaitingReview|AwaitingApproval|Succeeded|\n               \
+        \   Failed|Cancelled),\n        agentPhase(Pending|Queued|Running|Iterating|Succeeded|Failed|Cancelled),\n\
+        \        agentRunName, pr, headBranch,\n        prOutcome(opened|awaiting_review|merged|closed_unmerged),\
+        \ retryCount.\nGATES (for the PR-gates view): GET /plans/:name/steps/:step/gates behind a\nGatesSource\
+        \ INTERFACE \u2014 GitHubAdapter now (a ResultsStoreAdapter is the durable\nfollow-up; source\
+        \ must swap without touching handlers/DTO). GitHubAdapter: for a\nstep with a PR, fetch the PR's\
+        \ check-runs (per cluster az/gcp) + parse the\nai-review verdict from PR comments (score,label,per-reviewer,findings),\
+        \ as\ndocs/plan-viz.html in leartech-automated-agent-design models it. duration/history\nunavailable\
+        \ \u2192 return null, UI renders \"\u2013\"; do NOT fabricate. GH bot token\noptional; if absent,\
+        \ gates endpoint returns 501/empty, other endpoints still work.\n\nWRITE PATH \u2014 POST /plans\
+        \ (GUARDED create; this is how other AI clients + the\nMCP create Plans). Creating a Plan fires\
+        \ the autonomous build machine, so treat\nit as a privilege escalation:\n- Validate the submitted\
+        \ spec: each step's agentType exists (AgentType CR);\n  step.inputs validate against that AgentType's\
+        \ InputSchema; dependsOn references\n  real step names with NO cycles; repo format ok.\n- GUARDRAIL:\
+        \ created Plans default to spec.paused=true (the CRD supports it) so a\n  human unpauses before\
+        \ anything runs. Only allow immediate-start if the caller\n  has an explicit elevated scope AND\
+        \ passes autostart=true.\n- Set spec.triggeredBy from the AUTHENTICATED caller identity (JWT subject\
+        \ /\n  client id) \u2014 never client-supplied \u2014 for audit truth. Log an audit line on\n\
+        \  create (structured).\n- Require a SPECIFIC permission/scope to create (e.g. PlatformAdmin or\
+        \ a\n  plans:create scope) \u2014 NOT merely any valid token. Return 403 otherwise.\n- Return\
+        \ the created Plan (name + status). Annotate with swaggo so POST /plans is\n  in the OpenAPI (\u2192\
+        \ the MCP create tool + the SDK).\n\nAUTH (all authed together): gate /plans* behind the Hydra\
+        \ JWT via\ngithub.com/mikelear/leartech-go-common/pkg/auth ServiceClient.Middleware(...)\non a\
+        \ gin group (RFC 8707 audience = leartech-plan-api), per leartech-auth-service.\nFlag-gated +\
+        \ fail-CLOSED when enabled; add a gate-ON test with an httptest JWKS\nstub (never ship only a\
+        \ Required:false test).\n\nRBAC: chart Role/ClusterRole + binding granting the ServiceAccount\
+        \ get/list/watch\non agentruns + agenttypes and get/list/watch/CREATE on plans in agent.leartech.io\n\
+        (create is needed for POST /plans; still NO update/delete/patch). Wire the SA onto\nthe deployment\
+        \ (NOT the default SA).\n\nSDK PUBLISH (the portal depends on it): swaggo/swag annotations\n(@Summary/@Tags/@Router/@Security/clean\
+        \ @ID), `swag init` \u2192 docs/swagger.json via\nMakefile, and add the openapi-generation task\
+        \ to .lighthouse/jenkins-x/release.yaml\n(SwaggerServiceName: PlanApi, SpecPath: ./docs/swagger.json,\
+        \ OutputLanguages:\n\"angular typescript go\") so release publishes @mikelear/leartech-plan-api-angular\n\
+        \u2014 mirror leartech-auth-service's release.yaml.\n\nTESTS: unit-test the CRD\u2192DTO mapping\
+        \ for EVERY stepPhase/prOutcome/planPhase\ncombination; assert /health = 200 with no DB; test\
+        \ POST /plans validation\n(bad agentType / cyclic dependsOn / schema-invalid inputs \u2192 4xx),\
+        \ the\npaused=true default, triggeredBy set from the caller, and the create-scope gate\n(403 without\
+        \ it). Keep chart render + smoke green.\nOwn the PR + drive BOTH clusters' gates green THROUGH\
+        \ TO MERGE (\u2192 release\npublishes the SDK).\n"
+      name: plan-api-build
+      repo: leartech-plan-api
+    name: build-api
+    repo: mikelear/leartech-plan-api
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - build-api
+    inputs:
+      action: release-health-check
+      budgetMinutes: 60
+      healthPath: /health
+      namespace: jx-staging
+      service: leartech-plan-api
+    name: release-check
+  tenant: leartech
+  triggeredBy: human

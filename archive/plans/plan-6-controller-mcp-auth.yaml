@@ -1,0 +1,59 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=2
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: plan-6-controller-mcp-auth
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    budgetIter: 8
+    inputs:
+      base: main
+      branch: agent/controller-internal-services-client
+      description: "Provision a controller-internal-services s2s Hydra client (scope leartechapi.internal_services,\
+        \ audience allow-list [leartech-mcp]) so the orchestrator-controller can mint aud=leartech-mcp\
+        \ to call the pr_context MCP (its PROutcomeFetcher currently logs configured:false \u2192 can't\
+        \ resolve AwaitingReview steps). Mirror the existing orch-internal-services / mcp-internal-services\
+        \ entries."
+      goal: "In leartech-auth-service scripts/setup-internal-clients.sh add a new INTERNAL_CLIENTS_DEFAULT\
+        \ entry:\n`controller-internal-services|leartechapi.internal_services|leartech-mcp` (audience\
+        \ allow-list =\nleartech-mcp; add leartech-catalog-mcp too if the controller may read that later\
+        \ \u2014 else just\nleartech-mcp). The reconciling provisioning Helm hook applies it to live Hydra\
+        \ on deploy. Ensure the\nclient's creds are synced to a k8s secret the controller can consume\
+        \ (follow how orch-internal-services\ncreds reach orch \u2014 ESO ExternalSecret / the provisioning\
+        \ secret pattern); document the secret name +\nkeys for the controller step. Extend the e2e provisioning-audience\
+        \ assertion for the new client. All\nPR gates green incl real ai-review. Open a PR. Hold it.\n"
+      name: authsvc-controller-client
+      repo: leartech-auth-service
+    name: authsvc-controller-client
+    repo: mikelear/leartech-auth-service
+  - agentType: leartech-agent-py
+    budgetIter: 9
+    inputs:
+      base: main
+      branch: agent/wire-mcp-auth-config
+      description: "Wire the orchestrator-controller's MCP + s2s auth CONFIG so the (already-built) pr_context\
+        \ PROutcomeFetcher flips from configured:false \u2192 true and can resolve AwaitingReview steps.\
+        \ The code exists (#36); only the deployment config is missing (controller has 0 auth/mcp env\
+        \ vars)."
+      goal: "Make the controller an authed MCP client at runtime. In charts/leartech-orchestrator-controller\
+        \ wire\nthe env the fetcher reads to become configured:true: the internal MCP base URL\n(LEARTECH_PLATFORM_MCPS_URL\
+        \ = http://leartech-mcp-servers.jx-staging.svc.cluster.local \u2014 confirm the\nexact env var\
+        \ name the fetcher reads), the Hydra token URL, and the s2s client creds\n(LEARTECH_AUTH_CLIENT_ID=controller-internal-services\
+        \ + LEARTECH_AUTH_CLIENT_SECRET via secretKeyRef).\nAdd an ESO ExternalSecret for the controller-internal-services\
+        \ creds (secret name/keys per the\nauth-service step). Mirror how orch wires orch-internal-services.\
+        \ GitOps config on BOTH clusters\n(gsm + akv, SOURCE not config-root) if the URL/toggle needs\
+        \ per-cluster values. Fail-safe: if unset,\nkeep degrading to Noop (don't crash). Verify locally\
+        \ the fetcher's config gate reads these vars.\nAll PR gates green incl real ai-review. Open a\
+        \ PR. Hold it.\n"
+      name: controller-wire-mcp-auth
+      repo: leartech-orchestrator-controller
+    name: controller-wire-mcp-auth
+    repo: mikelear/leartech-orchestrator-controller
+  tenant: platform
+  triggeredBy: session-plan-6-controller-mcp-auth-2026-07-19

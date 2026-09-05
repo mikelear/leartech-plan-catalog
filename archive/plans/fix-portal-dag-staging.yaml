@@ -1,0 +1,47 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-portal-dag-staging
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: fix/dag-view-staging-fixture
+      goal: "Fix the portal end2end-ui spec `05-dag-text.spec.ts:38` ('plan detail \u2014 DAG + Text views\
+        \ \u203A\nDAG renders levels + node cards with dep edges') which PASSES at PR-preview time but\
+        \ FAILS\nagainst STAGING \u2014 it's the last red test blocking the portal cluster qa-gate.\n\n\
+        CONFIRMED ROOT CAUSE (from the staging arrivals-observer e2e-ui pod log + the live Plan CRD):\n\
+        the test's `ensurePlanExists` helper (end2end-ui/support/*) ADOPTS an existing plan named\n`build-portal-2b`,\
+        \ which in staging is FLAT \u2014 its steps have no `dependsOn` edges (verified:\nstep `design`\
+        \ dependsOn=[]). The DAG view therefore renders no multi-level structure, so\n`getByTestId('dag-level-0').toContainText(...)`\
+        \ fails. At preview time the adopted/created plan\nhappens to have dep-edge structure, so it passes\
+        \ there \u2014 a preview-vs-staging data divergence.\n(The sibling 05-dag-text:64 Text view test\
+        \ PASSES; only the DAG-levels assertion fails.)\n\nFIX (must be green in BOTH preview AND staging\
+        \ \u2014 feedback_e2e_must_pass_in_all_run_contexts):\n- Make the DAG test use a DETERMINISTIC\
+        \ FIXTURE plan that always has multi-level dependency\n  edges, instead of adopting whatever plan\
+        \ exists. Options (pick the cleanest for this repo's\n  ensurePlanExists design): (a) have ensurePlanExists\
+        \ CREATE (or ensure) a dedicated fixture\n  plan \u2014 e.g. `portal-dag-fixture` \u2014 with\
+        \ \u22652 dependency LEVELS and explicit dependsOn edges\n  (so dag-level-0 + dag-level-1 + node\
+        \ cards + edges render deterministically), reusing the\n  existing admin/create-plan path (platform-admin\
+        \ creds are wired: PLATFORM_ADMIN_EMAIL/\n  PASSWORD); or (b) if adopting, SELECT a plan that\
+        \ has dep edges (filter for steps with\n  dependsOn) and skip/xfail deterministically only if\
+        \ none \u2014 but PREFER creating the fixture\n  so the assertion is always meaningful. Keep it\
+        \ idempotent (safe to re-run every arrival).\n- Do NOT weaken the assertion to make it pass vacuously\
+        \ \u2014 the test must still prove the DAG\n  renders levels + node cards + dep edges; just guarantee\
+        \ the underlying plan HAS that shape.\n- Run the e2e-ui locally (your image has Chromium) in staging-shape\
+        \ (STAGING_URL) to confirm\n  05-dag-text:38 now passes, and confirm the other specs still pass\
+        \ (17\u219218/18).\nOpen the PR, get BOTH clusters' gates green, STOP at AwaitingReview. Merging\
+        \ it releases a new\nportal version \u2192 new Arrival \u2192 the observer re-runs e2e-ui \u2192\
+        \ the cluster qa-gate clears.\n"
+      name: fix-portal-dag-staging
+      repo: leartech-ship-proven-portal
+    name: fix-dag-e2e
+    repo: mikelear/leartech-ship-proven-portal
+  tenant: leartech
+  triggeredBy: human

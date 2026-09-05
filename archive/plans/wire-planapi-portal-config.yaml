@@ -1,0 +1,59 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=2
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: wire-planapi-portal-config
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: chart-config
+      cluster: gcp
+      goal: "GCP (jx-build-cluster-gsm) \u2014 edit the helmfiles SOURCE only (never config-root/). Two\n\
+        services, EXACT files under helmfiles/jx-staging/configs/:\n1) leartech-ship-proven-portal.yaml\
+        \ (create if missing) \u2014 set the portal chart's runtime\n   api.conf.json VALUES (chart reads\
+        \ .Values.config):\n     config.api: https://leartech-plan-api-jx-staging.jx.leartech.com\n  \
+        \   config.auth.authority: https://hydra-jx-staging.jx.leartech.com\n     config.peers.leartech-plan-api:\
+        \ https://leartech-plan-api-jx-staging.jx.leartech.com\n   (leave config.auth.clientId=frontend-services,\
+        \ scope, audiences=[leartech-plan-api] as\n   chart defaults). This is what a live ConfigMap patch\
+        \ proved fixes the BLANK render.\n2) Register the portal as an OIDC UI on the auth-service so\
+        \ login works: add the portal's\n   callback to the frontend-services OAuth2Client redirectUris\
+        \ AND the portal origin to\n   CORS. Read leartech-auth-service.yaml \u2014 it wires redirectUris/CORS\
+        \ from keys like\n   authUIURL/adminUIURL. Add the portal the SAME way (a portalUIURL / registeredUIs\
+        \ entry\n   if the chart supports it; otherwise add https://leartech-ship-proven-portal-jx-staging.jx.leartech.com/auth/callback\n\
+        \   + /silent-renew.html to the client redirectUris and the origin\n   https://leartech-ship-proven-portal-jx-staging.jx.leartech.com\
+        \ to the ingress\n   cors-allow-origin AND hydra serve.public.cors.allowed_origins \u2014 mirror\
+        \ exactly how\n   auth-admin-ui is registered). Do NOT drop existing UIs.\nDo NOT touch any other\
+        \ service (NOT catalog-mcp, NOT plan-api here \u2014 GCP plan-api is gsm\n#1231 already). Open\
+        \ ONE PR for review (config PRs merge with Mike's approval).\n"
+      service: leartech-ship-proven-portal
+    name: gcp
+    repo: mikelear/jx-build-cluster-gsm
+  - agentType: leartech-agent-infra
+    inputs:
+      action: chart-config
+      cluster: az
+      goal: "AZ (jx-build-cluster-akv) \u2014 edit helmfiles SOURCE only. THREE things, EXACT files under\n\
+        helmfiles/jx-staging/configs/ (use the AZ .az.leartech.com hosts \u2014 do NOT use GCP hosts,\n\
+        and do NOT edit catalog-mcp):\n1) leartech-plan-api.yaml (create if missing) \u2014 mirror GCP\
+        \ gsm #1231 for AZ:\n     auth.enabled: true\n     auth.serverUrl: https://hydra-jx-staging.az.leartech.com\
+        \   # AZ Hydra issuer\n     auth.audience (or LEARTECH_AUTH_AUDIENCE): leartech-plan-api\n   (this\
+        \ takes effect once the chart fix fix-planapi-authurl-value lands \u2014 the chart will\n   render\
+        \ LEARTECH_AUTH_SERVER_URL from .Values.auth.serverUrl as a plain value).\n2) leartech-ship-proven-portal.yaml\
+        \ (create if missing) \u2014 portal runtime config values:\n     config.api: https://leartech-plan-api-jx-staging.az.leartech.com\n\
+        \     config.auth.authority: https://hydra-jx-staging.az.leartech.com\n     config.peers.leartech-plan-api:\
+        \ https://leartech-plan-api-jx-staging.az.leartech.com\n3) Register the portal OIDC UI on the\
+        \ AZ auth-service (leartech-auth-service.yaml): add\n   https://leartech-ship-proven-portal-jx-staging.az.leartech.com/auth/callback\
+        \ +\n   /silent-renew.html to frontend-services redirectUris, and the origin to ingress\n   cors-allow-origin\
+        \ AND hydra serve.public.cors.allowed_origins \u2014 same pattern as\n   auth-admin-ui, do not\
+        \ drop existing UIs.\nOpen ONE PR for review.\n"
+      service: leartech-ship-proven-portal
+    name: az
+    repo: mikelear/jx-build-cluster-akv
+  tenant: leartech
+  triggeredBy: human

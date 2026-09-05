@@ -1,0 +1,57 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mcp-plan-adapter
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/plan-mcp-forwarder
+      goal: "Add a \"plan\" MCP plugin to leartech-mcp-servers that lets other AI clients read\nand create\
+        \ Plans \u2014 implemented as a THIN FORWARDER to the leartech-plan-api\nservice. This is the\
+        \ FIRST reference implementation of the platform vision:\nMCP servers FORWARD to the actual services\
+        \ over HTTP; they contain NO business\nlogic and MUST NOT touch the Plan/AgentRun CRDs directly.\
+        \ leartech-plan-api is\nthe single implementation and the only CRD-fronting service.\n\nARCHITECTURE\
+        \ (do not deviate):\n- The plugin calls leartech-plan-api's REST API (its base URL from config/env,\n\
+        \  in-cluster service DNS) \u2014 it does NOT import the CRD types, does NOT use a k8s\n  client,\
+        \ does NOT re-implement validation. All logic (DTO mapping, create\n  validation, paused-default,\
+        \ audit) lives in plan-api; the MCP just forwards.\n- Prefer generating/consuming plan-api's published\
+        \ OpenAPI (the Go client from\n  its openapi-generation, @mikelear/... or the go client) so the\
+        \ forwarder stays\n  in lockstep with the spec \u2014 the \"plug in a service\" / OpenAPI-driven\
+        \ pattern.\n  If a generated Go client isn't available, call the documented REST endpoints\n \
+        \ directly, but keep the mapping mechanical (endpoint in \u2192 tool out).\n- Follow the existing\
+        \ leartech-mcp-servers conventions: the official MCP go-sdk,\n  the plug-in registry, stateless\
+        \ Streamable-HTTP (multi-replica safe).\n\nTOOLS (thin wrappers over plan-api endpoints):\n- list_plans\
+        \           \u2192 GET  /plans\n- get_plan(name)       \u2192 GET  /plans/:name\n- get_plan_gates(name,step)\
+        \ \u2192 GET /plans/:name/steps/:step/gates\n- create_plan(spec)    \u2192 POST /plans\nEach tool\
+        \ needs a RICH description + input schema so an AI client can author a\nVALID Plan: explain what\
+        \ a Plan is, the step shapes (infra steps use\ninputs.action, dev steps use inputs.goal), agentType/repo/dependsOn/inputs,\
+        \ and\ninclude 1-2 worked examples. create_plan must surface plan-api's guardrail: Plans\nare\
+        \ created paused by default (a human unpauses) \u2014 say so in the tool description.\n\nAUTH\
+        \ \u2014 this is a PUBLIC MCP, so it MUST be authed (do NOT repeat the\nplatform-mcps no-auth\
+        \ public-exposure footgun):\n- Gate the MCP behind the platform's public-MCP auth STANDARD (go-common\
+        \ /\n  bus-common auth, per-consumer scope), fail-CLOSED when enabled.\n- Forward the caller's\
+        \ identity/scope to plan-api on the s2s call so plan-api's\n  own create-scope gate (plans:create\
+        \ / PlatformAdmin) is authoritative \u2014 the MCP\n  does not decide authorization, it propagates\
+        \ it. read tools = lower scope;\n  create_plan = the elevated create scope.\n- Configure the s2s\
+        \ credentials for the MCP\u2192plan-api call per the estate's\n  service-to-service auth pattern.\n\
+        \nCATALOG: register this as a PUBLIC MCP option WITH AUTH in the MCP catalog /\nmcp-servers registry\
+        \ so clients can discover it (name, description, auth\nrequirement, the tools above). Make the\
+        \ public-vs-internal + auth-required\nproperties explicit in the registration.\n\nTESTS: unit-test\
+        \ each tool forwards to the correct plan-api endpoint + maps\nrequest/response faithfully (mock\
+        \ the plan-api HTTP client \u2014 do NOT stand up a\nreal cluster); test that create_plan requires\
+        \ the create scope (fail-closed\nwhen auth on); test the tool descriptions/schemas are present.\
+        \ Extend end2end if\nmcp-servers exercises tools there. Own the PR + drive BOTH clusters' gates\
+        \ green\nTHROUGH TO MERGE.\n"
+      name: mcp-plan-forwarder
+      repo: leartech-mcp-servers
+    name: plan-mcp-forwarder
+    repo: mikelear/leartech-mcp-servers
+  tenant: leartech
+  triggeredBy: human

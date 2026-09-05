@@ -1,0 +1,113 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=5
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: ba-agent-slice
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/ba-remediation-crd
+      goal: "Extend the Plan CRD + controller for event-driven remediation.\n1. Plan CRD (api/v1alpha1):\
+        \ add spec field `remediates: []PlanRef`\n   (references to plan(s) this plan remediates \u2014\
+        \ name+namespace) and a\n   status back-link `resolvedBy`. Add a new TERMINAL step/plan phase\n\
+        \   `Resolved` (distinct from Succeeded \u2014 the plan's OWN work may have\n   Failed; a SEPARATE\
+        \ remediation plan fixed the environment). Keep\n   history honest: do NOT rewrite Failed->Succeeded.\n\
+        2. Controller: when a plan that carries `remediates:[...]` reaches\n   Succeeded AND its final\
+        \ verification step succeeded, flip each\n   referenced plan's phase to `Resolved (by <plan>)`\
+        \ and set their\n   `resolvedBy`. One remediation may resolve MANY referenced plans.\n3. Loop-guard:\
+        \ dedupe remediation spawning on a root-cause SIGNATURE\n   (annotation) + a depth cap, so a cluster-wide\
+        \ cause can't storm N\n   remediation plans. Log what was deduped/capped (no silent drop).\nFull\
+        \ design: ~/leartech/Hub/status/ba-agent-and-event-remediation.md.\nUnit tests (envtest/fake client)\
+        \ for resolve-many + loop-guard +\nResolved-not-Succeeded. Structured logging. Own the PR to green\
+        \ + merge.\n"
+      name: ba-controller-crd
+      repo: leartech-orchestrator-controller
+    name: ba-controller-crd
+    repo: mikelear/leartech-orchestrator-controller
+  - agentType: leartech-agent-go
+    dependsOn:
+    - ba-controller-crd
+    inputs:
+      branch: feat/ba-event-adapter
+      goal: "Wire the event->BA flow (thin producer, smart consumer).\n1. PRODUCER: emit a Maestro event\
+        \ `release.deploy_failed` when a\n   release-health/release-monitor step fails closed \u2014 annotations\n\
+        \   {plan, step, service, cluster, promotePRs, podReasonRef}. NO\n   diagnosis in the producer\
+        \ (stays dumb).\n2. CONSUMER: register an `EventRegistration consumes: [release.deploy_failed]`\n\
+        \   (the proven Maestro consumer pattern: POST /consume_event) that, on\n   receipt, creates a\
+        \ BA AgentRun whose inputs are a BRIEF rendered from\n   the event via a prompt TEMPLATE (goal\
+        \ + successCriteria=release\n   re-checks healthy + context=evidence + resolves=[failed plan]).\n\
+        \   The prompt template is the ONLY infra-specific bit \u2014 keep it at this\n   edge, not in\
+        \ the BA agent.\n3. Gate behind MAESTRO_ENABLED (default off) \u2014 do not flip on by default.\n\
+        dependsOn ba-controller-crd (needs remediates/resolves). Uses\n[[reference_maestro_consumer_pattern]].\
+        \ Tests + structured logging.\nOwn the PR to green + merge.\n"
+      name: ba-event-adapter
+      repo: leartech-orchestrator-controller
+    name: ba-event-adapter
+    repo: mikelear/leartech-orchestrator-controller
+  - agentType: leartech-agent-py
+    inputs:
+      branch: feat/ba-agent
+      goal: "Add the BA agent runtime: gate/agent/ba_agent.py (a new entrypoint,\nmirroring how infra_agent.py\
+        \ is an entrypoint on the agent image).\nIt takes a BRIEF (the Initiative contract EXTENDED with\
+        \ successCriteria,\ncontext, and resolves:[PlanRef]) and OUTPUTS a Plan CRD \u2014 it does NOT\n\
+        open a PR. Behaviour:\n- Read the brief (goal / successCriteria / context / resolves).\n- Connect\
+        \ the internal MCP servers as an authed client: platform_state\n  (list_plans / list_runs / get_plan_state\
+        \ / deploy_health) to see live\n  state, and control_plane/agent_api (create_plan / amend_plan)\
+        \ to\n  author.\n- Use the ai-gateway for reasoning + web research: chat via\n  AI_GATEWAY_API_KEY,\
+        \ model=claude (Opus 4.8 \u2014 NOT auto, which can\n  downgrade to GLM); web research via POST\
+        \ /v1/search and /v1/fetch.\n- Correlate live plans, then author a remediation/target Plan via\n\
+        \  create_plan \u2014 DRAFT-BY-DEFAULT (hold:true + draft annotation) so it\n  never triggers\
+        \ heavy downstream. Its FINAL step must verify the\n  brief's successCriteria (e.g. a release-health-check).\
+        \ Set the plan's\n  remediates:[...] from the brief's resolves. May author/amend MULTIPLE\n  plans\
+        \ (cluster-wide multi-resolve).\nBA has ZERO infra-specific knowledge \u2014 it only consumes\
+        \ the brief.\nDesign: ~/leartech/Hub/status/ba-agent-and-event-remediation.md.\nTests with mocked\
+        \ MCP + a stubbed gateway (no live calls). Structured\nlogging. Own the PR to green + merge.\n"
+      name: ba-agent-code
+      repo: leartech-automated-agent
+    name: ba-agent-code
+    repo: mikelear/leartech-automated-agent
+  - agentType: leartech-agent-py
+    dependsOn:
+    - ba-agent-code
+    inputs:
+      branch: feat/ba-agenttype-wiring
+      goal: "Register + wire the BA agent as a first-class AgentType.\n1. AgentType manifest `leartech-agent-ba`\
+        \ (agent.leartech.io/v1alpha1):\n   image = the agent-py image, entrypoint override = ba_agent\
+        \ (mirror\n   the leartech-agent-infra AgentType pattern).\n2. Chart/GitOps wiring for the BA\
+        \ pod: an ExternalSecret injecting the\n   gateway virtual key as env AI_GATEWAY_API_KEY \u2014\
+        \ GSM key\n   `agent-ba-gateway-key` (raw) / AKV `ai-agent-ba-gateway` (property\n   apiKey);\
+        \ plus env for the internal gateway URL\n   http://leartech-ai-gateway.ai-gateway.svc:8080 and\
+        \ model=claude.\n3. NetworkPolicy for the BA pod = GATEWAY-ONLY egress (plus the internal\n  \
+        \ MCP + k8s API it needs) \u2014 no blanket internet (search/fetch go\n   THROUGH the gateway).\
+        \ Make secretKeyRef optional:true for previews.\ndependsOn ba-agent-code (entrypoint must exist).\
+        \ Design +\nsecret names in ~/leartech/Hub/status/ai-gateway-ba-workstream.md.\nTests where applicable.\
+        \ Own the PR to green + merge.\n"
+      name: ba-agenttype-wiring
+      repo: leartech-automated-agent
+    name: ba-agenttype-wiring
+    repo: mikelear/leartech-automated-agent
+  - agentType: leartech-agent-py
+    dependsOn:
+    - ba-agenttype-wiring
+    inputs:
+      branch: feat/ba-test-harness
+      goal: "Add the draft-by-default BA test harness so BA can be proven WITHOUT\nfiring repo-factory-scale\
+        \ work.\n- Local pure-function test: hand-crafted brief YAML -> ba_agent (dry-run,\n  mocked platform_state\
+        \ snapshot + stubbed gateway) -> asserts the\n  authored Plan YAML shape (steps sensible, hold:true,\
+        \ final\n  verification step present, remediates set when resolves given).\n- 3 GOLDEN BRIEF fixtures\
+        \ with plan-shape assertions: infra-remediation\n  (resolves a failed plan), new-website (resolves\
+        \ empty), cluster-wide\n  multi-resolve (resolves many).\n- Document the fast on-cluster path:\
+        \ a single standalone BA AgentRun\n  with a brief -> a held DRAFT Plan to inspect (never auto-executes).\n\
+        dependsOn ba-agenttype-wiring. Own the PR to green + merge.\n"
+      name: ba-test-harness
+      repo: leartech-automated-agent
+    name: ba-test-harness
+    repo: mikelear/leartech-automated-agent
+  tenant: leartech
+  triggeredBy: agent

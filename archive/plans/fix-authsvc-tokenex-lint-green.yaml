@@ -1,0 +1,37 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-authsvc-tokenex-lint-green
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/mcp-client-token-exchange-grant
+      goal: "Continue on EXISTING branch feat/mcp-client-token-exchange-grant (PR #151 \u2014 gives the\
+        \ MCP\ns2s client the RFC 8693 token-exchange grant + leartech-plan-api audience). It is RED on\n\
+        az/lint. Your agent image runs bare `golangci-lint` (v2.12.2) with the repo's local\n.golangci.yml\
+        \ only \u2014 but CI's go-lint task runs the yq-MERGED config (catalog\ngo/.golangci.base.yml\
+        \ \u2190 repo .golangci.yml) which enables far more linters. That mismatch\nis why your local\
+        \ lint looks clean but az/lint fails. Do NOT guess.\n\nReproduce CI's EXACT lint locally using\
+        \ the golden make include (merged catalog #63):\n  curl -fsSL https://raw.githubusercontent.com/mikelear/leartech-pipeline-catalog/main/go/leartech-go.mk\
+        \ -o /tmp/leartech-go.mk\n  make -f /tmp/leartech-go.mk lint      # does: curl base config + yq-merge\
+        \ repo .golangci.yml + golangci-lint --config merged ./...\n(If the mk target isn't usable, replicate\
+        \ it manually: curl the base config, yq deep-merge\nthe repo's .golangci.yml onto it, run `golangci-lint\
+        \ run --config <merged> ./...`.)\nFix EVERY finding that merged-config run reports (gosec/gocritic/revive/etc.)\
+        \ \u2014 these are\nthe real az/lint failures. Do NOT weaken the token-exchange grant/audience\
+        \ change; do NOT\ndisable linters to pass (add a scoped //nolint only for a genuine false positive\
+        \ with a\nreason). Re-run `make -f /tmp/leartech-go.mk lint` until clean locally BEFORE pushing.\n\
+        Open the PR (idempotent open_pr adopts #151) and get az/lint + all gates GREEN, then STOP\nat\
+        \ AwaitingReview. Do NOT poll for or chase the merge.\n"
+      name: fix-authsvc-tokenex-lint-green
+      repo: leartech-auth-service
+    name: lintgreen
+    repo: mikelear/leartech-auth-service
+  tenant: leartech
+  triggeredBy: human

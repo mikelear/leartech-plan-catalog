@@ -1,0 +1,38 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: remediate-artifact-rest-and-mcp
+  namespace: jx-staging
+spec:
+  paused: true
+  remediates:
+  - name: artifact-rest-and-mcp
+    namespace: jx-staging
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: deploy-health
+      clusters:
+      - gcp
+      - az
+      goal: "Verify the leartech-artifact-api 0.0.3 release is healthy on BOTH clusters after the GCP\
+        \ GitOps verify gate on jx-build-cluster-gsm promote PR #1422 has been cleared by the operator\
+        \ hand-off. Deterministic, version-aware check: deploy-health must report healthy=true with >=1\
+        \ available replica AND observed_version == 0.0.3 for service leartech-artifact-api in namespace\
+        \ jx-staging on gcp and az. This satisfies the brief's successCriteria that release re-checks\
+        \ report healthy for mikelear/leartech-artifact-api. Root cause (a persistent state=error on the\
+        \ GCP promote verify PipelineRun; AZ promoted the identical commit green) is a GitOps/verify-pipeline\
+        \ environment issue that is a human/operator hand-off \u2014 see the capability-gap reported by\
+        \ the BA; this plan stays paused until that gate is cleared and 0.0.3 reconciles on GCP."
+      name: verify-release-health-artifact-api
+      namespace: jx-staging
+      service: leartech-artifact-api
+      version: 0.0.3
+    name: verify-release-health-artifact-api
+    repo: mikelear/leartech-artifact-api
+  tenant: leartech

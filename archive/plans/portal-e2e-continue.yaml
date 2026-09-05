@@ -1,0 +1,37 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: portal-e2e-continue
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: feat/observer-realauth-e2e
+      goal: "CONTINUE existing work on branch feat/observer-realauth-e2e \u2014 PR #4 is ALREADY OPEN.\n\
+        Do NOT redo the work and do NOT open a new PR; push commits to THIS branch to update PR #4.\n\n\
+        Already committed on the branch (a previous agent did this, then its pod hung):\n- src/app/auth/auth.guard.ts\
+        \ \u2014 the blank-render FIX: authGuard now renders '/' when\n  unauthenticated (landing) and\
+        \ only redirects OTHER routes. Keep this behaviour.\n- src/app/auth/auth.guard.spec.ts \u2014\
+        \ updated specs.\n- end2end-ui/{02-sign-in,07-create-plan}.spec.ts, playwright.config.ts, support/portal.ts\
+        \ \u2014\n  REAL-auth Observer e2e (login via process.env.USER_EMAIL/USER_PASSWORD, STAGING_URL\
+        \ as\n  baseURL, render-mode-agnostic, NO mock-auth).\n- end2end/02-fleet-smoke.sh \u2014 fleet\
+        \ smoke gated on STAGING_URL.\n\nYOUR JOB: get PR #4 GREEN on both clusters.\n1. Read PR #4's\
+        \ failing checks (gh pr checks / view). Run the SAME checks locally: ng lint,\n   ng test (your\
+        \ image has Chromium; enforce the 60% coverage floor), ng build. Fix any\n   failures (lint, unit\
+        \ test, coverage, build) with minimal edits \u2014 do NOT revert the render\n   fix or reintroduce\
+        \ mock-auth.\n2. If unit tests pass but coverage dips, add focused tests (esp. around auth.guard.ts).\n\
+        3. Commit + push to feat/observer-realauth-e2e (updates PR #4). Re-check until green.\n4. STOP\
+        \ at AwaitingReview once PR #4's gates are green. Do NOT attempt to merge.\nIf everything is already\
+        \ green, just confirm and stop \u2014 do not churn.\n"
+      name: portal-e2e-continue
+      repo: leartech-ship-proven-portal
+    name: continue
+    repo: mikelear/leartech-ship-proven-portal
+  tenant: leartech
+  triggeredBy: human

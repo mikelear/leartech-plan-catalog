@@ -1,0 +1,61 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=2
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: wire-observer-portal-personas
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: chart-config
+      cluster: gcp
+      goal: "Complete the portal Observer wiring on GCP \u2014 edit SOURCE only (helmfiles/jx-staging/configs/\u2026\
+        ),\nnever config-root/. TWO files, ONE PR:\n\nA) helmfiles/jx-staging/configs/leartech-auth-service.yaml\
+        \ \u2014 enable the persona-matrix secret\n   so `auth-service-test-users` renders (today only\
+        \ seedTestUser:true is set; the secret is a\n   SEPARATE opt-in flag, default false):\n   - postgresql.personaMatrixSecret.enabled:\
+        \ true\n   - postgresql.testUser.email: test@leartech.com   # REQUIRED by the secret template\
+        \ (chart\n   - postgresql.testUser.password: Test123!          # default is \"\"; render hard-fails\
+        \ if unset)\n   - set the platform-admin persona creds the secret exposes (read the merged\n \
+        \    charts/leartech-auth-service/templates/persona-matrix-secret.yaml to find the exact value\n\
+        \     keys, e.g. postgresql.platformAdmin.email/password) to platform-admin@leartech.com / Test123!\n\
+        \   CRITICAL single-source: these values feed BOTH the secret AND (via the client-provisioning\n\
+        \   Job env) the DB seed \u2014 they MUST equal what setup-auth.sh seeds (staging defaults\n \
+        \  test@leartech.com / platform-admin@leartech.com / Test123!) or the e2e login won't match the\n\
+        \   seeded user. Do NOT touch any production overlay (must keep enabled:false \u2014 the template\n\
+        \   refuses to render in production).\n\nB) helmfiles/jx-staging/configs/leartech-arrivals-observer.yaml\
+        \ \u2014 the leartech-ship-proven-portal\n   service entry:\n   - ADD to `env` (keep existing\
+        \ HYDRA_ADMIN_URL/USER_ID/USER_*):\n       - name: PLATFORM_ADMIN_EMAIL\n         valueFrom: {\
+        \ secretKeyRef: { name: auth-service-test-users, key: PLATFORM_ADMIN_EMAIL, optional: true } }\n\
+        \       - name: PLATFORM_ADMIN_PASSWORD\n         valueFrom: { secretKeyRef: { name: auth-service-test-users,\
+        \ key: PLATFORM_ADMIN_PASSWORD, optional: true } }\n   - Give the heavy Playwright pack headroom\
+        \ (fixes the GCP OOM) using the NEW per-pack resources\n     field from observer #25 \u2014 on\
+        \ the end2end-ui testPack entry:\n       - { name: end2end-ui, type: end2end-ui, resources: {\
+        \ requests: { memory: 1Gi }, limits: { memory: 4Gi } } }\n\nVALIDATE with `helm template` that\
+        \ both files render cleanly (no `required` failure) before\nopening the PR. Open ONE PR for review.\n"
+      service: leartech-arrivals-observer
+    name: wire-gcp
+    repo: mikelear/jx-build-cluster-gsm
+  - agentType: leartech-agent-infra
+    inputs:
+      action: chart-config
+      cluster: az
+      goal: "Same as wire-gcp but for AZ (jx-build-cluster-akv, helmfiles/jx-staging/configs/\u2026).\
+        \ TWO files, ONE PR:\nA) leartech-auth-service.yaml \u2014 postgresql.personaMatrixSecret.enabled:\
+        \ true +\n   postgresql.testUser.email: test@leartech.com + testUser.password: Test123! + the\
+        \ platform-admin\n   persona creds (platform-admin@leartech.com / Test123!, exact value keys per\
+        \ the merged\n   persona-matrix-secret.yaml). Single-source = must match the seeder + never enable\
+        \ in production.\nB) leartech-arrivals-observer.yaml \u2014 leartech-ship-proven-portal entry:\
+        \ ADD PLATFORM_ADMIN_EMAIL/\n   PLATFORM_ADMIN_PASSWORD env (valueFrom secretKeyRef auth-service-test-users,\
+        \ optional:true;\n   keep existing USER_*/HYDRA) + end2end-ui pack resources { requests: {memory:\
+        \ 1Gi}, limits:\n   {memory: 4Gi} }. The AZ portal stagingUrl is \u2026az.leartech.com.\n`helm\
+        \ template` both to confirm clean render, then open ONE PR for review.\n"
+      service: leartech-arrivals-observer
+    name: wire-az
+    repo: mikelear/jx-build-cluster-akv
+  tenant: leartech
+  triggeredBy: human

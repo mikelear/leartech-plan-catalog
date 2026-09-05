@@ -1,0 +1,94 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Cancelled
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: plan-1-dogfood
+  namespace: jx-staging
+spec:
+  command:
+    reason: cli-issued
+    uid: f03b3790-15ca-4ea3-a230-0789f8f55a23
+    verb: cancel
+  steps:
+  - agentType: leartech-agent-py
+    budgetIter: 8
+    inputs:
+      base: main
+      branch: agent/mqube-to-leartech-env
+      description: Migrate the auth env-var prefix MQUBE_AUTH_* -> LEARTECH_AUTH_* in pkg/auth, BACKWARD-COMPATIBLE,
+        then release a new version. Consumers (mcp-servers, step B) will adopt it next.
+      goal: 'In leartech-bus-common pkg/auth, rename the env prefix MQUBE_AUTH_* -> LEARTECH_AUTH_* for
+        the auth
+
+        middleware/verifier config (MQUBE_AUTH_SERVER_URL, MQUBE_AUTH_AUDIENCE, MQUBE_AUTH_RESOURCE,
+
+        MQUBE_AUTH_AUTHORIZATION_SERVERS, MQUBE_AUTH_RESOURCE_METADATA_URL). BACKWARD-COMPATIBLE: read
+        the
+
+        LEARTECH_AUTH_* var first, fall back to the MQUBE_AUTH_* var with a one-time deprecation log if
+        only
+
+        the old one is set. No behaviour change when only the old vars are set. Bump the minor version
+        and
+
+        ensure the release pipeline publishes the new module version. Add/extend unit tests: new var wins,
+
+        old var still works (with deprecation warning), neither set behaves as before. All PR gates green
+
+        incl a real ai-review verdict. Open a PR. Hold it (do not merge).
+
+        '
+      name: a-buscommon-mqube
+      repo: leartech-bus-common
+    name: a-buscommon-mqube
+    repo: mikelear/leartech-bus-common
+  - agentType: leartech-agent-py
+    budgetIter: 8
+    dependsOn:
+    - a-buscommon-mqube
+    inputs:
+      base: main
+      branch: agent/adopt-leartech-auth-env
+      description: 'Adopt the bus-common LEARTECH_AUTH_* env prefix (from step A): bump the bus-common
+        dependency to the version A released, and switch the chart/deployment env keys MQUBE_AUTH_* ->
+        LEARTECH_AUTH_* on both internal + public deployments. Depends on A''s released version being
+        available.'
+      goal: "Bump leartech-bus-common in go.mod to the NEW version released by step A (the one carrying\
+        \ the\nLEARTECH_AUTH_* prefix support), run go mod tidy. In the chart (charts/leartech-mcp-servers),\
+        \ rename\nthe templated auth env keys MQUBE_AUTH_SERVER_URL/AUDIENCE/RESOURCE/AUTHORIZATION_SERVERS/\n\
+        RESOURCE_METADATA_URL -> the LEARTECH_AUTH_* equivalents on BOTH the internal and public deployment\n\
+        templates. Do NOT change the values (same URLs/audiences) \u2014 only the env NAMES. Do NOT regress\
+        \ the\nauth enforcement: internal /mcps + /mcp/{server} must still reject no-token (401) and accept\
+        \ a valid\naud=leartech-mcp token (200); public /mcps stays open. Update any tests that assert\
+        \ the old env\nnames. All PR gates green incl real ai-review. Open a PR. Hold it (do not merge).\n"
+      name: b-mcpservers-adopt
+      repo: leartech-mcp-servers
+    name: b-mcpservers-adopt
+    repo: mikelear/leartech-mcp-servers
+  - agentType: leartech-agent-py
+    budgetIter: 8
+    inputs:
+      base: main
+      branch: agent/e2e-crd-selfcontained
+      description: 'Make the preview end2end fully self-contained: vendor the Plan CRD YAML into the repo
+        and idempotently apply it as a preflight, so the CRD end2end does not depend on orchestrator-controller
+        having pre-installed plans.agent.leartech.io on the cluster. Independent of steps A/B (different
+        repo).'
+      goal: "In leartech-infra-agent, make the CRD end2end self-contained (Mike's independence bar). Vendor\
+        \ the\nPlan CRD definition (plans.agent.leartech.io/v1alpha1) as a YAML file in the repo (e.g.\n\
+        test/crds/plan-crd.yaml, kept in sync with orchestrator-controller's CRD) and have end2end/run.sh\n\
+        idempotently `kubectl apply` it as a PREFLIGHT before applying the fixture Plan \u2014 so the\
+        \ preview no\nlonger hard-fails when the cluster-scoped CRD is absent (currently it checks + fails\
+        \ at line ~154).\nKeep it idempotent (apply, not create) so it never clobbers a live CRD. Everything\
+        \ still scoped to\nPREVIEW_NAMESPACE otherwise; no other namespace touched. All PR gates green\
+        \ incl real ai-review +\nthe real CRD end2end. Open a PR. Hold it (do not merge).\n"
+      name: c-infra-crd-selfcontained
+      repo: leartech-infra-agent
+    name: c-infra-crd-selfcontained
+    repo: mikelear/leartech-infra-agent
+  tenant: platform
+  triggeredBy: session-plan-1-dogfood-2026-07-18

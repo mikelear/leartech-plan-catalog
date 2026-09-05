@@ -1,0 +1,94 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Failed, az=Paused
+# AgentRuns owned: gcp=5, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: agent-repo-access-terminal
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    inputs:
+      branch: fix/repo-access-terminal
+      goal: "Make a repo-access failure terminal, self-explaining and impossible to mistake for any other\
+        \ failure \u2014 before the model starts, and wherever it happens mid-run.\nCONFIRM THE PREMISE\
+        \ FIRST. In gate/agent/initiative.py read _clone_repo (around line 497) and its caller (around\
+        \ line 900). Confirm the caller discards clone_reason and that RunSummary has no field for it.\
+        \ Confirm by grep that write_failure_reason, which _clone_repo's docstring names as the consumer,\
+        \ does not exist in this repo. If any of that is already fixed, STOP and report what you found.\n\
+        THIS IS NOT ABOUT ADDING A FAILURE. The run already fails, correctly, with a correct classification\
+        \ computed. The defect is that the classification reaches nothing. Do not add a new failure path;\
+        \ give the existing one a destination.\nCARRY THE REASON, AND EMIT IT WHERE IT HAPPENS. Two changes,\
+        \ both needed, because they cover different cases. RunSummary must carry the reason so run_end\
+        \ can report it instead of a bare exit_code. AND the denial must emit its own structured record\
+        \ at the point of failure, not only at run_end \u2014 a pod killed between the two loses the only\
+        \ explanation otherwise. Give it a stable event name of its own so it can be queried directly\
+        \ rather than found by grepping message text, and fields for the repo, the git exit code, the\
+        \ classification, and the remediation. The existing token redaction must survive: assert in a\
+        \ test that the token appears in no emitted field.\nPRE-FLIGHT THE DECLARED REPO BEFORE THE MODEL\
+        \ STARTS. A brief declares initiative.primary.qualified_repo. Probe it before any model turn,\
+        \ fail immediately if it is unreachable or unwritable. Use `git ls-remote` \u2014 _branch_exists_on_remote\
+        \ (around line 578) already uses it, so follow that shape: it needs no GitHub API and so cannot\
+        \ be throttled by the GraphQL rate limit that made `gh repo clone` unusable. Today's failure cost\
+        \ four pods and burned the Job's whole backoffLimit in 85 seconds; the pre-flight costs one round\
+        \ trip and spends no model tokens at all.\nA READABLE PROBE IS NOT A WRITABLE ONE, AND THIS BRIEF\
+        \ WILL OPEN A PR. The recorder repo had `pull` and lacked `push`, and a clone would have succeeded\
+        \ while the PR at the end could not. Decide deliberately how to establish write access without\
+        \ mutating the repo, state the method and its limits in the PR description, and make the code\
+        \ express the decision. If write cannot be established without a side effect, say so and check\
+        \ read only \u2014 an honest read-only check beats a write check that leaves a branch behind,\
+        \ and beats a claim the code cannot support.\nTHE PRE-FLIGHT COVERS ONE REPO AND THE RUN TOUCHES\
+        \ MANY. Recorded from the run that eventually succeeded: nine distinct repos were accessed, and\
+        \ only one is declared in the brief. Reaching a repo by following a reference chain mid-run is\
+        \ normal and must stay possible. So do not attempt to pre-flight the undeclarable, and do not\
+        \ gate mid-run access behind an allow-list. Make mid-run denial loud instead: a `gh` or `git`\
+        \ call that fails on permissions or a 404 against a private repo must be classified and emitted\
+        \ with the same event name as the pre-flight, so one query finds every access failure regardless\
+        \ of where it arose. State in the PR description which paths you covered and which you could not.\n\
+        THE PROMPT MUST FORBID WORKING AROUND IT. This is the part that matters most and the part no logging\
+        \ can fix. The agent runs with permission_mode bypassPermissions, so nothing mechanically stops\
+        \ it from responding to a missing repo by creating files locally, retargeting another repo, or\
+        \ reporting partial success. A loud failure and a plausible false success are not equally bad,\
+        \ and the second is what the run-report corpus exists to catch. State in the system prompt that\
+        \ inability to reach a declared repo is terminal: do not synthesise a local substitute, do not\
+        \ retarget, do not report success. Test that the instruction is present, in the style prompt-contract-checks-tool-schemas\
+        \ established.\nPROVISIONING IS ALREADY SOLVED ELSEWHERE \u2014 DO NOT REBUILD IT HERE. The estate\
+        \ has a bootstrap route for new repos: the repo-factory MCP's create_repo, driven by the bootstrap-authed-service\
+        \ PlanTemplate, which creates the repo and invites the six machine bots (see BotCollaborators\
+        \ in leartech-mcp-servers internal/repofactory). This failure happened because two repos were\
+        \ created by hand and skipped it, not because the route is missing. So do not add repo creation,\
+        \ collaborator invitation or invitation acceptance to the agent runtime: the agent's correct move\
+        \ is to verify and refuse, and the operator's is to run the bootstrap. Point at the bootstrap\
+        \ in the failure's remediation field so the next reader is sent there.\nTHE PLAN CR SHOULD SHOW\
+        \ THE REASON, AND THAT IS NOT THIS REPO. The controller rendered `reason: \"Failed\"` with no\
+        \ message. Even after this change, `kubectl get plan` will not show why. Do not change the controller\
+        \ here. Record in the PR description what the controller would need to surface the agent's reason\
+        \ onto the Plan decision, so it can be picked up as its own change in leartech-orchestrator-controller.\n\
+        FOUR IDENTICAL PODS FOR A DETERMINISTIC ERROR IS WASTE, AND MAY NOT BE WORTH FIXING. A missing\
+        \ collaborator will fail identically on every retry, and the Job spends backoffLimit 3 discovering\
+        \ that. Say in the PR description whether the retry is avoidable at reasonable cost. Do not restructure\
+        \ Job or controller retry semantics from this repo to chase it.\nISOLATE TESTING: pytest, offline,\
+        \ no network, no cluster, in the style of the existing suite. Cover: a Repository-not-found clone\
+        \ yields the classification and the run_end reason; the point-of-failure record is emitted independently\
+        \ of run_end; the token appears in no emitted field; the pre-flight fails a declared repo that\
+        \ cannot be reached and passes one that can; a mid-run permission denial is classified under the\
+        \ same event name; and the prompt carries the do-not-work-around instruction. Prove each is load-bearing\
+        \ by breaking it. Non-negative coverage delta.\nDone = PR merged (open via open_pr, drive gates\
+        \ green)."
+      name: repo-access-terminal
+      repo: mikelear/leartech-automated-agent
+    kind: pr
+    name: repo-access-terminal
+  - dependsOn:
+    - repo-access-terminal
+    kind: check
+    name: repo-access-terminal-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.repo-access-terminal.pr}
+      repo: mikelear/leartech-automated-agent
+      service: leartech-automated-agent
+  triggeredBy: plan-catalog-internal-services

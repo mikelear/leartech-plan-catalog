@@ -1,0 +1,38 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-babrief-contract
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/babrief-contract
+      goal: "The event->BA loop's Brief contract is mismatched between the controller\n(Go producer) and\
+        \ the BA agent (Python consumer), so the BA agent pod\nfails to author a plan with:\n  brief did\
+        \ not validate: 2 validation errors for Brief\n    name: Field required\n    resolves.0: Input\
+        \ should be a valid PlanRef, input_value='<plan>' (str)\n\nThe BA agent's Brief model is CANONICAL\
+        \ \u2014 it lives in\ngate/agent/ba_agent.py of mikelear/leartech-automated-agent:\n  - Brief.name:\
+        \ required, kebab-case str (min_length 1)\n  - Brief.resolves: list[PlanRef], where PlanRef =\
+        \ {name: <Plan CR name>,\n    plus optional free-form fields like cluster}\n  - (goal, successCriteria,\
+        \ context already match)\n\nFix internal/controller/ba_event_adapter.go so renderBABrief produces\
+        \ a\nBABrief that validates against that model:\n  1. Add a `Name string \\`json:\"name\"\\``\
+        \ field to BABrief and set it to a\n     deterministic kebab-case identifier (e.g. \"remediate-\"\
+        +service, or\n     derived from the failed plan name).\n  2. Change `Resolves []string \\`json:\"\
+        resolves\"\\`` to a slice of PlanRef\n     OBJECTS \u2014 define a small struct e.g.\n     `type\
+        \ BAPlanRef struct { Name string \\`json:\"name\"\\`; Cluster string \\`json:\"cluster,omitempty\"\
+        \\` }`\n     and set brief.Resolves = []BAPlanRef{{Name: brief.Plan, Cluster: brief.Cluster}}.\n\
+        \  3. Update BABriefTemplate + ba_event_adapter_test.go for the new shape.\nKeep goal/successCriteria/context/plan/step/service/cluster/promotePRs/\n\
+        podReasonRef unchanged. Verify: `go build ./...` + tests pass; the emitted\nJSON has top-level\
+        \ `name` and `resolves: [{\"name\": \"...\"}]`. Own the PR to\ngreen + merge.\n"
+      name: fix-babrief-contract
+      repo: leartech-orchestrator-controller
+    name: fix-babrief-contract
+    repo: mikelear/leartech-orchestrator-controller
+  tenant: leartech
+  triggeredBy: agent

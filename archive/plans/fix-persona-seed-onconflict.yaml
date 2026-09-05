@@ -1,0 +1,39 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-persona-seed-onconflict
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/persona-seed-onconflict-tenant
+      goal: "The DSN persona seed (#156) now reaches the shared CNPG but FAILS at the UPSERT:\n\"there\
+        \ is no unique or exclusion constraint matching the ON CONFLICT specification\".\nRoot cause:\
+        \ scripts/setup-auth.sh's seed_persona_matrix UPSERTs `ON CONFLICT (email)`,\nbut the users table's\
+        \ real unique constraint is the COMPOSITE (tenant_id, email) \u2014 see\ncharts/leartech-auth-service/templates/seed-test-user-job.yaml\
+        \ which correctly uses\n`ON CONFLICT (tenant_id, email) DO UPDATE`, and the migrations. The persona\
+        \ INSERT also\ndoesn't set tenant_id.\n\nFIX (make the persona seed match the actual schema +\
+        \ the seed-test-user-job.yaml pattern):\n1. In scripts/setup-auth.sh AND charts/leartech-auth-service/files/scripts/setup-auth.sh\n\
+        \   (keep them in sync): the persona-matrix INSERT must set `tenant_id` (use the same tenant\n\
+        \   value seed-test-user-job.yaml / the schema expects \u2014 inspect it; likely the default\n\
+        \   'leartech' tenant), and the UPSERT must be `ON CONFLICT (tenant_id, email) DO UPDATE`\n  \
+        \ (matching the real unique constraint). Confirm the users table columns + the exact\n   unique\
+        \ constraint by reading the migrations (charts/.../files/migrations/*.sql) and\n   seed-test-user-job.yaml\
+        \ \u2014 do NOT guess; match reality.\n2. Update the guard test charts/persona_seed_dsn_test.go\
+        \ (it currently asserts\n   `ON CONFLICT (email) DO UPDATE` count>=2) to assert the corrected\
+        \ clause, and add\n   coverage that tenant_id is set.\n3. Keep both personas (user=['User'], platform-admin=['User','PlatformAdmin'])\
+        \ + idempotent.\nRun the go tests + the golden lint locally (green) before pushing. Open PR, both\
+        \ clusters\ngreen, STOP at AwaitingReview. This is the LAST blocker for platform-admin seeding\
+        \ \u2192 portal e2e.\n"
+      name: fix-persona-seed-onconflict
+      repo: leartech-auth-service
+    name: code
+    repo: mikelear/leartech-auth-service
+  tenant: leartech
+  triggeredBy: human

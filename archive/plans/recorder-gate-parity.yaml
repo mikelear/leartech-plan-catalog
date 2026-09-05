@@ -1,0 +1,57 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: az
+# Phase: az=Paused
+# AgentRuns owned: az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: recorder-gate-parity
+  namespace: jx-staging
+spec:
+  paused: true
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/gate-parity
+      goal: "Bring this repo's presubmit gates up to the estate's Go-service standard, so the image it\
+        \ publishes has been scanned.\nCONFIRM THE PREMISE FIRST. Read .lighthouse/jenkins-x/triggers.yaml\
+        \ here and in mikelear/leartech-mcp-servers. This repo should have pr, lint and test; mcp-servers\
+        \ should have ten. If this repo already carries the five below, STOP and report that.\nCOPY THE\
+        \ REFERENCE, NOT code-audit. mcp-servers, plan-api and orchestrator-controller all carry the identical\
+        \ ten-presubmit set and are the standard. leartech-code-audit carries two and is the outlier \u2014\
+        \ this repo was originally modelled on it, which is how the gap arose. Do not use code-audit as\
+        \ the reference for anything in this change.\nADD EXACTLY FIVE: govulncheck, security-scan, image-scan,\
+        \ ai-review, ai-feedback. In mcp-servers each is a thin wrapper whose only content is a `uses:`\
+        \ onto a leartech-pipeline-catalog task, referenced from triggers.yaml by a `source:` path \u2014\
+        \ note that three of them live in subdirectories (security-scan/, ai-review/). Mirror that layout\
+        \ and those catalog references rather than authoring pipeline logic here. Keep ai-feedback's optional/trigger/rerun_command\
+        \ shape as mcp-servers has it; it is a comment-triggered advisory, not an always-run gate.\nDO\
+        \ NOT ADD end2end OR dynamic-scan. end2end needs a preview URL to smoke and dynamic-scan is DAST\
+        \ against a running endpoint. This repo deploys a CronJob and serves no HTTP, so both would fail\
+        \ for a reason that is not a defect. State this in the PR description so the omission is a recorded\
+        \ decision rather than an oversight.\nEXPECT THE SCANS TO FIND THINGS, AND DO NOT SILENCE THEM.\
+        \ The point is a real verdict on code that has never been scanned. If govulncheck or the security\
+        \ scan fails, fix the finding or, where a finding is genuinely not applicable, record why in the\
+        \ PR description. Do NOT add ignore files, thresholds, allowlists or `|| true` to make a gate\
+        \ pass. A gate that cannot fail is worse than the absent gate it replaced, because it reports\
+        \ safety it never checked.\nVERIFY EACH GATE ACTUALLY RAN. A `source:` path that does not resolve,\
+        \ or a context name that does not match, produces no check and no error \u2014 the gate simply\
+        \ never appears, which is indistinguishable from passing. After the PR is open, confirm every\
+        \ one of the five reports a status on both clusters and put the observed context names and verdicts\
+        \ in the PR description. Five contexts that do not appear is a failure of this change, not a pass.\n\
+        Done = PR merged (open via open_pr, drive gates green)."
+      name: recorder-gate-parity
+      repo: mikelear/leartech-agent-run-recorder
+    kind: pr
+    name: recorder-gate-parity
+  - dependsOn:
+    - recorder-gate-parity
+    kind: check
+    name: recorder-gate-parity-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.recorder-gate-parity.pr}
+      repo: mikelear/leartech-agent-run-recorder
+      service: leartech-agent-run-recorder
+  triggeredBy: plan-catalog-internal-services

@@ -1,0 +1,72 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=3
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: logging-json-standard
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/json-structured-logging
+      goal: "Make the controller emit pure-JSON logs so Loki's `| json` parser can\nextract fields (today\
+        \ it uses zap's CONSOLE encoder \u2014 `ts\\tINFO\\tmsg\\t{json}`\n\u2014 which is NOT a JSON\
+        \ line, so `| json` extracts nothing and loop-hop\ncorrelation falls back to brittle substring\
+        \ matching). Standard doc:\nHub/status/structured-logging-standard.md.\n\nCHANGE (cmd/server/main.go,\
+        \ where ctrl.SetLogger/zap.New is configured):\nswitch the zap logger to the JSON encoder, ENV-TOGGLED:\
+        \ read `LOG_FORMAT`\n(or reuse the controller-runtime zap flag) \u2014 `json` (DEFAULT in-cluster)\
+        \ \u2192\nzap JSON encoder; `console` \u2192 the current human-readable encoder for local\ndev.\
+        \ Each log line must then be a single JSON object\n({\"level\":..,\"ts\":..,\"msg\":..,\"loop_hop\"\
+        :..,\"event_id\":..,\"plan\":..}).\nKeep the existing structured fields + the loop_hop contract\
+        \ fields\n(loop_hop/event_id/plan/run_id, snake_case) exactly as-is \u2014 this is a\nFORMAT change\
+        \ only, no field renames, no behaviour change.\nSet the chart default so the deployed pod runs\
+        \ LOG_FORMAT=json (add the env\nin charts/.../deployment.yaml + values, default json). Add a unit/chart\
+        \ test\nthat the deployment sets LOG_FORMAT=json and (if feasible) a logger test that\nthe JSON\
+        \ encoder is selected when LOG_FORMAT=json. Own the PR + gates green.\n"
+      name: controller-json-logging
+      repo: leartech-orchestrator-controller
+    name: controller-json-logging
+    repo: mikelear/leartech-orchestrator-controller
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/json-structured-logging-standard
+      goal: "Bake the structured-logging standard (Hub/status/structured-logging-standard.md)\ninto the\
+        \ Go service template so every NEW Go service is compliant from the\nfirst commit. Configure the\
+        \ template's logger to emit pure-JSON logs\nin-cluster (zap/slog JSON encoder), ENV-TOGGLED via\
+        \ `LOG_FORMAT`\n(json default in-cluster, console for local dev), and set the chart to run\nLOG_FORMAT=json\
+        \ by default. Add a short LOGGING section to the template's\nREADME documenting the field vocabulary\
+        \ (snake_case: msg, level, ts, service,\ntenant, event_id, run_id, plan, step, loop_hop, pr, repo,\
+        \ phase) and the Loki\nrule: query fields via `| json | field=\u2026`, keep stream labels low-cardinality\n\
+        (never promote event_id/plan to labels). Keep the template building + its\nsmoke green. Own the\
+        \ PR + gates green.\n"
+      name: template-json-logging
+      repo: leartech-go-service-template
+    name: template-json-logging
+    repo: mikelear/leartech-go-service-template
+  - agentType: leartech-agent-go
+    dependsOn:
+    - controller-json-logging
+    inputs:
+      branch: feat/loop-forensics-json-parse
+      goal: "Now that the controller emits pure-JSON logs (this plan's controller step)\nand maestro already\
+        \ does (zerolog JSON), finalise scripts/loop-forensics.sh\nto use Loki JSON parsing reliably.\
+        \ Per hop, query\n`{namespace=\"<ns>\"} | json | loop_hop=\"<hop>\"` and correlate:\n  - mid-loop\
+        \ hops (maestro_receive, maestro_dispatch, consume, ba_spawn):\n    filter by `| event_id=\"<id>\"\
+        ` (resolved from the BA AgentRun's\n    triggered-by-event annotation, as today).\n  - emit +\
+        \ resolved: these do NOT carry event_id (emit precedes the Maestro\n    id; resolved is plan-triggered)\
+        \ \u2014 correlate them by `| plan=\"<plan>\"`\n    instead. Do NOT mark them NO-LOG for lacking\
+        \ event_id.\nKeep a line-filter fallback (|~ \"\\\"loop_hop\\\":...\") for any stream that\nisn't\
+        \ yet JSON, so a not-yet-migrated service degrades gracefully rather than\nfalse-NO-LOG. Keep\
+        \ the per-hop LOGGED/NO-LOG table + LOGGING-GAPS + kubectl\ncross-checks + --report-json. Update\
+        \ scripts/loop-forensics.md. Verify\n`bash -n` + shellcheck clean. Own the PR + gates green. NOTE:\
+        \ same repo as\nthe controller step \u2014 this step dependsOn it so they don't race on the repo.\n"
+      name: forensics-json
+      repo: leartech-orchestrator-controller
+    name: forensics-json
+    repo: mikelear/leartech-orchestrator-controller
+  tenant: leartech
+  triggeredBy: human

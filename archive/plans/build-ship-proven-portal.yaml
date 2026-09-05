@@ -1,0 +1,75 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=7
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: build-ship-proven-portal
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: create-repo
+      newRepo: mikelear/leartech-ship-proven-portal
+    name: create
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - create
+    inputs:
+      action: register-source-config
+      cluster: gcp
+      service: leartech-ship-proven-portal
+    name: register-gcp
+    repo: mikelear/jx-build-cluster-gsm
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - create
+    inputs:
+      action: register-source-config
+      cluster: az
+      service: leartech-ship-proven-portal
+    name: register-az
+    repo: mikelear/jx-build-cluster-akv
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - register-gcp
+    - register-az
+    inputs:
+      action: scaffold-pr
+      name: leartech-ship-proven-portal
+      template: angular
+    name: scaffold
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - scaffold
+    inputs:
+      action: smoke-pr
+      name: leartech-ship-proven-portal
+    name: smoke
+  - agentType: leartech-agent-ng
+    dependsOn:
+    - smoke
+    inputs:
+      branch: smoke-leartech-ship-proven-portal
+      goal: "Adopt the open smoke PR for the freshly-scaffolded leartech-ship-proven-portal Angular\n\
+        app (idempotent open_pr), own it, drive BOTH clusters' gates green THROUGH TO MERGE so\nthe first\
+        \ release cuts. No features here \u2014 just make the scaffold green + merged.\n"
+      name: portal-smoke-dev
+      repo: leartech-ship-proven-portal
+    name: smoke-dev
+    repo: mikelear/leartech-ship-proven-portal
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - smoke-dev
+    inputs:
+      action: release-health-check
+      budgetMinutes: 60
+      healthPath: /health
+      namespace: jx-staging
+      service: leartech-ship-proven-portal
+    name: release-monitor
+  tenant: leartech
+  triggeredBy: human

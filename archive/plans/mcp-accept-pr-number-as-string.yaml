@@ -1,0 +1,56 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Succeeded, az=Paused
+# AgentRuns owned: gcp=5, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mcp-accept-pr-number-as-string
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/accept-pr-number-as-string
+      goal: "Make every MCP tool that takes `pr_number` accept the string form the estate actually produces,\
+        \ as well as an integer, so a caller holding \"245\" is not rejected.\nCONFIRM THE PREMISE FIRST,\
+        \ AND ESTABLISH THE MECHANISM. Find every declaration of a `pr_number` argument across the servers\
+        \ \u2014 internal/jx3flowserver and internal/prcontextserver both have several, and check the\
+        \ tekton server too. They are declared as Go `int` with a `jsonschema` tag. Then establish HOW\
+        \ the published schema is produced from those declarations and WHERE the incoming arguments are\
+        \ validated against it. The observed error is a schema-validation failure raised before the handler\
+        \ runs, so confirm that a custom UnmarshalJSON would not be reached; if you find it would be,\
+        \ say so and use it, but do not assume either way.\nMAKE THE SCHEMA HONEST ABOUT WHAT IS ACCEPTED.\
+        \ Whatever mechanism you choose, the published schema must describe reality. Do not silently coerce\
+        \ behind a schema that still claims integer-only \u2014 a schema that lies is how the next caller\
+        \ gets surprised. Equally, do not simply widen the type and leave the handler to guess: a string\
+        \ that is not a number must still be rejected, with a message naming the argument and the value.\n\
+        ONE HELPER, NOT A FIX PER SITE. There are many declarations; they must all behave identically.\
+        \ A shared type or shared schema-construction helper is the point \u2014 if a future tool adds\
+        \ another `pr_number` and gets different behaviour, this has failed.\nDO NOT CHANGE THE CRDs.\
+        \ It is tempting to make the estate carry PR numbers as integers instead. That is a Kubernetes\
+        \ API change across AgentRun and Plan for a cosmetic gain, and it is explicitly out of scope.\
+        \ The MCP boundary is the cheap place to absorb this.\nISOLATE TESTING: table-driven Go tests,\
+        \ no cluster and no network. Cover, for at least two different tools on different servers: an\
+        \ integer is accepted; the equivalent string is accepted and produces an identical result; a non-numeric\
+        \ string is rejected with a message naming the argument; and an absent argument behaves exactly\
+        \ as it does today. Assert on the PUBLISHED SCHEMA too, so a future change that narrows it back\
+        \ to integer-only fails here rather than in a run. Non-negative coverage delta.\nLOGGING TO VERIFY:\
+        \ state in the PR description the exact call that previously failed \u2014 pr_number as the string\
+        \ \"245\" \u2014 and show it now succeeding.\nDone = PR merged (open via open_pr, drive gates\
+        \ green)."
+      name: accept-pr-number-as-string
+      repo: mikelear/leartech-mcp-servers
+    kind: pr
+    name: accept-pr-number-as-string
+  - dependsOn:
+    - accept-pr-number-as-string
+    kind: check
+    name: accept-pr-number-as-string-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.accept-pr-number-as-string.pr}
+      repo: mikelear/leartech-mcp-servers
+      service: leartech-mcp-servers
+  triggeredBy: plan-catalog-internal-services

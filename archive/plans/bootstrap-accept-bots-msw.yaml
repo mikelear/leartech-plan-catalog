@@ -1,0 +1,20 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  labels:
+    leartech.io/origin: bootstrap-repair
+  name: bootstrap-accept-bots-msw
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: create-repo
+      newRepo: mikelear/leartech-mortgagesourcing-web
+    kind: apply
+    name: create

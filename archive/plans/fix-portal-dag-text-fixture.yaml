@@ -1,0 +1,44 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-portal-dag-text-fixture
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: fix/dag-text-fixture-complete
+      goal: "Complete the e2e-ui DAG/Text fixture so BOTH 05-dag-text.spec.ts tests pass DETERMINISTICALLY\n\
+        in staging on BOTH clusters. The prior fix (PR #16, merged) made 05-dag-text:38 ('DAG renders\n\
+        levels + node cards with dep edges') pass via a deterministic multi-level dep-edge fixture, but\n\
+        the SIBLING test 05-dag-text:81 ('Text view lists conditions[], decisions[], and per-step\nmessages')\
+        \ now FAILS on GCP (staging 0.0.10 arrival e2e-ui = 17 passed / 1 failed, confirmed via\nLoki).\
+        \ AZ passed the same spec \u2014 proving the fixture is NOT deterministic: on AZ ensurePlanExists\n\
+        adopted a pre-existing plan that happened to carry conditions/decisions/messages, on GCP it\n\
+        didn't. So the fixture has dep edges but lacks the data the Text-view test asserts.\n\nFIX: make\
+        \ the fixture plan (the one ensurePlanExists creates/ensures for 05-dag-text) carry ALL\nthe data\
+        \ BOTH tests need, and CREATE it deterministically (do NOT rely on adopting whatever plan\nexists\
+        \ \u2014 that's the AZ/GCP divergence root cause):\n- multi-level dependency edges (already added\
+        \ \u2014 keep them; 05-dag-text:38 must stay green), AND\n- per-step `conditions[]`, `decisions[]`,\
+        \ and per-step `messages` populated on the fixture's\n  steps, matching exactly what 05-dag-text:81\
+        \ asserts (read the spec's expectations at line ~81\n  and the Text-view component's testIds \u2014\
+        \ make the fixture data satisfy them).\n- Ensure the fixture is a dedicated, deterministic plan\
+        \ (e.g. a fixed name like\n  `portal-e2e-fixture` created via the admin/create path, platform-admin\
+        \ creds are wired), so it\n  renders identically in preview AND staging AND on both clusters.\
+        \ Idempotent (safe every arrival).\n- Do NOT weaken either assertion; make the underlying plan\
+        \ data satisfy them.\n\nRun the FULL e2e-ui locally in staging-shape (STAGING_URL; your image\
+        \ has Chromium) and confirm\n05-dag-text BOTH tests (:38 DAG + :81 Text) pass AND the whole suite\
+        \ is 18/18. Open the PR, drive\nboth clusters' gates green, STOP at AwaitingReview. Merging releases\
+        \ a new portal version \u2192 new\nArrival \u2192 the observer re-runs e2e-ui \u2192 18/18 both\
+        \ clusters \u2192 cluster qa-gate GREEN for real.\n"
+      name: fix-portal-dag-text-fixture
+      repo: leartech-ship-proven-portal
+    name: complete-dag-fixture
+    repo: mikelear/leartech-ship-proven-portal
+  tenant: leartech
+  triggeredBy: human

@@ -1,0 +1,30 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-mcpfwd-bearer2-green
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/forwarder-bearer-prod
+      goal: "Continue on EXISTING branch fix/forwarder-bearer-prod (PR #49 \u2014 the REAL forwarder\n\
+        caller-bearer propagation fix). It is RED on az/lint + gcp/lint (both clusters \u2192 a real\n\
+        lint issue introduced by the change; NOT a flake). Do NOT weaken the bearer-propagation\nprod\
+        \ fix or its through-the-middleware test.\nRun LOCALLY: `golangci-lint run`, `go build ./...`,\
+        \ `go test ./...` \u2014 fix EVERY lint\nfinding (gofmt/goimports/gosec/govet/etc.; add a scoped\
+        \ `//nolint:<linter> // reason`\nonly for genuine false positives like a gosec G101 on a scope-name\
+        \ const) and any test\nbreakage. Verify all three are green locally BEFORE pushing. Own PR #49,\
+        \ drive BOTH\nclusters' gates GREEN (incl ai-review) THROUGH TO MERGE \u2192 release \u2192 deploy\
+        \ (the fix that\nmakes the public MCP create_plan path forward the caller's token to plan-api).\n"
+      name: fix-mcpfwd-bearer2-green
+      repo: leartech-mcp-servers
+    name: lintgreen
+    repo: mikelear/leartech-mcp-servers
+  tenant: leartech
+  triggeredBy: human

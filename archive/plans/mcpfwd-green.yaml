@@ -1,0 +1,33 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mcpfwd-green
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/plan-forwarder-write-authz
+      goal: "Continue on EXISTING branch feat/plan-forwarder-write-authz (PR #47). A prior\ncontinuation\
+        \ (commit 32bff385) partially fixed the fail-closed authz + gosec G101 but\ndid NOT complete (ran\
+        \ out of budget) and LEFT THE BRANCH RED: az/test, gcp/lint and\ngcp/test are FAILING (its edits\
+        \ broke a test and/or lint). Get it fully GREEN without\nweakening the security fix.\nThe intended\
+        \ state: authorizeRead/authorizeWrite FAIL-CLOSED (deny when claims absent;\na dev bypass, if\
+        \ any, only behind an explicit default-off env flag); scope name\nleartechapi:mcp:write + platform_admin\
+        \ role; the gosec G101 on the scope-name const\nsuppressed with `//nolint:gosec // G101: scope\
+        \ name, not a credential`.\nSteps: run LOCALLY `go build ./...`, `go test ./... -cover`, and `golangci-lint\
+        \ run`\n\u2014 fix EVERY failure they surface (the broken test from the fail-closed change; any\
+        \ lint\nincl G101; typecheck). Update/extend the authorize unit tests so they pass and cover the\n\
+        fail-closed + allow paths. VERIFY all three are green locally BEFORE pushing (no\nhalf-fix). Then\
+        \ push, own PR #47, drive BOTH clusters' gates GREEN (incl ai-review PASS)\nTHROUGH TO MERGE.\n"
+      name: mcpfwd-green
+      repo: leartech-mcp-servers
+    name: green
+    repo: mikelear/leartech-mcp-servers
+  tenant: leartech
+  triggeredBy: human

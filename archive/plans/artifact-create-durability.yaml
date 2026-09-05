@@ -1,0 +1,78 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Succeeded, az=Paused
+# AgentRuns owned: gcp=5, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: artifact-create-durability
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/create-durability
+      goal: "Make POST /api/v1/artifacts durable so POST /api/v1/artifacts/{id}/finalize\ncan find the\
+        \ artifact it created. Today create allocates a GUID and mints\npresigned URLs but persists nothing,\
+        \ so finalize's existence check finds no\nmanifest and returns 404 \u2014 proven end to end by\
+        \ hand (see the Plan header).\n\nIMPLEMENT OPTION A, decided. Do not implement B or C; C is a\
+        \ security\nregression and the header says why.\n\nCREATE must, after allocating the id and BEFORE\
+        \ returning 201, write an\nUNSEALED manifest for the revision at the existing immutable path\n\
+        (artifact/<guid>/<revision>/manifest.json). It carries what is known at\ncreate time \u2014 id,\
+        \ label, kind, target, ttl, revision, the DECLARED files\n(path plus any caller-supplied bytes/sha256\
+        \ expectations), publishedBy\n{client, subject} from the validated token claims, and a state marking\
+        \ it\nNOT yet sealed. It must NOT carry observed sizes or hashes; nothing has been\nuploaded yet\
+        \ and recording unverified values as fact is the bug this Plan\nexists to avoid repeating.\n\n\
+        Pick the state representation from what internal/storage already models\nrather than inventing\
+        \ a parallel notion \u2014 read storage.Manifest first. If\nthere is no existing field, add ONE\
+        \ explicit field; do not overload an\nexisting one.\n\nFINALIZE keeps its existence + tenant check\
+        \ exactly as it is \u2014 that check is\nthe reason Option A was chosen over C. It must now:\n\
+        \  - load the unsealed manifest for the named revision (404 if absent \u2014 an\n    unknown or\
+        \ never-created artifact must still 404, and there must be a\n    test proving that);\n  - verify\
+        \ every declared file EXISTS in GCS, and that observed size and\n    sha256 match any caller expectation,\
+        \ rejecting a mismatch;\n  - seal: write the manifest with observed values and the sealed state;\n\
+        \  - remain idempotent-safe \u2014 re-finalizing an ALREADY-SEALED revision keeps\n    returning\
+        \ 409, which is existing behaviour and must not regress.\n\nIMMUTABILITY IS NOT WEAKENED. Sealing\
+        \ rewrites the manifest of a revision\nthat is not yet sealed. A sealed revision stays untouched\
+        \ forever; a new cut\nis always a NEW revision. Make this explicit in the code comments, because\n\
+        \"create writes a manifest that finalize later rewrites\" reads like a\nviolation of the immutability\
+        \ rule until you see that unsealed != sealed.\n\nABANDONED CREATES \u2014 decide and document,\
+        \ do not leave implicit. A caller can\ncreate (leaving an unsealed manifest) and never upload.\
+        \ State the policy in\nthe code and README: an unsealed manifest older than its TTL, or older\
+        \ than\na stated default when no TTL is given, is eligible for cleanup, and list\nendpoints MUST\
+        \ NOT present unsealed revisions as though they were published\nartifacts. Implement the list-filtering\
+        \ now; a sweeper may be a follow-up,\nbut say which you did.\n\nISOLATE TESTING: unit tests against\
+        \ the existing fake/in-memory storage\nseam, no real GCS. Cover: create writes an unsealed manifest;\
+        \ finalize seals\nit and records observed values; finalize on a NEVER-created id returns 404;\n\
+        finalize with a sha256 mismatch is rejected; re-finalize of a sealed\nrevision returns 409; a\
+        \ second revision can be created and sealed while\nrevision 1 stays byte-identical; unsealed revisions\
+        \ are excluded from list.\n\nKEEP THE PUBLISHED CONTRACT HONEST. If any request or response shape\n\
+        changes, update the swaggo annotations so /openapi.json still describes\nreality \u2014 leartech-mcp-servers\
+        \ asserts its tool DTOs against that document\n(its TestCreateArtifactBodyMatchesServiceSchema\
+        \ and siblings), so a silent\ndivergence there breaks the design MCP. If a shape does change,\
+        \ say so in\nthe PR description and note that the MCP's testdata golden needs refreshing.\n\n\
+        LOGGING: follow the estate standard already wired via internal/logging\n(zerolog, snake_case,\
+        \ service/version/cluster stamped). Log create and\nfinalize with op, artifact_id, revision, label,\
+        \ tenant, outcome and the\nsealed/unsealed transition. CARDINALITY: artifact_id is a GUID and\
+        \ revision\nis unbounded \u2014 JSON body fields only, NEVER Loki stream labels.\n\nEND-TO-END\
+        \ VERIFICATION IS MANUAL, DELIBERATELY. The full round trip needs\nan interactive user token obtained\
+        \ by a BROWSER LOGIN (the loopback\nauthorization-code flow in the mcp-testing-hydra kit), which\
+        \ an agent cannot\nobtain \u2014 so do NOT add a kind:check step attempting it. A dev-agent\n\
+        check step could not produce a deterministic verdict anyway (catalog rule\nR25). Your job is the\
+        \ unit-tested code change; a human re-runs\ncreate -> PUT -> finalize -> get-by-label -> byte-match\
+        \ afterwards.\n\nDone = PR merged (open via open_pr, drive gates green)."
+      name: create-durability
+      repo: mikelear/leartech-artifact-api
+    kind: pr
+    name: create-durability
+  - dependsOn:
+    - create-durability
+    kind: check
+    name: create-durability-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.create-durability.pr}
+      repo: mikelear/leartech-artifact-api
+      service: leartech-artifact-api
+  triggeredBy: plan-catalog-internal-services

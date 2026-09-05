@@ -1,0 +1,55 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-mcp-token-exchange
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/forwarder-token-exchange
+      goal: "Add RFC 8693 OAuth token-exchange to the MCP forwarder so a NATIVE MCP client (whose\ntoken\
+        \ only carries aud=[<mcp-host>]) can call downstream services that require a different\naudience\
+        \ (e.g. plan-api needs aud contains leartech-plan-api). Today the forwarder attaches\nthe caller's\
+        \ bearer verbatim (internal/planserver/client.go) \u2014 that only works if the\ncaller already\
+        \ requested the target audience (our manual both-audiences test). A standard\nclient can't, so\
+        \ create_plan \u2192 plan-api 401.\n\nDesign (make it GENERAL + config-driven, not plan-api-specific):\n\
+        - A per-target audience registry: config mapping each downstream target \u2192 its required\n\
+        \  audience (start: plan-api \u2192 leartech-plan-api). Framework-level so \"plug in a service\"\
+        \n  just adds a config entry. Env/config-driven (same style as the existing MQUBE_AUTH_* /\n \
+        \ s2s config).\n- Outbound token selection, per downstream call:\n  1. If the caller's token ALREADY\
+        \ has the target audience in aud \u2192 use it as-is\n     (pass-through; preserves the Option-B\
+        \ path + caller identity, zero extra latency).\n  2. Else \u2192 perform RFC 8693 token-exchange\
+        \ at Hydra's /oauth2/token:\n     grant_type=urn:ietf:params:oauth:grant-type:token-exchange,\n\
+        \     subject_token=<caller access token>, subject_token_type=\u2026:access_token,\n     audience=<target\
+        \ audience> (and/or resource=), authenticated with the MCP's OWN\n     confidential client creds\
+        \ (the existing s2s client_id/secret the forwarder already\n     has for the s2s fallback). Use\
+        \ the RETURNED token (aud=target) for the plan-api call.\n  3. Fallback: if exchange is unavailable/errors,\
+        \ keep current behaviour (attach caller\n     bearer) so nothing regresses.\n- IDENTITY MUST BE\
+        \ PRESERVED: token-exchange keeps the subject = the original caller, so\n  plan-api still records\
+        \ triggeredBy=<real user> (do NOT switch to a pure s2s/service\n  identity \u2014 that would lose\
+        \ who created the Plan). Verify the exchanged token's sub is the\n  caller.\n- Cache exchanged\
+        \ tokens briefly (per subject+audience, until near expiry) to avoid a\n  Hydra round-trip on every\
+        \ call.\n\nHYDRA/AUTH-SERVICE DEPENDENCY: token-exchange must be permitted for the MCP's client.\n\
+        Investigate whether Hydra already allows grant_type token-exchange for the MCP s2s client\n+ has\
+        \ leartech-plan-api in that client's audience allow-list. If config is needed\n(enable the grant\
+        \ type / audience), document EXACTLY what (client_id, grant, audiences) so\nthe auth-service/Hydra\
+        \ config PR can be made \u2014 call it out clearly in the PR description\n(a follow-up config\
+        \ step will wire it). Do not hardcode secrets.\n\nTEST (through the middleware): a caller token\
+        \ with ONLY aud=[<mcp-host>] (+ mcp:write) \u2192\ncreate_plan \u2192 assert the forwarder obtains\
+        \ a token whose aud CONTAINS leartech-plan-api\nAND sub = the caller, and the outbound plan-api\
+        \ request carries it. Stub Hydra's\ntoken-exchange endpoint in the test. Also assert the pass-through\
+        \ path (caller token\nalready has plan-api aud \u2192 no exchange). Lean diff. Own the PR, drive\
+        \ BOTH clusters green\nTHROUGH TO MERGE \u2192 release \u2192 deploy. After deploy, a native Claude\
+        \ client create_plan works\nwith only the MCP audience.\n"
+      name: fix-mcp-token-exchange
+      repo: leartech-mcp-servers
+    name: forwarder
+    repo: mikelear/leartech-mcp-servers
+  tenant: leartech
+  triggeredBy: human

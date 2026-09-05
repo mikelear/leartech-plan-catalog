@@ -1,0 +1,69 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp, az
+# Phase: gcp=Failed, az=Paused
+# AgentRuns owned: gcp=3, az=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: shipproven-website-visual
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-ng
+    inputs:
+      branch: feat/brand-visual-layer
+      goal: "Apply the ShipProven brand visual layer to the marketing site. Your design direction comes\
+        \ from an ARTIFACT, not from this goal \u2014 fetch and read it first, in full, before writing\
+        \ any code.\nARTIFACT: gs://artifacts-product-first/artifact/84a0eddb-5d20-4322-87c5-afebbae2c176/1/\
+        \ Read manifest.json first (it indexes everything and captions every ref), then intent.md (the\
+        \ authoritative MUST / MUST NOT / MAY), then tokens.json, then the four docs under docs/. The\
+        \ bundle is self-contained: everything you need is in it. binding=guidance, so intent.md's MAY\
+        \ list is real latitude \u2014 use it, and report what you chose.\nTHE FOUR GAPS TO CLOSE (all\
+        \ verified missing on staging, see intent.md): 1. Brand palette + type from tokens.json \u2014\
+        \ light theme, dark navy hero and footer,\n   ONE signal-green accent, bordered cards (1px #E2E8F0,\
+        \ radius 14px, soft shadow),\n   3px green top-border on featured cards, alternating white / #F3F6F9\
+        \ sections,\n   content max-width ~1120px. The current stylesheet is 640 bytes; that is the\n\
+        \   measure of how much is missing.\n2. The signature visuals from docs/VISUAL-BUILD-SPEC.md as\
+        \ INLINE SVG \u2014 not\n   <img>, not canvas, not a JS chart library. Inline SVG is prerender-safe,\n\
+        \   themeable and crawlable, which is why the spec requires it. Honour\n   prefers-reduced-motion\
+        \ and give every diagram alt/aria text.\n3. og-default.png at 1200x630. It is a 404 today and\
+        \ og:image already points at\n   it, so every social and AI preview of this site is currently\
+        \ broken.\n4. Attribution to Verrian. Per docs/WEBSITE-DESIGN.md \xA73 the eyebrow is\n   \"SHIPPROVEN\
+        \ \xB7 BY VERRIAN\" and the footer reads \"product of Verrian Ltd, UK\".\n   LearTech must appear\
+        \ ONLY as a Showcase customer. Staging currently presents\n   LearTech as the producer, which\
+        \ is backwards \u2014 this is a brand/legal\n   correction, not a style preference.\n\nSANITISATION\
+        \ \u2014 HARD REQUIREMENT. Every image in refs/ is an internal Plan-portal capture containing\
+        \ *.jx.leartech.com preview hostnames, cluster tags, GCS paths and real repo/PR identifiers. This\
+        \ site is PUBLIC. If you derive a Showcase visual from any ref, redact or replace that detail\
+        \ with plausible neutral values. Do not ship a raw capture. Per-ref notes are in manifest.json;\
+        \ the rule is docs/WEBSITE-DESIGN.md \xA74.6.\nDO NOT REGRESS CRAWLABILITY. .lighthouse/jenkins-x/seo-preview.yaml\
+        \ is a BLOCKING presubmit that fetches RAW HTML with no JS and asserts the hero h1 verbatim, /fleet-status\
+        \ prerendering independently, the full meta set, robots.txt with a Sitemap: line, and a well-formed\
+        \ sitemap.xml. Keep prerender/SSG (outputMode: static). No JS-only routes. No content behind interaction.\
+        \ Do not weaken or skip that gate to make a visual change pass \u2014 if it goes red, the visual\
+        \ change is wrong.\nDO NOT CHANGE THE COPY. docs/WEBSITE-CONTENT.md is the source of truth for\
+        \ wording.\nACCESSIBILITY: WCAG 2.2 AA. Explicitly verify #16A34A contrast on white AND on #F3F6F9\
+        \ \u2014 green-on-white is the known risk in this palette. Keep the skip-link, visible focus and\
+        \ keyboard nav.\nREPORT IN THE PR DESCRIPTION: every derivation and choice you made under the\
+        \ MAY latitude \u2014 what you cropped or generated from refs/, exactly what you sanitised, which\
+        \ shades you used and where, and how you expressed the tokens. Latitude is granted on condition\
+        \ it is recorded.\nISOLATE TESTING: extend end2end-ui specs to assert the visual layer landed\
+        \ \u2014 brand colours resolve on the rendered page, each signature diagram is present as inline\
+        \ SVG with accessible text, og-default.png returns 200, the eyebrow and footer name Verrian, and\
+        \ LearTech appears only within the Showcase section. Runnable against the PR preview; no new infrastructure.\n\
+        Done = PR merged (open via open_pr, drive gates green, seo-preview included)."
+      name: apply-visual-layer
+      repo: mikelear/leartech-ship-proven-website
+    kind: pr
+    name: apply-visual-layer
+  - dependsOn:
+    - apply-visual-layer
+    kind: check
+    name: apply-visual-layer-verify-release
+    use: verify-release-flow
+    with:
+      pr: ${steps.apply-visual-layer.pr}
+      repo: mikelear/leartech-ship-proven-website
+      service: leartech-ship-proven-website
+  triggeredBy: plan-catalog-internal-services

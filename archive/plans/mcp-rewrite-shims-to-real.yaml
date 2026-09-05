@@ -1,0 +1,39 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mcp-rewrite-shims-to-real
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    inputs:
+      branch: feat/shims-to-real-mcp
+      goal: "Migrate the agent's in-process HTTP-spawning \"MCP\" shims to the REAL\nclient-side MCP client\
+        \ (gate/mcp_servers/remote.py) that the platform's\nstandard agents use \u2014 Go-first, safely,\
+        \ one tool at a time.\n\nBUCKET FIRST (produce the map in the PR description):\n- DUPLICATE \u2014\
+        \ a shim whose tool ALREADY exists as a deployed Go MCP tool\n  in leartech-mcp-servers (e.g.\
+        \ pr_context \u2194 prcontextserver;\n  pipelines/triggers \u2194 tektonserver/jx3flowserver;\
+        \ k8s \u2194 k8sserver).\n  \u2192 cut the agent over to the real MCP via remote.py, then DELETE\
+        \ the shim.\n- GAP \u2014 no Go MCP tool yet. \u2192 do NOT hand-migrate; note it for a\n  follow-up\
+        \ (build the Go tool in leartech-mcp-servers first). Leave the\n  shim in place this pass.\n-\
+        \ KEEP-LOCAL \u2014 git / toolchain-against-a-clone ops (clone, build, lint,\n  test run on the\
+        \ working copy). \u2192 leave in-process; these are correctly local.\n\nRULES (Go-first, no breakage):\n\
+        - Only cut over a tool once you've VERIFIED the deployed Go MCP tool\n  covers what the shim did\
+        \ (parity: fields/behaviour) \u2014 via remote.py\n  against the in-cluster MCP (aud=leartech-mcp),\
+        \ reusing the same\n  LEARTECH_MCP_URL + LEARTECH_AUTH_* the menu agents use.\n- One tool per\
+        \ commit; run the tests after each; do NOT delete a shim\n  until its replacement is proven. Never\
+        \ break a running agent path.\n- Keep the PR reviewable: bucket table + per-tool cutover + shim\
+        \ deletions.\nOwn the PR: take all Tekton gates green + merge. This standardizes the\nagent fleet\
+        \ on the real MCP (remote.py) instead of the spawn-temp shims,\nand gives the BA agent the same\
+        \ integration to wire against tomorrow.\n"
+      name: shims-to-real-mcp
+      repo: leartech-automated-agent
+    name: shims-to-real-mcp
+    repo: mikelear/leartech-automated-agent
+  tenant: leartech
+  triggeredBy: agent

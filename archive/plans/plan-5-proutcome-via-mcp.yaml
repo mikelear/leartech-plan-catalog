@@ -1,0 +1,71 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=2
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: plan-5-proutcome-via-mcp
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-py
+    budgetIter: 8
+    inputs:
+      base: main
+      branch: agent/pr-context-add-merged-field
+      description: "Add explicit merged / merged_at to the pr_context MCP get_pr_metadata output. Today\
+        \ PRMetadataOut has {repo,number,head_sha,base_sha,title,body,state,changed_files} but NO merged\
+        \ field \u2014 and the code itself notes callers can't distinguish MERGED vs CLOSED from state\
+        \ alone. The GH PR JSON already carries `merged` + `merged_at`; surface them."
+      goal: "In leartech-mcp-servers internal/prcontextserver: add `Merged bool` (json \"merged\") and\n\
+        `MergedAt string` (json \"merged_at\") to PRMetadataOut, populated from the GitHub PR JSON's\n\
+        `merged` / `merged_at` fields (already fetched in GetPRMetadata). Keep `state` too. Update the\
+        \ tool\njsonschema/description + the parity doc comment. Tests: a merged PR \u2192 merged=true\
+        \ + merged_at set;\nan open PR \u2192 merged=false; a closed-unmerged PR \u2192 merged=false,\
+        \ state=closed. All PR gates green incl\nreal ai-review. Open a PR. Hold it.\n"
+      name: pr-context-add-merged
+      repo: leartech-mcp-servers
+    name: pr-context-add-merged
+    repo: mikelear/leartech-mcp-servers
+  - agentType: leartech-agent-py
+    budgetIter: 10
+    inputs:
+      base: main
+      branch: agent/proutcome-fetcher-via-pr-context-mcp
+      description: "Wire a REAL PROutcomeFetcher (currently the Noop default \u2192 AwaitingReview steps\
+        \ stuck forever \u2192 plans stuck Running) that resolves a step's PR outcome by calling the pr_context\
+        \ MCP get_pr_metadata over the internal MCP (NOT a direct GH client). The controller becomes an\
+        \ authenticated MCP client (mint aud=leartech-mcp). Uses the merged/merged_at field being added\
+        \ to pr_context (parallel step)."
+      goal: "Make AwaitingReview steps resolve so plans roll up (fix \"Plan CRs stuck Running\"). Do it\
+        \ via MCP, not\ndirect GitHub. All PR gates green incl a real ai-review verdict.\n\n## Implement\
+        \ (internal/controller + cmd/server)\n- A real PROutcomeFetcher implementing the existing interface:\
+        \ given a step's repo + captured\n  targetPR, call the pr_context MCP tool `get_pr_metadata` (over\
+        \ the internal MCP at\n  /mcp/pr_context) \u2192 read `merged`/`merged_at`/`state`: merged=true\
+        \ \u2192 step StepPhaseSucceeded;\n  state=closed & merged=false \u2192 StepPhaseFailed; open\
+        \ \u2192 stay AwaitingReview. Match the existing\n  PROutcome return contract the reconcile loop\
+        \ already consumes.\n- Wire it into the PlanReconciler in cmd/server (replace the Noop default).\
+        \ Keep nil-safe fallback for\n  tests + degrade safely (fetcher error / merged-field-absent \u2192\
+        \ stay AwaitingReview, logged) so it\n  never crashes the reconcile.\n- CONTROLLER AS AUTHED MCP\
+        \ CLIENT: add an MCP HTTP/JSON-RPC client + s2s auth to mint aud=leartech-mcp\n  (the internal\
+        \ MCP enforces it). Use go-common's ServiceAuthClient (outbound minter). For the Hydra\n  client:\
+        \ reuse an existing internal-services client that is allowed to mint aud=leartech-mcp if one\n\
+        \  fits, OR provision a dedicated `controller-internal-services` client via the auth-service\n\
+        \  setup-internal-clients allow-list (note it in the PR if a new client is needed \u2014 that\
+        \ may require a\n  small auth-service follow-up). Config via chart env + ExternalSecret, fail-safe\
+        \ when unset.\n\n## Tests (envtest/unit, stub the pr_context client)\n- AwaitingReview + get_pr_metadata\
+        \ merged=true \u2192 step Succeeded \u2192 plan rolls up Complete (all\n  Succeeded). merged=false+state=closed\
+        \ \u2192 Failed \u2192 plan Failed. open \u2192 stays AwaitingReview.\n  fetcher/MCP error or\
+        \ unauth \u2192 stays AwaitingReview (safe). MCP call carries an aud=leartech-mcp\n  bearer.\n\
+        \n## Acceptance\n- Real PROutcomeFetcher wired, reads PR outcome via the pr_context MCP (no direct\
+        \ GH client in the\n  controller), controller authenticates to the internal MCP (aud=leartech-mcp),\
+        \ AwaitingReview steps\n  resolve on merge/close, plans roll up to Complete/Failed, degrades safely.\
+        \ All PR gates green\n  (gcp+az) incl real ai-review. Open a PR. Hold it.\n"
+      name: controller-proutcome-fetcher
+      repo: leartech-orchestrator-controller
+    name: controller-proutcome-fetcher
+    repo: mikelear/leartech-orchestrator-controller
+  tenant: platform
+  triggeredBy: session-plan-5-proutcome-2026-07-19

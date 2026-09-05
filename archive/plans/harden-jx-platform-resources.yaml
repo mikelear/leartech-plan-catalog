@@ -1,0 +1,56 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Failed
+# AgentRuns owned: gcp=2
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: harden-jx-platform-resources
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: chart-config
+      cluster: gcp
+      goal: "Right-size the JX/Lighthouse/Tekton platform on GCP \u2014 it's under-resourced for the current\n\
+        Renovate + Tekton-build load (lighthouse-webhooks OOMKilling \u2192 dropping GitHub webhooks \u2192\
+        \nrelease postsubmits silently missed; this is the root cause of the stuck GCP auth-service\n\
+        release). Edit SOURCE helmfiles ONLY (never config-root/, it's generated).\n\nChanges in helmfiles/jx/\
+        \ (the dev/lighthouse release loads configs/lighthouse.yaml last =\nauthoritative override):\n\
+        1. configs/lighthouse.yaml \u2014 ADD a `webhooks.resources` block (currently the webhooks: block\n\
+        \   has no resources \u2192 takes chart default 512Mi/128Mi \u2192 OOMKills). Set requests cpu\
+        \ 100m /\n   mem 256Mi, limits cpu 200m / mem 1Gi. (foghorn + tektoncontroller already overridden\
+        \ at\n   1Gi \u2014 keep; keeper healthy \u2014 leave.)\n2. jx-pipelines-visualizer \u2014 OOM\
+        \ churn (524 restarts at 512Mi). Bump to 1Gi limit / 256Mi req\n   (find its release values \u2014\
+        \ jx-values.yaml or add a configs/ override).\n3. boot job (jx-git-operator / jx-boot) \u2014\
+        \ bump its resources if it takes low defaults, so the\n   boot job doesn't get OOM/evicted under\
+        \ load.\n4. SCHEDULING: add nodeSelector/tolerations so JX platform services (lighthouse-*, visualizer,\n\
+        \   controllers) schedule on the SERVICES node pool, off the general/build pool. Match the\n \
+        \  existing services-pool label/taint the cluster already uses (inspect the nodes).\nNOTE \u2014\
+        \ do NOT mask jx-build-controller's crashloop with resources: it exits code 2 (APP/config\nerror,\
+        \ ~997 restarts), NOT OOM. Leave a comment flagging it as a separate app bug to escalate.\nNo\
+        \ node is under memory/disk pressure, so these bumps schedule safely. Open ONE PR.\n"
+      service: jx-platform
+    name: gsm
+    repo: mikelear/jx-build-cluster-gsm
+  - agentType: leartech-agent-infra
+    inputs:
+      action: chart-config
+      cluster: az
+      goal: "Same JX platform right-sizing for AZ (mirror the GCP changes in helmfiles/jx/):\n1. configs/lighthouse.yaml\
+        \ \u2014 ADD webhooks.resources (req 100m/256Mi, lim 200m/1Gi) \u2014 AZ\n   lighthouse-webhooks\
+        \ runs the same 512Mi default and will OOM under the same load.\n2. jx-pipelines-visualizer \u2014\
+        \ CRITICAL on AZ: 13001 restarts (OOM). Bump to 1Gi/256Mi (or if\n   it's a non-critical dashboard\
+        \ and churn is harmful, set replicaCount 0 \u2014 note the choice).\n3. boot job resources bump\
+        \ (as GCP).\n4. SCHEDULING is MORE important on AZ: the `default` node pool is OVERCOMMITTED (a\
+        \ node at\n   ~297% mem-limits / 395% cpu-limits). Add nodeSelector/tolerations so JX services\
+        \ land on\n   the roomier servicesv2 pool (lighthouse pods already do \u2014 extend to visualizer/controllers).\n\
+        AZ lighthouse-tekton-controller already at 2Gi (keep). Same jx-build-controller note (exit 2\n\
+        app crash, not resources \u2014 flag, don't mask). Edit SOURCE only. Open ONE PR.\n"
+      service: jx-platform
+    name: akv
+    repo: mikelear/jx-build-cluster-akv
+  tenant: leartech
+  triggeredBy: human

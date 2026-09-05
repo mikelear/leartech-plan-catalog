@@ -1,0 +1,32 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: remediate-s2-verify-planapi-release
+  namespace: jx-staging
+spec:
+  paused: true
+  remediates:
+  - name: s2-verify-planapi
+    namespace: jx-staging
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: deploy-health
+      clusters:
+      - gcp
+      - az
+      goal: Deterministically verify the leartech-plan-api release is live and healthy on both clusters,
+        confirming the s2-verify-planapi 'verify-release-passed' failure was a false-negative caused by
+        empty service/cluster inputs (not an actual release failure). Release fired (tag v0.0.15-az) and
+        promote PRs merged on gcp (#1360 -> 0.0.16) and az (#1161 -> 0.0.15).
+      name: verify-deploy-healthy
+      namespace: jx-staging
+      service: leartech-plan-api
+    name: verify-deploy-healthy
+    repo: mikelear/leartech-plan-api
+  tenant: leartech

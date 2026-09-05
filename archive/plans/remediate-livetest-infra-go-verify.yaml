@@ -1,0 +1,51 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: remediate-livetest-infra-go-verify
+  namespace: jx-staging
+spec:
+  paused: true
+  remediates:
+  - name: livetest-infra-go-verify
+    namespace: jx-staging
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: feat/hello-go7-optional-db
+      goal: 'Root cause: hello-go7 pods in jx-staging are stuck CreateContainerConfigError with ''secret
+        "hello-go7-db" not found'' (0/2 replicas available, ProgressDeadlineExceeded), which blocks release/deploy
+        verification. The chart hard-requires a database secret that does not exist in jx-staging (nor
+        in ephemeral preview namespaces). Fix at source in the hello-go7 Helm chart: set database.enabled=false
+        as the default in values.yaml, and gate the DB-related resources behind {{- if .Values.database.enabled
+        }} so the Deployment no longer references the missing secret. Specifically: (1) wrap the container
+        env secretKeyRef block that reads the hello-go7-db secret in the database.enabled conditional,
+        (2) gate the db-migrate Job (hello-go7-migrate) behind the same conditional, and (3) ensure any
+        DB DSN the Go code reads is optional (os.Getenv null-checked) so the service starts without a
+        database. Do NOT invent secret values. Open a PR on branch feat/hello-go7-optional-db. Keep the
+        diff minimal and chart-only unless the Go code also hard-fails on a missing DSN.'
+      name: fix-hello-go7-optional-db
+      repo: mikelear/hello-go7
+    name: fix-hello-go7-optional-db
+    repo: mikelear/hello-go7
+  - agentType: leartech-agent-infra
+    dependsOn:
+    - fix-hello-go7-optional-db
+    inputs:
+      action: deploy-health
+      clusters:
+      - gcp
+      - az
+      goal: "Verify the brief successCriteria: after the optional-db fix promotes, hello-go7 is the newly-released\
+        \ version AND healthy in-cluster. Deterministic, version-aware deploy-health check \u2014 healthy=true\
+        \ requires >=1 available replica and observed_version == the promoted version, with no CreateContainerConfigError."
+      name: verify-release-deploy-healthy
+      namespace: jx-staging
+      service: hello-go7
+    name: verify-release-deploy-healthy
+    repo: mikelear/hello-go7
+  tenant: leartech

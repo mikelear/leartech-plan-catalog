@@ -1,0 +1,34 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: remediate-e2e-inject-canary
+  namespace: jx-staging
+spec:
+  paused: true
+  remediates:
+  - name: e2e-inject-canary
+    namespace: jx-staging
+  steps:
+  - agentType: leartech-agent-infra
+    inputs:
+      action: deploy-health
+      clusters:
+      - gcp
+      - az
+      goal: 'Deterministically re-verify that the leartech-qa-canary release is healthy and the NEW version
+        is deployed on both clusters, once the in-flight promote PRs (gcp/jx-build-cluster-gsm #1394 ->
+        v0.0.37, az/jx-build-cluster-akv #1194 -> v0.0.36) have completed their pending verify check and
+        merged. This re-runs the verification that the original step ''empty-commit-verify-release-promote-merged''
+        failed to complete when its AgentRun Job was evicted mid-flight. Success = deploy_health reports
+        healthy=true with >=1 available replica AND observed_version == the promoted version on each cluster.'
+      name: verify-canary-release-healthy
+      namespace: jx-staging
+      service: leartech-qa-canary
+    name: verify-canary-release-healthy
+    repo: mikelear/leartech-qa-canary
+  tenant: leartech

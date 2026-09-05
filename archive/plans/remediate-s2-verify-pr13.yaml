@@ -1,0 +1,64 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Paused
+# AgentRuns owned: gcp=0
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: remediate-s2-verify-pr13
+  namespace: jx-staging
+spec:
+  paused: true
+  remediates:
+  - name: s2-verify-pr13
+    namespace: jx-staging
+  steps:
+  - agentType: leartech-agent-py
+    inputs:
+      branch: fix/release-status-wait-for-run
+      goal: "Fix the root-cause race in the infra agent's `release-pipeline-status` check action so it\
+        \ stops failing closed when invoked before the main-push release PipelineRun has been created.\n\
+        \nEVIDENCE / ROOT CAUSE: For leartech-plan-api PR #13 (merge commit f14a94d6b0db80dfd6e2fd3f5399aaf0b1075ecf,\
+        \ merged 2026-08-08T18:57:48Z), the verify step (action=release-pipeline-status, run s2-verify-pr13-verify-release-passed)\
+        \ ran at 18:58:33Z and reported verdict=FAIL 'gcp: release pipeline did not fire for this commit\
+        \ (no run matched lastCommitSHA)'. But the release PipelineRun r-leartech-plan-api-main-release-d4frr\
+        \ for that exact SHA was not created until 18:59:35Z (~62s AFTER the check). The release fired\
+        \ and progressed normally; the check simply ran ~1 minute too early and fail-closed.\n\nWHERE:\
+        \ the infra agent invoked by `python -m gate.agent.infra_agent`, in the handler for the `release-pipeline-status`\
+        \ action that calls the leartech-jx-release `release_pipeline_status` MCP tool (fired=false /\
+        \ no matching run path).\n\nCHANGE: When no PipelineRun matches lastCommitSHA yet, POLL with a\
+        \ bounded backoff before returning FAIL \u2014 return immediately as soon as a matching run appears\
+        \ (then report its running/passed/failed state exactly as today). Make the wait window configurable\
+        \ via an env var (e.g. LEARTECH_RELEASE_WAIT_SECONDS, default ~300s, poll every ~15s). Only return\
+        \ the 'release pipeline did not fire' FAIL if no matching run appears within the window. Preserve\
+        \ all existing behaviour when a run already exists.\n\nTESTS: Add a unit test with a fake release_pipeline_status\
+        \ client that returns 'no run' for the first N polls then a Running run for the target SHA, asserting\
+        \ the action WAITS and does not fail-close prematurely, and that it returns as soon as the run\
+        \ is found. If the test drives a background poll loop, synchronise with an asyncio.Event (NOT\
+        \ asyncio.sleep) per the async-test calibration, and keep poll intervals injectable so the test\
+        \ runs fast. Do NOT change behaviour for the az 'shares one MCP endpoint' path in this PR."
+      name: harden-release-status-wait
+      repo: mikelear/leartech-automated-agent
+    name: harden-release-status-wait
+    repo: mikelear/leartech-automated-agent
+  - agentType: leartech-agent-infra
+    inputs:
+      action: deploy-health
+      clusters:
+      - gcp
+      - az
+      goal: 'Verify the brief''s successCriteria: leartech-plan-api is deployed at the NEW version from
+        PR #13 (merge commit f14a94d6b0db80dfd6e2fd3f5399aaf0b1075ecf) and HEALTHY on BOTH clusters. The
+        original release-pipeline-status check failed closed only because it ran ~62s before the main-push
+        release PipelineRun (r-leartech-plan-api-main-release-d4frr, started 18:59:35Z) existed; the release
+        did fire and promote normally. This deterministic, version-aware deploy-health check must report
+        healthy with >=1 available replica AND observed_version == the promoted version on gcp and az.
+        Version is derived from promote_status if not pinned. This is the terminal verification of the
+        release->promote->reconcile->deploy chain.'
+      name: verify-deploy-healthy
+      namespace: jx-staging
+      service: leartech-plan-api
+    name: verify-deploy-healthy
+    repo: mikelear/leartech-plan-api
+  tenant: leartech

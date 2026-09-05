@@ -1,0 +1,41 @@
+# ARCHIVED — NOT A CATALOG PLAN. Do not copy this as a pattern.
+# Predates the current controller and catalog gate; see archive/README.md.
+# Existed on: gcp
+# Phase: gcp=Succeeded
+# AgentRuns owned: gcp=1
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: plan-api-auth-optional
+  namespace: jx-staging
+spec:
+  steps:
+  - agentType: leartech-agent-go
+    inputs:
+      branch: fix/auth-secret-optional
+      goal: "leartech-plan-api 0.0.3 is deployed but its pods are stuck in\nCreateContainerConfigError:\
+        \ the chart's deployment references MANDATORY\n(optional:false) secretKeyRefs for the auth middleware\
+        \ \u2014\nLEARTECH_AUTH_SERVER_URL, LEARTECH_AUTH_CLIENT_ID, LEARTECH_AUTH_CLIENT_SECRET\nfrom\
+        \ secret `leartech-plan-api-auth` \u2014 but that secret is NOT provisioned in\njx-staging, so\
+        \ the container can't be created. This is the known preview/deploy\nbreaker (mandatory secretKeyRef\
+        \ with no secret).\n\nFIX (make the service START without the secret, keep auth correct when present):\n\
+        1. In the chart, set `optional: true` on ALL three LEARTECH_AUTH_* secretKeyRefs\n   (and any\
+        \ other secretKeyRef that isn't guaranteed to exist), so a missing\n   secret does NOT block container\
+        \ creation. Also make the values gate the whole\n   auth env block behind an `auth.enabled` flag\
+        \ (default false for now) so a fresh\n   deploy comes up clean \u2014 mirror how leartech-angular-service-template\
+        \ / the\n   optional-DB pattern gate optional infra.\n2. Code side: the auth middleware must be\
+        \ FLAG-GATED and FAIL-CLOSED when enabled\n   (see the auth-middleware-fail-open lesson) \u2014\
+        \ construct the ServiceClient from\n   env only when the creds are present/required; when absent\
+        \ (auth.enabled=false),\n   the service starts and serves /health (always open) and the read endpoints\n\
+        \   (or 401 on /plans if you prefer closed-by-default) \u2014 but it MUST start, never\n   CreateContainerConfigError.\
+        \ Keep the gate-ON httptest JWKS test.\n3. If a leftover `leartech-plan-api-migrate` Job/template\
+        \ is still in the chart,\n   remove it (this service is DB-less).\nVERIFY: `helm template` with\
+        \ default values renders NO mandatory secretKeyRef\n(optional:false) and no migrate Job; the container\
+        \ starts with no auth secret.\nKeep the diff LEAN (no vendor). Own the PR + drive BOTH clusters'\
+        \ gates green\nTHROUGH TO MERGE \u2192 release \u2192 the deploy comes up Ready.\n"
+      name: plan-api-auth-optional
+      repo: leartech-plan-api
+    name: auth-optional
+    repo: mikelear/leartech-plan-api
+  tenant: leartech
+  triggeredBy: human
