@@ -1,0 +1,148 @@
+# Replace illustration with evidence, drop the hard-coded counts, and correct the cloud framing.
+#
+# ⭐ DESIGN SOURCE — v3, READ IT BY GUID
+#   artifact 2b528e01-cb5a-4031-ba6c-5e0e797e45e3 · label shipproven-web-design-system-v3
+#   revision 1 · sealed · files DESIGN.md, diagram-wow.html, motion-principles.html
+#   DESIGN.md sha256 fa3603a28d5f343ec5f1a7d3386a659c289df9143211b9f38d52629901eba885
+# ⚠️ SUPERSEDES 87e95fbd (v2) and 781fbaf1 (v1). New in v3: §6a "Evidence beats illustration",
+# the corrected cloud framing, the no-count rule, and the two process rules (assertions pin
+# invariants not copy; positive verification not negative guards).
+# ⚠️ POSITIVE VERIFICATION: fetch DESIGN.md, compute its sha256, and PRINT THAT DIGEST IN THE
+# PR DESCRIPTION. If you cannot produce that line, say so explicitly in the PR — do not
+# silently fall back to docs/WEBSITE-MOTION-SYSTEM.md, which derives from v1 and is a stale
+# fork. `diagram-wow.html` in the same artifact is a working reference for every treatment
+# below; prefer matching it to re-deriving from this prose.
+#
+# WHY THIS PLAN EXISTS — three problems, all in the deployed page
+#   1. HARD-CODED COUNTS. "Four rungs, each stricter than the last" caps the thing whose whole
+#      claim is "a new guarantee is a new step". The environment count is incidental and
+#      should not be stated either.
+#   2. THE CLOUD FRAMING IS WRONG, AND CI ENFORCES THE WRONG VERSION. The footer says "Two
+#      independent clouds today", which reads as a ceiling. We have run the same change on
+#      GCP, Azure AND AWS. Worse: end2end-ui/13-pipeline-scenes.spec.ts asserts
+#      toContainText('Two independent clouds today'), so the correct copy CANNOT ship until
+#      that assertion changes. This is the v3 lesson — assertions must pin invariants, not
+#      marketing copy.
+#   3. THE DIAGRAMS ARE BLAND. §6's "flat, no gradients, no shadows" prevented decoration and
+#      produced blandness: every element the same weight, no focal point, nothing to look at.
+#      The fix is NOT gloss — it is to show real artefacts, which no competitor can.
+#
+# VERIFICATION — auto-injected, NOT hand-authored (R23/R24).
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: shipproven-evidence-diagrams
+spec:
+  paused: true
+  steps:
+    - name: open-ladder-and-clouds
+      kind: pr
+      agentType: leartech-agent-ng
+      inputs:
+        name: open-ladder-and-clouds
+        repo: mikelear/leartech-ship-proven-website
+        branch: fix/open-ladder-and-clouds
+        goal: >-
+          Remove the hard-coded counts and correct the cloud framing. Read DESIGN.md from
+          artifact 2b528e01-cb5a-4031-ba6c-5e0e797e45e3 (§6a and the ladder/cloud sections)
+          and print its sha256 in the PR description.
+
+          1. DROP THE COUNT FROM THE LADDER. Scene 1's heading becomes "Each rung stricter
+          than the last." — no number, anywhere. Add a fifth, OPEN rung at the end: a narrow
+          dashed-border tile containing only a "+", with no label, so the ladder visibly does
+          not end. Keep the four real rungs and their content unchanged otherwise, and keep
+          rung 2 as the single featured rung (`rung-featured`) and rung 4 as `rung-human`.
+          Show each rung's checks as small mono chips (rung 1: build · lint · tests · scan ·
+          review; rung 2: e2e · ui · pen-test · seo; rung 3: e2e · dyn-scan; rung 4: promote ·
+          bootjob · healthy) so "a rung is a set of Tekton steps" is visible rather than
+          asserted. Footer line: "A new guarantee is a new step — the agent cannot game a
+          rung, only pass it."
+
+          2. CORRECT THE CLOUD FRAMING. Scene 2's footer currently reads "Two independent
+          clouds today. Byte-identical output. The architecture is provider-agnostic."
+          Replace with: "The same change, stood up independently on every cloud we plug in —
+          GCP, Azure, AWS. Two shown here for legibility. Byte-identical output."
+          NAME the clouds — most competitors are Azure-bound by model economics, so naming
+          GCP is a differentiator. Do NOT phrase any of it as future work ("a third is
+          configuration", "we could add") — GCP, Azure and AWS have all run it. Do NOT
+          reduce it to a count in either direction.
+
+          3. FIX THE ASSERTION THAT BLOCKS THIS (this is the point of the step).
+          end2end-ui/13-pipeline-scenes.spec.ts line ~142 asserts
+          toContainText('Two independent clouds today'). Replace it with an INVARIANT rather
+          than a copy string: assert the footer names at least two distinct clouds, contains
+          "Byte-identical", and does NOT contain the word "today" adjacent to a cloud count.
+          Also remove the `not.toContain('as many clouds')` guards — that phrase was banned on
+          a mistaken reading and the ban is no longer correct. Then re-read the whole
+          end2end-ui suite for any OTHER assertion pinning marketing copy and convert it the
+          same way, listing each one you changed in the PR description. Per DESIGN.md:
+          assertions pin invariants (no clipped labels, reveal degrades without JS, no
+          unlisted hexes, no label under the type floor, a pause control where motion
+          auto-plays) — never sentences.
+
+    - name: evidence-treatments
+      kind: pr
+      agentType: leartech-agent-ng
+      dependsOn:
+        - open-ladder-and-clouds
+      inputs:
+        name: evidence-treatments
+        repo: mikelear/leartech-ship-proven-website
+        branch: feat/evidence-treatments
+        goal: >-
+          Give the diagrams impact by showing real artefacts instead of drawing boxes.
+          Implement DESIGN.md §6a from artifact 2b528e01-cb5a-4031-ba6c-5e0e797e45e3 and
+          match `diagram-wow.html` in the same artifact — it is a working reference for all
+          three treatments. Print the DESIGN.md sha256 in the PR description.
+
+          1. DEPTH WITHOUT GRADIENT (§6a craft move 1). Dark panels get a faint 34px grid
+          (rgba(255,255,255,.028) 1px lines, both axes) plus an inset hairline
+          (inset 0 1px 0 rgba(255,255,255,.09)) and a soft inner vignette
+          (inset 0 0 90px rgba(0,0,0,.35)). No background gradients, no drop shadows on text.
+          A panel should read as a surface, not a drawn rectangle.
+
+          2. SCENE 2 BECOMES REAL BROWSER CHROME (§6a, "Direction A"). Replace the two plain
+          cloud cards with two window frames: a title bar (three inert dots, a lock glyph, and
+          the URL in mono green), then a body containing the cloud/stage eyebrow, the passed
+          gate chips, and the byte count + short sha. Below both, a single accent-tinted bar
+          carrying a large "=" and "Byte-identical output." with the one-line explanation that
+          divergence is an ENVIRONMENT defect, not a code defect, and that the Infra agent uses
+          the difference as the signal. Keep the real hostnames already asserted by
+          13-pipeline-scenes.spec.ts.
+
+          3. NEW SECTION — "What the gate actually said" (§6a, "Direction D"). This is the
+          strongest asset on the site and it does not exist yet. A designed extract of the
+          REAL AI-review comment from a PR in this repo, framed as a PR comment (bot name +
+          "commented on PR #NN"). Use the real values, do not invent any:
+            · verdict line — "AI Code Review: 96/100 — Excellent", cluster tag `az`,
+              "5 reviewers · quorum met"
+            · a four-row table — claude `claude-opus-4-8` 100 / 7.58s · deepseek
+              `deepseek-chat` 96 / 4.32s · qwen `qwen2.5-coder:7b` 95 / 24.47s (tag this row
+              "self-hosted") · codestral `codestral-latest` 95 / 2.33s
+            · THE FINDING, in an amber-tinted block: deepseek · `landing.component.ts:1024` ·
+              "Magic number 200 used in endAt calculation is not from the named constants
+              block."
+            · a footnote: the same change on `gcp` ran 3 reviewers — no local GPU there, so no
+              `qwen`. Different clusters, different reviewer sets, one verdict each.
+            · three deterministic-gate tiles: Coverage 72.0% PASS (threshold 30.0%);
+              Dependency scan PASS (Grype 0/0/0/0); Security scan WARN (Gitleaks 0 secrets,
+              Semgrep 4 warnings, 0 errors)
+            · closing line: "A gate that only ever goes green isn't a gate."
+          ⚠️ SHOW THE WARN AND THE FINDING PROMINENTLY. A wall of green reads as
+          rubber-stamping; the defect is the credibility. Do not soften, hide or omit either.
+          ⚠️ These are quoted historical results from a specific PR. Label them as such
+          (e.g. "from PR #17, 4 Sept 2026") so nobody reads them as live figures, and do NOT
+          wire this to a live API in this step.
+
+          4. SCALE CONTRAST (§6a craft move 2). Wherever a section currently presents
+          uniformly-sized tiles, promote ONE hero figure to >=72px with the supporting numbers
+          small beneath it. Apply to the run-report treatment if present. Do not do this more
+          than once per section — two hero numbers competing is the same failure as two accent
+          borders.
+
+          5. GUARDRAILS. Keep prerender/SSG — .lighthouse/jenkins-x/seo-preview.yaml is a
+          BLOCKING presubmit, so all of this must be in raw HTML with no JS. Respect the type
+          floors (§2) and width budgets (§2a) — assert `scrollWidth <= clientWidth` on every
+          new label at 375/768/1440. No new hexes outside §1's tables. Do not regress the
+          motion primitives, the single accent on rung 2, the hero playing once, or the scene
+          stage's pause control.

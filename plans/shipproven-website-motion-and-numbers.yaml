@@ -1,0 +1,264 @@
+# Give www.shipproven.com a motion system, collapse the diagram sprawl into one
+# video-native stage, kill the walls of prose — and land three queued content corrections.
+#
+# WHY THIS PLAN EXISTS — findings from a design review of the live staging site (2026-09-02)
+#   1. DIAGRAM SAMENESS. Six diagrams (hero gate strip, tier staircase, tools fan-in,
+#      consensus fan-out, agent grid, flywheel) all use the identical visual language —
+#      rounded rect, hairline border, two-line 9-10px label. They blur into one another and
+#      none of them earns its scroll.
+#   2. WALLS OF PROSE. Three side-by-side cards of 15-25 lines of continuous body text
+#      (one is 141 words). Nobody reads that; it is a PDF pasted into a card.
+#   3. NO MOTION. The gate strip has one green box and never moves. The single most
+#      persuasive thing the product does — a change earning green — is rendered as a
+#      static screenshot of a moment.
+#   4. TEXT OVERFLOWS ITS BOXES (real bug, visible on staging). In the consensus diagram
+#      "METERED · VIRTUAL KEYS" is clipped by the Gateway box edge; "providers must agree"
+#      overflows the Quorum box; "rules on the set" overflows Meta-judge; the outbound
+#      arrow runs off the panel. Same class of clipping on "MORE" labels in the tier
+#      staircase ("MOR"/"MORE" truncated).
+#   5. DEAD SPACE. The tier staircase and consensus panels waste ~40% of their area,
+#      pushing the actual content small.
+#   6. CAPTIONS RESTATE DIAGRAMS IN PROSE. Every diagram is followed by an italic
+#      paragraph saying the same thing in words. If a diagram needs a paragraph to explain
+#      it, the diagram failed — and shipping both admits it.
+#   7. TYPE TOO SMALL FOR VIDEO. Diagram labels at 9-10px mush under video compression.
+#      These assets are about to be screen-recorded for presentation.
+#
+# THE THREE QUEUED CONTENT CORRECTIONS (fold in here, do not need a separate Plan)
+#   A. PER-SEAT CORPUS REFRAME. Stop quoting absolute corpus size as a moat — it is one
+#      developer's output and invites "so what?". Quote the measured per-developer rate and
+#      let the reader multiply. See the exact copy in step 3.
+#   B. FOUR RUNGS, NOT THREE. The staircase omits the pre-merge PREVIEW NAMESPACE, which is
+#      the strongest rung: the change is deployed and exercised in an ephemeral per-PR
+#      environment BEFORE it is allowed into the repo. You cannot pen-test a diff.
+#   C. MULTI-CLOUD IS A DIVERSITY AXIS, NOT PORTABILITY. Every rung exists once per cloud.
+#      Verified live during the previous Plan run: PR #12 stood up BOTH
+#      leartech-ship-proven-website-pr12.jx.leartech.com AND ...pr12.az.leartech.com, and the
+#      two staging environments returned BYTE-IDENTICAL output (124,820 bytes). We already
+#      use this as evidence — the Infra agent compares the healthy cluster against the
+#      failing one to tell a real defect from an environment blip. Diversity is applied
+#      twice: across model providers (consensus quorum) and across clouds.
+#
+# ⭐ DESIGN SOURCE — A PUBLISHED ARTIFACT, READ IT BY GUID.
+#   artifact 781fbaf1-7d78-4ec1-a1e4-3f0a2496ed7a  ·  label shipproven-web-design-system
+#   kind design-doc  ·  revision 1  ·  sealed  ·  files: DESIGN.md, motion-principles.html
+# Fetch it with the artifacts MCP (get_artifact). DESIGN.md is the authoritative spec for
+# every token, hex, type floor, motion timing, accessibility rule, chart form and diagram
+# rule this Plan depends on. motion-principles.html is the executable reference — the three
+# primitives already working in a browser.
+#
+# ⚠️ IF YOU CANNOT READ THE ARTIFACT, STOP. Say so in the PR description and do not proceed.
+# DO NOT build from this goal text alone. On 2026-08-10 plan `shipproven-website-visual`
+# pointed an agent at a design bundle it could not read; the agent wrote a 0-byte listing,
+# gave up WITHOUT erroring, built from goal prose, and INVENTED the primary brand ink
+# (#0B1220 used 24 times where #0B1F3A was specified). PR #7 was closed rather than merged.
+# A silent partial build is far worse than a failed one. Fail loudly.
+#
+# Sanity check on read: DESIGN.md sha256 must be
+# 74c9a05c915399dc2a16eb4174fd7cf7dd298acb39749528ea3596732b71743a
+# If it differs, the spec has moved on — re-read rather than trusting a cached copy.
+#
+# ⚠️ MOTION ACCESSIBILITY IS A HARD REQUIREMENT, NOT A NICETY
+#   - `prefers-reduced-motion: reduce` MUST short-circuit every animation to its END state
+#     (all gates green), never to a blank or mid-state.
+#   - WCAG 2.2.2: anything that auto-plays for more than 5s needs a visible pause control.
+#     Every looping element in this Plan ships one.
+#   - Animation runs ONLY while in viewport (IntersectionObserver) — no off-screen loops
+#     burning CPU on a laptop.
+#   - REVEAL-ON-SCROLL MUST DEGRADE TO VISIBLE. Apply the hidden state only under a
+#     JS-set root class (html.js). A bare `.rv{opacity:0}` renders a BLANK panel with no JS,
+#     a failed observer, or in a non-scrolling renderer — and it still passes a raw-HTML grep,
+#     so the SEO gate goes green while a human sees nothing. That failure was reproduced in
+#     review; do not reintroduce it.
+#
+# HONESTY GUARDRAIL: unchanged from the previous Plan. Do not claim a model fine-tuned on our
+# review corpus runs in production. Do not imply N clouds are running — "two independent
+# clouds today; the architecture is provider-agnostic".
+#
+# OUT OF SCOPE: DNS/infra (R22 template-only); the recorder service; any change to the gate
+# or agent-role claims themselves. This Plan changes HOW things are presented and lands the
+# three content corrections above — nothing more.
+#
+# VERIFICATION — auto-injected, NOT hand-authored (R23/R24).
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: shipproven-website-motion-and-numbers
+spec:
+  paused: true
+  steps:
+    - name: motion-system
+      kind: pr
+      agentType: leartech-agent-ng
+      inputs:
+        name: motion-system
+        repo: mikelear/leartech-ship-proven-website
+        branch: feat/motion-system
+        goal: >-
+          Establish a reusable motion + diagram system, and commit it as
+          docs/WEBSITE-MOTION-SYSTEM.md in the same PR so later changes inherit it rather
+          than re-deriving it. No page content changes in this step — primitives only, plus
+          one reference application (the hero gate strip).
+
+          TOKENS, TYPE FLOORS AND MOTION TIMINGS: read them from DESIGN.md in artifact
+          781fbaf1-7d78-4ec1-a1e4-3f0a2496ed7a (§1 colour tokens, §2 type, §3 motion
+          primitives, §4 accessibility). Do not retype them here and do not infer any value
+          that is absent — §1 says to use muted ink and flag it in the PR description
+          instead. motion-principles.html in the same artifact is a working implementation
+          of all three primitives; prefer matching it to re-deriving from prose.
+
+          PRIMITIVE 1 — GATE STATE MACHINE. A check has three states: pending, running,
+          passed. Represent them as a `data-s` attribute, not ad-hoc classes.
+            - pending: fill ink-2, 2px border rgba(255,255,255,.16)
+            - running: border rgba(134,224,166,.5), translateY(-2px), and a left-to-right
+              sweep overlay (linear-gradient transparent -> rgba(134,224,166,.22) ->
+              transparent, 1s linear infinite). The sweep matters: work must READ as work,
+              not be implied by a colour change.
+            - passed: fill green-deep, border accent, qualifier text -> green-line, and a
+              circular tick badge (accent circle, white check) fading in at scale(.5)->1.
+          Sequence timing: each gate starts 760ms after the previous, runs 700ms, then
+          passes. On completion set a verdict line from "RUNNING — NOTHING MERGES YET"
+          (muted) to "ALL GATES GREEN — MERGE AUTHORISED" (green-line, with a glowing dot).
+
+          PRIMITIVE 2 — THE LOOP. After the sequence completes, HOLD on green for 2.4s,
+          reset to pending, and replay. The loop is the argument: this happens on every
+          change. Ship a visible "Pause loop" button (WCAG 2.2.2), gate the loop on
+          IntersectionObserver at threshold .3, and under prefers-reduced-motion paint the
+          END state immediately (all green + verdict on) with no animation.
+
+          PRIMITIVE 3 — REVEAL-ON-SCROLL, SAFELY. Add `js` to <html> from script, then
+          `html.js .rv{opacity:0;transform:translateY(12px)}` and `html.js .rv.in{...}`.
+          The base `.rv` must carry NO hidden state. Stagger siblings with
+          transition-delay .08s steps. Under reduced-motion, `html.js .rv` is visible.
+
+          APPLY IT ONCE: rebuild the hero gate strip using these primitives. Five gates —
+          Build/compile, Deploy/preview env, E2E + UI/exercise, Security/SAST · pen-test,
+          Consensus/5 providers — preceded by an Agent card ("proposes a change") and a
+          dashed vertical GATE barrier between them. The gates must FILL the panel width
+          (the current version wastes ~40% of its card); no fixed-width boxes floating in
+          space. Keep the strip legible at 1280px and stack to two rows below 720px.
+
+          Commit docs/WEBSITE-MOTION-SYSTEM.md documenting the three primitives, the tokens,
+          the type floors and the four accessibility rules above.
+
+    - name: pipeline-scenes
+      kind: pr
+      agentType: leartech-agent-ng
+      dependsOn:
+        - motion-system
+      inputs:
+        name: pipeline-scenes
+        repo: mikelear/leartech-ship-proven-website
+        branch: feat/pipeline-scenes
+        goal: >-
+          Replace the diagram sprawl in "How it works" with ONE stage that plays three
+          scenes on a single canvas, using the primitives from docs/WEBSITE-MOTION-SYSTEM.md.
+          This is built to be screen-recorded: each scene crossfades OVER the previous one in
+          the same frame, which is how it will cut in a video.
+
+          MECHANICS. A relatively-positioned stage; each scene absolutely positioned and
+          inset 0; inactive scenes opacity 0 + translateY(10px) scale(.985), active scene
+          opacity 1 + no transform, 550ms transition. Auto-advance every 5s. Pagination bars
+          (not dots — 26x5px pills, active one 40px in accent) that jump to a scene and are
+          real <button>s with aria-label and aria-current. Arrow keys move between scenes.
+          Auto-advance pauses on hover and on focus-within, plus a visible "Pause" button,
+          plus IntersectionObserver gating. Under prefers-reduced-motion do not auto-advance
+          — show scene 1 and let the pagination drive.
+
+          SCENE 1 — FOUR RUNGS, EACH STRICTER. ⚠️ The live site shows THREE tiers and omits
+          the most important one. Four ascending cards (heights 58%/74%/88%/100%, baseline
+          aligned, rung 4 bordered in accent):
+            RUNG 1 "Enter the repo" — build · lint · tests · scan · review
+            RUNG 2 "Preview namespace" — eyebrow must read "RUNG 2 · PRE-MERGE" — qualifier
+              "built on demand, per PR". This rung is the point of the scene: the change is
+              deployed and exercised in an ephemeral environment BEFORE it may enter the
+              repo. Give it a visible emphasis the others lack.
+            RUNG 3 "Staging" — integrated environment
+            RUNG 4 "Production" — human GitOps merge (rollback is the same action reversed)
+
+          SCENE 2 — AND EVERY RUNG EXISTS ONCE PER CLOUD. Two cloud columns, Google Cloud
+          and Azure, each listing its real preview + staging hostnames in mono green-line:
+          `…-pr<N>.jx.leartech.com` / `…-jx-staging.jx.…` and `…-pr<N>.az.leartech.com` /
+          `…-jx-staging.az.…`. Headline the framing: this is a VERIFICATION signal, not
+          portability — the same change stood up twice, independently, and the Infra agent
+          compares the healthy cluster against the failing one to tell a real defect from an
+          environment blip. Close with: "Two independent clouds today. Byte-identical output.
+          The architecture is provider-agnostic." Do NOT write "as many clouds as you plug
+          in" — that is an extensibility claim, not a fact.
+
+          SCENE 3 — EVERY OUTCOME FEEDS THE CORPUS. Four equal cards: GENERATE "Agents
+          propose" · GATE "Prove it" · SHIP "Run it" · OUTCOME "Did it work?" with
+          "-> better models". The OUTCOME card is accent-bordered and carries the caption
+          "the step only a system that ships the code can see". Reuse the existing flywheel
+          figure's argument; do not build a second competing flywheel graphic.
+
+          THEN DELETE, don't add: remove the italic prose caption under every diagram in this
+          section — they restate the graphic in words. Remove the standalone tools fan-in
+          diagram and the tier staircase that scenes 1-2 replace. Keep the consensus fan-out
+          diagram and the agent-team grid (the grid is the most successful diagram on the
+          site — leave it alone beyond the type floors).
+
+          FIX THESE REAL CLIPPING BUGS while you are in the diagrams (all visible on staging):
+          "METERED · VIRTUAL KEYS" clipped by the Gateway box; "providers must agree"
+          overflowing Quorum; "rules on the set" overflowing Meta-judge; the arrow leaving
+          Meta-judge running off the panel edge; "MORE" truncated to "MOR" on the staircase
+          arrows. Root cause is fixed-width boxes with text longer than the box — let the
+          boxes size to their content or shorten the labels; do not clip.
+
+    - name: prose-and-numbers
+      kind: pr
+      agentType: leartech-agent-ng
+      dependsOn:
+        - pipeline-scenes
+      inputs:
+        name: prose-and-numbers
+        repo: mikelear/leartech-ship-proven-website
+        branch: feat/prose-and-numbers
+        goal: >-
+          Break up the walls of body text, and land the per-seat corpus reframe. Update
+          docs/WEBSITE-CONTENT.md in the same PR.
+
+          1. THE PROSE PATTERN. Every card currently carrying more than ~60 words of
+          continuous body text gets restructured to this shape, using the `.rv` reveal
+          primitive with staggered delays:
+            - a LEAD of 18-22px, max two lines, with the load-bearing phrase highlighted by
+              a green-wash underlay (linear-gradient(transparent 62%, #DCFCE7 62%)) — not
+              bold, not a different colour;
+            - THREE scannable points, each a row with a hairline top border, a mono numeral
+              01/02/03 in accent, a bolded claim and a short plain-language consequence;
+            - ONE pull-quote with a 3px accent left border carrying the sentence you would
+              want remembered.
+          Apply to at least the three "Why we win"-area cards, the longest being the 141-word
+          gateway card. Total word count must come DOWN; this is a rewrite, not a reflow.
+
+          2. THE CORPUS REFRAME — replace the absolute-number proof block. The current copy
+          quotes "5,264 review decisions ... growing ~35 a day", which is ONE DEVELOPER'S
+          output and invites "so what?". Replace with the per-seat framing. Headline:
+          "A corpus that compounds — per seat." Body:
+            "Every developer working through ShipProven generates about 35 reviewed
+            decisions a day, and roughly one labelled production outcome — measured on our
+            own build. A ten-person team produces around 88,000 reviewed decisions a year.
+            A thousand-developer engineering organisation produces 8.75 million, and clears
+            the threshold for a model fine-tuned on its own conventions within a day of
+            going live. The signal scales with the seats you deploy, and it is signal nobody
+            outside the pipeline can see."
+          Present the multiples as illustrative and the 35/day as measured. This copy change
+          also touches the Playwright assertions that currently pin the exact strings
+          '5,264 review decisions', '~50 repositories' and '~35 a day' — update those tests
+          to the new copy in the same PR, do not delete the assertions.
+
+          3. THE CORPUS CHART. It plots cumulative absolute decisions, which is now the wrong
+          argument. Re-point it at the per-seat story: a small multiple or a single-series
+          line of ANNUAL reviewed decisions by team size (1 / 10 / 100 / 1,000 developers),
+          one hue #16A34A, log or clearly-labelled scale, direct-label only the endpoint,
+          no legend for a single series, ONE axis only. Update docs/WEBSITE-MOAT-FIGURES.md
+          in the same PR. If a per-seat chart cannot be made honest and legible, keep the
+          cumulative chart and say so in the PR description rather than shipping a
+          misleading axis.
+
+          4. GUARDRAILS unchanged: keep prerender/SSG (outputMode: static) —
+          .lighthouse/jenkins-x/seo-preview.yaml is a BLOCKING presubmit fetching raw HTML
+          with no JS. Do not claim a model fine-tuned on our review corpus is in production.
+          Do not lead with "trust layer"/"verification layer"/"control layer". "leartech"
+          must not appear in built output. And verify the reveal primitive degrades:
+          with JavaScript disabled every restructured card must still be fully visible.
