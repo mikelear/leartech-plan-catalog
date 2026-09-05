@@ -1,0 +1,196 @@
+# Make the scene stage signal that it will advance, and make the scene CONTENT stop being
+# boxes with words in them.
+#
+# ⭐ DESIGN SOURCE — v4, READ IT BY GUID
+#   artifact 2b528e01-cb5a-4031-ba6c-5e0e797e45e3 · target shipproven-website
+#   revision 3 · sealed · files DESIGN.md, motion-principles.html, scene-stage.html,
+#                              scene-content.html
+#   DESIGN.md sha256 8ec640481bb588775f909e4603b102231a52d0b115020e55b75900baa7a74df3 (23742 bytes)
+#
+# ⚠️ REVISION 3, NOT 1. This is the SAME GUID the last three Plans cited, so a cached or
+# remembered copy of "2b528e01 = v3" is now stale. `create_revision` was returning 500 when
+# v2 and v3 were published, which is why v1/v2/v3 ended up as three separate GUIDs
+# (781fbaf1, 87e95fbd, 2b528e01). It works now, so v4 is revision 3 of 2b528e01 and the
+# earlier GUIDs are dead ends. Revision 2 exists but carried DESIGN.md only — ignore it.
+#
+# ⚠️ POSITIVE VERIFICATION (DESIGN.md §6a). Fetch DESIGN.md from the artifact, compute its
+# sha256, and PRINT THAT DIGEST IN THE PR DESCRIPTION. It must equal the value above. If you
+# cannot produce that line, SAY SO EXPLICITLY IN THE PR and stop — do NOT fall back to
+# docs/WEBSITE-MOTION-SYSTEM.md, which derives from v1 and is a stale fork. Two previous runs
+# did exactly that silently. An honest "I could not retrieve it" is a success; a silent
+# substitution is the failure this rule exists to catch.
+#
+# ⚠️ THE PROTOTYPES ARE THE SPEC. scene-stage.html and scene-content.html in the same
+# revision are working, reviewed implementations of everything below — approved by Mike on
+# 2026-09-05 after three rounds of revision. PREFER MATCHING THEM to re-deriving from this
+# prose. Every numeric value in the goals below is quoted from them.
+#
+# WHY THIS PLAN EXISTS — two problems, both found by looking at the deployed page
+#   1. THE STAGE LOOKS STATIC. Scene 1 crossfades to scene 2 after a silent wait, so a
+#      visitor cannot tell the thing is going to move and leaves before it does. Worse, the
+#      stage is fixed to the tallest scene, so the short scenes sit above a dead white band
+#      running all the way down to the pause control. Verbatim: "the each rung stricter than
+#      the next doesn't give an impression it will move on so there is a lot of white ... when
+#      the diagrams change there is a lot of white space around it right the way down to the
+#      pause as well".
+#   2. THE SCENES ARE LISTS WEARING BOXES. Verbatim: "all of the actual diagrams are a bit
+#      wordy or a bit just boxes". §6b adds the test that settles it — IF YOU CAN REPLACE THE
+#      GEOMETRY WITH A BULLETED LIST AND LOSE NOTHING, IT IS NOT A DIAGRAM. Scene 1 passes
+#      (height encodes escalation). Scene 2 mostly fails. Scene 3 fails outright.
+#
+# VERIFICATION — auto-injected, NOT hand-authored (R23/R24).
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: shipproven-scene-stage-and-content
+spec:
+  paused: true
+  steps:
+    - name: stage-affordances
+      kind: pr
+      agentType: leartech-agent-ng
+      inputs:
+        name: stage-affordances
+        repo: mikelear/leartech-ship-proven-website
+        branch: feat/stage-affordances
+        goal: >-
+          Make the scene stage announce its own advance and stop leaving a dead white band.
+          Implement DESIGN.md §3.5 from artifact 2b528e01-cb5a-4031-ba6c-5e0e797e45e3
+          revision 3, and match `scene-stage.html` in the same revision — it is a working
+          reference. Print the DESIGN.md sha256 in the PR description.
+
+          1. THE PAGINATION PILL BECOMES THE COUNTDOWN. This is the fix for "it doesn't give
+          an impression it will move on". Each pagination pill gets an inner `.fill` element.
+          The ACTIVE pill's fill animates left-to-right across the dwell time, so the advance
+          is visible BEFORE it happens instead of arriving as a surprise:
+            .pill[aria-current="true"].run .fill { width:100%; transition:width 5.5s linear }
+          Arm by adding `run` to the active pill when it becomes active; clear it on change.
+          ⚠️ REMOVE `run` WHENEVER THE COUNTDOWN IS NOT ACTUALLY RUNNING — when paused, when
+          the stage is scrolled out of view (the existing IntersectionObserver), and under
+          prefers-reduced-motion. A bar that keeps filling while paused is a lie about state,
+          and it is the single easiest thing to get wrong here.
+          Widen the dwell from 5s to 5.5s in BOTH the CSS transition and the setTimeout; at
+          5s the fill reads as a glitch rather than as deliberate progress. Keep the pills as
+          real <button>s with aria-label and aria-current, and keep arrow-key navigation.
+
+          2. THE STAGE ANIMATES ITS OWN HEIGHT. This is the fix for the white band. Scenes
+          are absolutely positioned, so the container currently has to be tall enough for the
+          tallest one. Instead give the container
+            .scenes { position:relative; transition:height .5s var(--ease) }
+          and set `style.height` from the ACTIVE scene's offsetHeight. Recompute on advance,
+          on window resize, and after document.fonts.ready (web-font metrics change the
+          height, and getting this wrong leaves a 20-30px gap that looks like a bug). Set the
+          initial height on load, not on first advance.
+
+          3. PANELS BECOME SURFACES. Add the §6a depth treatment, using these exact values —
+          do not invent your own:
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.09), inset 0 0 90px rgba(0,0,0,.35)
+          A top hairline plus an inner vignette. No outer shadow, no background gradient
+          beyond what §6 now permits.
+
+          4. THE PAUSE CONTROL GETS MORE PROMINENT, NOT LESS. Now that the advance is
+          legible, a visitor has a reason to reach for pause, so it stops being a compliance
+          checkbox and becomes a real control — give it clear affordance (visible border,
+          hover/focus state, label that reads as an action). It stays a WCAG 2.2.2 hard
+          requirement. Do NOT shorten the dwell to make the stage feel livelier: the dwell is
+          long because the content needs reading, and the fix is signalling the advance.
+
+          5. GUARDRAILS. prefers-reduced-motion must resolve to a complete, readable END
+          state — never blank, never mid-transition — and the fill element hides entirely
+          (`.pill .fill{display:none}`) rather than sitting at a random width. All of §3.5 is
+          progressive enhancement over markup that is already complete and readable without
+          JS: .lighthouse/jenkins-x/seo-preview.yaml is a BLOCKING presubmit that reads raw
+          HTML with no JS executed, so a JS-set height must never be what makes content
+          visible. Keep the §3.4 `html.js` reveal guard intact.
+
+    - name: scene-content-treatments
+      kind: pr
+      agentType: leartech-agent-ng
+      dependsOn:
+        - stage-affordances
+      inputs:
+        name: scene-content-treatments
+        repo: mikelear/leartech-ship-proven-website
+        branch: feat/scene-content-treatments
+        goal: >-
+          Replace the scene contents so they stop being boxes with words in them. Implement
+          DESIGN.md §6b from artifact 2b528e01-cb5a-4031-ba6c-5e0e797e45e3 revision 3 and
+          match `scene-content.html` in the same revision — all three treatments are built
+          and approved there, and matching it is faster and more accurate than working from
+          this prose. Print the DESIGN.md sha256 in the PR description.
+
+          Apply §6b's test to anything you touch: IF THE GEOMETRY COULD BE A BULLETED LIST
+          WITHOUT LOSING MEANING, IT IS NOT A DIAGRAM. Position, size or adjacency must carry
+          something prose cannot.
+
+          1. SCENE 1 — THE LADDER KEEPS ITS GEOMETRY AND ENCODES THE CLAIM TWICE. Height
+          already IS the argument, so it passes the test; make it stop looking decorative.
+          Give each rung its CHECK COUNT as a large mono number — 5, 9, 12, 15 — plus a block
+          of one 6x6px rounded dot per check (flex-wrap, 3px gap, max-width 112px). "Stricter"
+          becomes arithmetic you can see instead of an adjective in a caption. Rung heights
+          46% / 66% / 83% / 100% of a 230px band, aligned to a bottom axis, with the open
+          dashed "+" rung at full height beside them.
+          Bottom-anchor the numbers (`margin-top:auto`) so they share a baseline across rungs
+          of different heights and can be compared. This leaves a visible gap between the
+          title and the number in the tallest rung — THAT IS ACCEPTED AND DELIBERATE, the
+          shared baseline is worth more than the gap. Do not "fix" it by centring.
+          ⚠️ MOVE THE QUALIFIERS OUT OF THE BOXES. Each rung box holds a mono eyebrow, a
+          name, a number and its dots — NOTHING ELSE. Conditions like "built on demand per
+          PR, pre-merge" go in the caption above and the mono footer below. Cramming them
+          into the boxes is exactly what produced the "boxes seem to be a little crushed in"
+          verdict on the previous attempt.
+          Keep the no-count rule (§6): the heading stays "Each rung stricter than the last."
+          with no number anywhere, and the open "+" rung stays. Keep rung 2 as the single
+          featured rung and rung 4 as the human-action rung.
+
+          2. SCENE 2 — REAL BROWSER CHROME, NOT CAPTIONED BOXES. The claim is "one change,
+          stood up twice independently, outputs identical", and no arrangement of labelled
+          rectangles can assert that. Build two real window frames — three inert
+          traffic-light dots and the genuine preview hostname in mono, `…-pr<N>.jx.leartech.com`
+          and `…-pr<N>.az.leartech.com` — either side of a large mono "=" captioned
+          "IDENTICAL". Layout `grid-template-columns:1fr auto 1fr`.
+          Each window body carries the same three facts in the same order: cloud/stage
+          eyebrow, byte count (e.g. 134,516 bytes), then `sha` and checks-green on one small
+          line.
+          ⚠️ THE TWO PANES MUST BE EQUAL WIDTH AND THE FIGURES MUST MATCH CHARACTER FOR
+          CHARACTER. A mismatched byte count or sha reads as a mistake and destroys the entire
+          point of the scene. If you cannot source a real matched pair, use the values already
+          on the page rather than inventing a second set.
+          Caption above: the same change, stood up independently — and where the two disagree
+          that is an ENVIRONMENT defect, not a code defect, which is the signal the Infra
+          agent acts on. Footer keeps the §6 framing naming GCP, Azure and AWS with two shown
+          for legibility. Do NOT reintroduce a cloud count or a "x2" label — v4 explicitly
+          supersedes that guidance.
+
+          3. SCENE 3 — STOP DRAWING, SET TYPE. The corpus cycle-of-boxes fails the test
+          outright: it is a list in a circle. Delete the geometry. The claim is a magnitude,
+          so the number IS the diagram.
+          One hero figure at font 900 76px/.86, letter-spacing -.045em, reading "35", with its
+          unit line beneath in green-line at 26px: "REVIEWED DECISIONS / DEVELOPER / DAY".
+          Supporting prose in a narrow column (max-width 38ch) to the side — the ten-person
+          team at ~88,000 a year, the thousand-developer organisation at 8.75 million, and
+          clearing the fine-tune threshold within a day of going live.
+          Evidence below as a RECEIPT STRIP: `repeat(auto-fit, minmax(140px, 1fr))` tiles,
+          each holding exactly one figure (18px mono) and one label (10.5px) — 5,264 decisions
+          captured · ~50 repositories · 5 providers per review · +629 in 18 days · free labels
+          from the outcome.
+          Two rules: FIVE TILES IS THE CEILING (beyond that it becomes the box-grid it
+          replaced), and EVERY TILE HOLDS ONE NUMBER ONLY — a tile with a sentence in it is a
+          bullet, and per the test it should then be written as one. Give the accent to the
+          single punchline tile ("free"), because labels arriving from the outcome rather than
+          from a paid annotator is the whole argument.
+          Prefer the PER-SEAT rate framing over any absolute total; the absolutes are
+          receipts for the rate, not the headline.
+
+          4. GUARDRAILS. Respect the §2 type floors (nothing below 10px, node labels >=16px,
+          qualifiers >=12px) and the §2a width budgets — assert `scrollWidth <= clientWidth`
+          on every new label at 375, 768 and 1440. No hex outside §1's tables; the only
+          gradients permitted are the two calibrated washes §6 now names, and the receipt and
+          window panels otherwise stay flat. All three treatments must be complete in raw
+          HTML with no JS (seo-preview.yaml is blocking). Do not regress the §3.5 work from
+          step 1, the single accent on rung 2, the hero playing once, or the pause control.
+          ⚠️ Per §6a, assert INVARIANTS ONLY — no clipped labels, reveal degrades without JS,
+          no unlisted hexes, no label under the type floor, a pause control exists where
+          motion auto-plays, the two window panes carry identical figures. NEVER assert a
+          marketing sentence with toContainText: v2's "two independent clouds today" got
+          pinned that way and then blocked its own correction.
