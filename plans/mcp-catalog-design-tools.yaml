@@ -1,0 +1,146 @@
+# Register the design/artifact MCP server in the agent MCP catalog so Plans can fetch
+# artifacts referenced in a step goal.
+#
+# WHY THIS EXISTS
+# Disclosed as a cross-repo follow-up on plan-catalog#2 (artifact-endpoints). That Plan
+# wires leartech-mcp-servers/internal/designserver to the artifact-api endpoints, but
+# deliberately does NOT edit gate/agent/mcp_catalog.yaml because it lives in a different
+# repo (leartech-automated-agent). Without this registration an AGENT cannot reach the
+# artifact tools — only external MCP clients (Claude sessions) can. That breaks the
+# intended loop: a session publishes an artifact, the GUID goes in a Plan goal, and the
+# Plan's agent fetches it.
+#
+# The catalog's own contract (gate/agent/mcp_catalog.yaml header): "Adding an MCP requires
+# three changes: add to the `mcp_servers` map, add any required env to the chart's
+# externalSecrets, and reference it in the right role's `mcps` list. No agent code changes."
+#
+# NOTE an alternative path exists — app/routers/mcp_admin.py exposes POST /mcps which
+# opens its own PR. A reviewed Plan PR is preferred here so the role wiring gets the same
+# scrutiny as code.
+#
+# DEPENDS ON plan-catalog#2 landing first: the tools must exist before they are advertised.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: mcp-catalog-design-tools
+spec:
+  paused: true
+  steps:
+    - name: register-mcp
+      kind: pr
+      agentType: leartech-agent-py
+      inputs:
+        name: register-mcp
+        repo: mikelear/leartech-automated-agent
+        branch: feat/register-mcp
+        goal: >-
+          Add the design/artifact MCP server to gate/agent/mcp_catalog.yaml and reference
+          it from the roles that need it.
+
+          Follow the file's own stated contract exactly: add an entry to the `mcp_servers`
+          map, add any required env to the chart's externalSecrets, and reference it in the
+          right role's `mcps` list. No agent code changes.
+
+          SERVER ENTRY: name it leartech-design — NOT anything containing "artifact". The
+          catalog ALREADY has leartech-test-artifacts ("Playwright videos, traces,
+          screenshots from GCS test-artifacts bucket"), which initiative_agent already
+          holds. Two artifact-named MCPs on the same role invites the agent to reach for
+          the wrong one; these are unrelated surfaces (CI debug output vs design guidance).
+          Say so explicitly in the description, and mirror the URL path the server actually
+          mounts: /mcp/design/sse.
+
+          Type http_sse, served by the existing leartech-mcp-servers deployment, so use the
+          same ${LEARTECH_PLATFORM_MCPS_URL:-http://localhost:8899} shape as the sibling
+          leartech-jx3-flow / leartech-pr-context entries. Do NOT hardcode a
+          *.jx.leartech.com cluster URL in source — the chart injects the env var per
+          cluster; the fallback is dev-only localhost.
+
+          ROLES: add it to initiative_agent and ba_agent — those are the roles that consume
+          guidance to do work. Justify in the PR description which roles you added and why
+          any were left out; do NOT add it to review_agent unless you can say why a
+          read-only reviewer needs it.
+
+          AGENTS ARE CONSUMERS, NOT PRODUCERS — and note WHERE that is enforced, because it
+          is not here. The catalog grants a WHOLE server: verified that mcp_catalog.yaml has
+          no per-tool allow-list (the `tools:` keys in that file are role-level Claude tools
+          like Read/Write/Bash, not MCP tool filters). So registering leartech-design
+          advertises create_artifact to agents too, and the ONLY thing stopping an agent
+          writing is the scope on its token. Verified on the live cluster: ALL SEVEN
+          agentTypes share ONE auth client, controller-internal-services — so there is no
+          per-role split available either.
+
+          Therefore: do NOT grant leartechapi:artifact:write to controller-internal-services.
+          Agents get :read only, so create_artifact/finalize_artifact return 403 at the MCP's
+          own authorizeWrite gate before artifact-api is touched. This matters beyond least
+          privilege — artifacts are GUIDANCE, and an agent that can author guidance can
+          rewrite its own brief mid-run. Producers are external sessions on the public
+          deployment. If a BA feedback loop later needs to write, it needs its OWN auth
+          client, not a widened shared one; note that as a follow-up rather than doing it here.
+
+          Beyond that, do NOT change the auth story. The MCP already enforces the caller's own
+          leartechapi:artifact:read / :write through the existing three-tier forwarder.
+
+          THE MCP IS PREFERRED, THE CLI IS THE FALLBACK — and the description is where that
+          preference has to live, because the description is what the agent reads when it
+          decides which tool to reach for. Agents ALREADY read design artifacts straight from
+          GCS with `gcloud storage`: gate/agent/gcp_credentials.py bridges
+          GOOGLE_APPLICATION_CREDENTIALS_JSON (projected per AgentType.gcsSecretName) to a
+          0600 file and exports GOOGLE_APPLICATION_CREDENTIALS once at agent startup, and the
+          recent website Plans have been using exactly that route. That capability MUST keep
+          working — do NOT remove the bridge, do NOT change the projected env, and do NOT
+          touch AgentType or the controller. This step only changes which route an agent
+          REACHES FOR FIRST.
+          So the description must say: use these tools for design artifacts; fall back to
+          reading the bucket directly with `gcloud storage` ONLY when the MCP is unavailable,
+          and say so in the step output when you do.
+
+          MAKE THE FALLBACK OBSERVABLE — otherwise adoption is a guess. gate/agent/tool_logging.py
+          already logs every tool call with its command (_summarise_input pulls `command` for
+          Bash) and is already redaction-aware, so do NOT add a new logging path or a Python
+          GCS wrapper — there is no Python GCS access path to wrap, only the credential
+          bridge. Extend the EXISTING record instead: when a Bash command targets the
+          artifact bucket prefix, tag it as a direct-GCS artifact access (artifact_fallback
+          true, plus the bucket/prefix) so MCP-vs-CLI usage is a Loki query rather than an
+          assumption. Keep it a JSON body field, never a stream label. This is the evidence
+          that decides whether test-artifacts-gcs-key can later be retired from the seven
+          agentTypes — without it, removing that secret is a leap of faith.
+
+          ISOLATE TESTING: extend tests/test_mcp_catalog.py so the new entry is covered by
+          the existing loader/validation tests — the server resolves, its type is valid, the
+          env-var placeholder shape matches its siblings, and every role that references it
+          exists. Add a tool_logging test asserting a gcloud-storage-against-the-artifact-prefix
+          command is tagged as a fallback while an unrelated Bash command is not, and that
+          redaction still applies. Runnable with no cluster and no LLM.
+
+          LOGGING TO VERIFY: confirm the existing catalog-load log line lists the new server
+          at startup, and that a direct-GCS artifact read emits the fallback tag — both
+          queryable in Loki so a session can be traced.
+          Done = PR merged (open via open_pr, drive gates green).
+
+    # Canned infra action — the infra agent is action-driven, not goal-driven (R21).
+    - name: verify-catalog
+      kind: check
+      agentType: leartech-agent-go
+      dependsOn:
+        - register-mcp
+      inputs:
+        name: verify-catalog
+        repo: mikelear/leartech-automated-agent
+        branch: feat/verify-catalog
+        goal: >-
+          Because release verification is AUTO-INJECTED after the PR step (R23) rather than hand-authored, this step depends on the PR step directly and MUST therefore wait for the rollout itself: poll until the released version is live on the target cluster(s) with a deadline, and FAIL (exit non-zero) if it is not. Verifying at merge time races the rollout and asserts against the old version. 
+          Deterministically confirm the DEPLOYED agent resolves the new MCP — verifying the
+          committed file alone would not prove the running pod picked it up. This is a
+          verification step only: do NOT open a PR and do NOT modify the repo. FAIL (exit
+          non-zero) if ANY assertion below fails; the verdict is this step's exit code.
+
+          Assertions, on BOTH clusters (gcp + az):
+          - The deployed leartech-automated-agent's MCP admin/introspection surface (see
+            app/routers/mcp_admin.py and app/routers/introspection.py for the exact route)
+            lists the design/artifact MCP server in its resolved catalog.
+          - The roles changed in register-mcp resolve with the new server present in their
+            mcps list, and roles NOT changed do not list it.
+          - The resolved URL points at the cluster-local platform-mcps deployment, not the
+            dev-only localhost fallback — a localhost URL in a cluster means
+            LEARTECH_PLATFORM_MCPS_URL was not injected and the tools are unreachable.
+          - The startup catalog-load log line for the new server is queryable in Loki.
