@@ -1,0 +1,150 @@
+# Remove the LEARTECH_TOKEN_EXCHANGE_ENABLED master switch — its committed default
+# contradicts every deployment, so reading the repo gives a confidently wrong answer.
+#
+# THE PROBLEM
+# charts/leartech-mcp-servers/values.yaml ships `tokenExchange.enabled: false`, and the
+# code comment states "When `enabled: false` (the default) the exchanger is a noop and
+# every forwarder falls straight through to attaching the caller's Bearer verbatim".
+# But BOTH clusters run it on — verified on the live deployments:
+#   leartech-mcp-servers          LEARTECH_TOKEN_EXCHANGE_ENABLED=true
+#   leartech-mcp-servers-public   LEARTECH_TOKEN_EXCHANGE_ENABLED=true
+# and both gitops repos set `tokenExchange: { enabled: true }`.
+#
+# So the noop branch is dead code carrying a live comment, and the chart default describes
+# a state nothing runs in. This is not hypothetical harm: it caused a design session to
+# conclude — with chart evidence AND gitops evidence apparently agreeing — that RFC 8693
+# exchange was disabled platform-wide, and to propose an identity-header workaround for a
+# problem that did not exist. A flag whose default contradicts reality is worse than no
+# flag, because it makes a false statement look verified.
+#
+# It is also spreading: internal/designserver/client.go now references the switch too, so
+# every new thin forwarder inherits the same misleading default.
+#
+# WHAT MUST BE PRESERVED
+# There are TWO safety behaviours in internal/tokenexchange/env.go. Only the master switch
+# goes. The incomplete-config → noop MUST stay: "the incomplete case is treated as 'not yet
+# configured' so a partial GitOps rollout doesn't accidentally cause exchange attempts
+# against a wrong endpoint". That is what keeps PR previews and local dev working without
+# Hydra s2s creds. Removing it would break every preview.
+#
+# ORDERING: code first, then gitops. Once the chart no longer renders the env var, the
+# gitops `tokenExchange.enabled: true` lines are inert (Helm ignores unknown values absent
+# a values schema) and can be cleaned up safely. Reversed, a rollout could drop exchange.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: tokenexchange-flag-removal
+spec:
+  paused: true
+  steps:
+    - name: remove-switch
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: remove-switch
+        repo: mikelear/leartech-mcp-servers
+        branch: feat/remove-switch
+        goal: >-
+          Make token exchange unconditional. Remove ONLY the master switch; keep the
+          incomplete-config safety.
+
+          REMOVE:
+          - internal/tokenexchange/exchanger.go — the EnvEnabled const
+            (LEARTECH_TOKEN_EXCHANGE_ENABLED)
+          - internal/tokenexchange/env.go — enabledFromEnv() and the `if !enabledFromEnv()`
+            early-return
+          - charts/leartech-mcp-servers/values.yaml — the tokenExchange.enabled key and the
+            now-false comment about the noop default
+          - charts/leartech-mcp-servers/templates/deployment.yaml and
+            public-deployment.yaml — the LEARTECH_TOKEN_EXCHANGE_ENABLED env block and the
+            conditional that gates it
+
+          KEEP (do not touch): the incomplete-config → noop path. Its own doc comment
+          explains why — "the incomplete case is treated as 'not yet configured' so a partial
+          GitOps rollout doesn't accidentally cause exchange attempts against a wrong
+          endpoint". PR previews and local dev have no Hydra s2s creds and rely on it. If you
+          remove this, every preview breaks.
+
+          Also update the stale doc comments that reference the switch in
+          internal/planserver/client.go and internal/designserver/client.go, and the
+          chart-values comment block that documents the Hydra prerequisites — those
+          prerequisites are still true and must survive, just not as preconditions for
+          "flipping enabled=true".
+
+          TESTS: internal/tokenexchange/exchanger_test.go and
+          internal/charttests/tokenexchange_test.go both assert on the switch (the chart test
+          asserts the env var is ABSENT when enabled=false, and PRESENT when true). Rewrite
+          them to the new contract: exchange is on whenever the config is complete, noop when
+          it is not, and the chart never renders the removed env var. Do not delete coverage —
+          convert it.
+
+          ISOLATE TESTING: all of the above runs with `go test ./...` — no cluster, no Hydra,
+          no network. The chart tests render templates locally.
+
+          LOGGING TO VERIFY: keep or add a startup log line stating whether the exchanger is
+          active or noop-because-unconfigured, so the previously-flag-driven state is still
+          observable in Loki after the flag is gone.
+          Done = PR merged (open via open_pr, drive gates green).
+
+    # Canned infra actions — the infra agent is action-driven, not goal-driven (R21).
+    # Both MCP deployments must be live before exchange is re-verified.
+    - name: verify-exchange
+      kind: check
+      agentType: leartech-agent-go
+      dependsOn:
+        - remove-switch
+      inputs:
+        name: verify-exchange
+        repo: mikelear/leartech-mcp-servers
+        branch: feat/verify-exchange
+        goal: >-
+          Because release verification is AUTO-INJECTED after the PR step (R23) rather than hand-authored, this step depends on the PR step directly and MUST therefore wait for the rollout itself: poll until the released version is live on the target cluster(s) with a deadline, and FAIL (exit non-zero) if it is not. Verifying at merge time races the rollout and asserts against the old version. 
+          Prove exchange still works with the flag gone — this is the whole risk of the
+          change. This is a verification step: do NOT open a PR and do NOT modify the repo.
+          FAIL (exit non-zero) if ANY assertion below fails; the verdict is this step's exit
+          code.
+
+          Assertions, on BOTH clusters (gcp + az):
+          - A call through the MCP that requires re-audiencing still succeeds, exercising
+            the RFC 8693 path. The plan MCP's outbound call to leartech-plan-api is the
+            proven reference: a caller token audienced at the public MCP host must reach
+            plan-api, which enforces aud=leartech-plan-api.
+          - The tier-1 path is unaffected: a caller whose token already carries the target
+            audience is still forwarded verbatim, not exchanged.
+          - The pods carry no LEARTECH_TOKEN_EXCHANGE_ENABLED env var.
+          - The startup log states the exchanger is active (not noop) on both clusters.
+
+    - name: gitops-cleanup-gsm
+      kind: pr
+      agentType: leartech-agent-go
+      dependsOn:
+        - verify-exchange
+      inputs:
+        name: gitops-cleanup-gsm
+        repo: mikelear/jx-build-cluster-gsm
+        branch: feat/gitops-cleanup-gsm
+        goal: >-
+          Remove the now-inert `tokenExchange: { enabled: true }` block from
+          helmfiles/jx-staging/configs/leartech-mcp-servers.yaml. The chart no longer consumes
+          it (removed in remove-switch), so the value is a no-op that will confuse the next
+          reader exactly as the old default did. Keep `planApiAudience` and everything else
+          untouched. Ordered AFTER verify-exchange deliberately: cleaning up gitops before
+          the code change is proven live could drop exchange mid-rollout.
+          Done = PR merged (open via open_pr, drive gates green).
+
+    - name: gitops-cleanup-akv
+      kind: pr
+      agentType: leartech-agent-go
+      dependsOn:
+        - verify-exchange
+      inputs:
+        name: gitops-cleanup-akv
+        repo: mikelear/jx-build-cluster-akv
+        branch: feat/gitops-cleanup-akv
+        goal: >-
+          Mirror gitops-cleanup-gsm for the Azure cluster — remove the inert
+          `tokenExchange: { enabled: true }` block from the mcp-servers config, leaving
+          planApiAudience and the per-cluster Hydra issuer
+          (https://hydra-jx-staging.az.leartech.com) untouched. Confirm the two cluster
+          configs stay at parity field-for-field.
+          Done = PR merged (open via open_pr, drive gates green).
