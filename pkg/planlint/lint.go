@@ -537,7 +537,10 @@ func lintAutoInject(steps []any, where string, f *Findings) {
 		if has(s, "use") || truthy(s["fanIn"]) {
 			continue
 		}
-		if normalizeKind(asStr(s["kind"])) == "pr" && asStr(s["repo"]) != "" {
+		// Mirror the plan-api injection trigger: a deployable PR step is kind:pr
+		// (empty coerces to pr) carrying a repo EITHER at step level OR under
+		// inputs.repo (the natural R21 dev-agent shape — injection falls back to it).
+		if normalizeKind(asStr(s["kind"])) == "pr" && stepRepo(s) != "" {
 			if n := asStr(s["name"]); n != "" {
 				prSteps[n] = true
 			}
@@ -560,6 +563,16 @@ func lintAutoInject(steps []any, where string, f *Findings) {
 			}
 		}
 	}
+}
+
+// stepRepo returns a step's repo, preferring the step-level `repo` and falling
+// back to inputs.repo — mirroring the plan-api injection trigger (deployable when
+// either is set). Authors commonly put repo only under inputs (the R21 shape).
+func stepRepo(s map[string]any) string {
+	if r := asStr(s["repo"]); r != "" {
+		return r
+	}
+	return asStr(mapOf(s["inputs"])["repo"])
 }
 
 func lintUseStep(planName string, s map[string]any, sw string, f *Findings, idx TemplateIndex) {
