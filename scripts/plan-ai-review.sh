@@ -17,9 +17,19 @@ set -uo pipefail
 
 GW="${AI_GATEWAY_URL:-}"
 KEY="${AI_GATEWAY_API_KEY:-}"
-# Gateway LOGICAL model names (it resolves each to a provider). Default to a
-# two-supplier panel so the consensus/owned-gateway story is visible.
-MODELS="${REVIEW_MODELS:-claude,deepseek}"
+# Gateway LOGICAL model names (it resolves each to a provider).
+#
+# PLAN_REVIEWERS comes from the ai-review-cluster-config ConfigMap — the same
+# one the PR review and the weekly code audit read, so all three review paths
+# take their model set from one place. It was hardcoded here with REVIEW_MODELS
+# set by nothing, which meant changing the panel required editing this script.
+#
+# A SEPARATE KEY FROM `REVIEWERS`, deliberately: that list is chosen for
+# reviewing CODE and includes qwen, a 7B coder model that is a poor judge of a
+# Plan's design quality. Same place, different list.
+#
+# REVIEW_MODELS is still honoured so an operator can override for one run.
+MODELS="${PLAN_REVIEWERS:-${REVIEW_MODELS:-claude,deepseek}}"
 CLUSTER="${CLUSTER_ID:-unknown}"
 
 if [ -z "$GW" ] || [ -z "$KEY" ]; then
