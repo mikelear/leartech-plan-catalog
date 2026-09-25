@@ -83,10 +83,16 @@ spec:
         # never ran and the only symptom was the reviewer reporting the absent
         # template catalogue as a defect in the Plan under review.
         #
-        # ai-review-worker carries git, curl, pyyaml and httpx baked in, is
-        # version-pinned, and is the same image the PR review and the weekly
-        # code audit run. Three review paths, one toolchain.
-        - image: ghcr.io/mikelear/ai-review-worker:0.51.4
+        # ai-review-worker carries git, curl, pyyaml and httpx baked in and is
+        # the same image the PR review and the weekly code audit run. Three
+        # review paths, one toolchain.
+        #
+        # `latest`, matching leartech-code-audit and the ai-review-eval cron
+        # (the catalog tasks pin a version; the release pushes both tags). A
+        # pinned tag here would have to be bumped every time the image gains
+        # something this step needs — which is exactly what happened on the
+        # first attempt: pinned 0.51.4, and curl arrives in the NEXT release.
+        - image: ghcr.io/mikelear/ai-review-worker:latest
           name: plan-ai-review
           resources:
             requests:
@@ -107,10 +113,18 @@ spec:
             done
             python3 -c "import yaml" 2>/dev/null || missing="$missing pyyaml"
             if [ -n "$missing" ]; then
-              echo "plan-ai-review: image is missing:$missing"
-              echo "  This step depends on the ai-review-worker image providing them."
-              echo "  Refusing to run a review that would silently check less."
-              exit 1
+              echo "=============================================================="
+              echo "plan-ai-review SKIPPED — the image is missing:$missing"
+              echo
+              echo "  This step needs them from ai-review-worker. It is NOT running"
+              echo "  a partial review: a reviewer that quietly checks less is how"
+              echo "  criterion 7 stayed off from an unnoticed pyyaml gap until"
+              echo "  2026-08-12, reporting the absent catalogue as a Plan defect."
+              echo
+              echo "  Exiting 0. This step is ADVISORY by design and does not gate"
+              echo "  merges; skipping loudly is the behaviour, not blocking."
+              echo "=============================================================="
+              exit 0
             fi
             bash scripts/plan-ai-review.sh || true
   podTemplate:
