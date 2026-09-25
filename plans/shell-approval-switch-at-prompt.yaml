@@ -1,0 +1,125 @@
+# Let the operator switch approval mode AT the `run it? [y/N]` prompt — so a
+# person who can see the tenth script does not have to leave the question,
+# stop the run, type /auto write, and resume.
+#
+# THE PAIN (leartech-ba-service `ship-proven shell`)
+# The approval gate already has mid-session modes — /auto ask|write|auto over
+# one shared set (cmd/leartech/approvemode.go, sessionApprover) — and the mode
+# is visible in the prompt (`write › `, `auto › `). But mode switches are only
+# reachable as a slash command BETWEEN inputs. When a model is mid-run asking
+# its 10th `[y/N]`, the operator's real choices are "keep pressing y" (a gate
+# being clicked through) or "answer N, type /auto write, re-issue the input"
+# (loses the turn). Both are worse than letting the answer to the question
+# carry the mode change.
+#
+# THE DESIGN DECISIONS (encoded below, do not re-litigate casually)
+#   1. UP-ONLY at the prompt: `w`/`write` and `a`/`auto` are accepted answers;
+#     there is NO ask/downgrade answer. An accidental downgrade at a security
+#     prompt is a worse failure than a missing convenience; downgrades stay on
+#     /auto, which is one line away when nothing is in flight.
+#   2. SWITCHING IMPLIES YES for THIS call. The operator just declared the
+#     effect class acceptable; re-asking the same question after the switch
+#     would be the one absurd outcome. Subsequent calls of covered effects run
+#     under the mode as usual.
+#   3. ONE SOURCE OF TRUTH. The switch must write the SAME set /auto and --yes
+#     write (sessionApprover.effects), not wrap or shadow it. This repo already
+#     fixed the dual-representation bug where the flag's approver sat inside
+#     the session one and /auto ask could not revoke what --yes allowed — the
+#     new affordance must not reintroduce that shape.
+#   4. THE BACKSTOPS DO NOT MOVE. Default stays N (bare return, interrupt and
+#     EOF are all still "not run"); the tool-budget question
+#     (`allow N more? [y/N/number]`) is deliberately mode-independent and stays
+#     exactly as it is; every auto-approved call still logs its
+#     `auto-approved (<mode>)` line.
+#   5. TERMINAL ONLY. The scripted/pipe path (DenyAll, non-interactive) never
+#     sees a prompt and must be byte-for-byte unaffected.
+#
+# VERIFICATION — auto-injected, deliberately NOT hand-authored (R23/R24): the
+# platform auto-composes verify-release-flow after the deployable PR step.
+# The explicit check step below verifies the behaviour itself, not the release.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: shell-approval-switch-at-prompt
+spec:
+  paused: true
+  steps:
+    - name: impl
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: shell-approval-switch-impl
+        repo: mikelear/leartech-ba-service
+        branch: feat/approval-switch-at-prompt
+        goal: >-
+          In the ship-proven shell (cmd/leartech/), make the per-call approval prompt
+          able to switch the approval mode, per the decisions in this Plan's header.
+          Read cmd/leartech/approve.go, approvemode.go and shell.go first; they carry
+          the intent as proven-by comments and the change must extend that style
+          (a WHY comment plus a `// proven-by: TestX` on every guarantee, tests in
+          the sibling _test.go files).
+
+          BEHAVIOUR. termApprover.Approve in cmd/leartech/approve.go currently accepts
+          only `y`/`yes` (everything else, including a bare return, is "not run").
+          Extend the accepted answers to:
+            - `w` or `write`: set the session mode to write, approve THIS call.
+            - `a` or `auto`: set the session mode to auto, approve THIS call.
+            - `y`/`yes`: unchanged — approve this call only.
+            - anything else, empty, interrupt, EOF: unchanged — not run.
+          Print a line naming the new mode when a switch happens (mirroring the
+          wording the /auto handler in shell.go already uses, e.g.
+          "write — file writes run without asking, scripts still ask") so the
+          operator sees what they just turned on. Change the prompt string to
+          `run it? [y/N/write/auto] ` so the affordance is discoverable at all.
+
+          WIRING — one set, three writers. The switch must call the existing
+          sessionApprover.SetMode (cmd/leartech/approvemode.go), NOT a parallel
+          state. termApprover is constructed before the sessionApprover wraps it
+          (cmd/leartech/shell.go, approverFor/newSessionApprover), so pass a
+          switch-mode callback into newTermApprover (cmdShell can close over the
+          *sessionApprover and the promptSetter it already has), or lift the
+          construction order — pick the smaller change and say why in a comment.
+          On a switch also update the prompt indicator via promptFor(m) and the
+          existing setPrompt hook, so the `write › ` / `auto › ` reminder follows
+          the change exactly as /auto does. Keep promptFor and approvalMode as
+          the single place a mode is named.
+
+          DO NOT TOUCH: the tool-budget question askContinue (mode-independent
+          by design); the default-N semantics; the scripted/pipe path
+          (approverFor already returns DenyAll there — it must stay unaffected);
+          the auto-approved log line; R21-shaped concerns of other commands.
+
+          TESTS mirroring the existing provens in cmd/leartech/approvemode_test.go
+          and shellcmd_test.go, at minimum:
+            - w/a at the prompt approves the CURRENT call and switches the mode
+              for subsequent ones (both modes; proven on Approve's return AND on
+              the shared set the /auto handler reads);
+            - a switch then /auto ask round-trips through the one set (no shadow
+              state survives the switch);
+            - the prompt indicator changes after a switch at the prompt;
+            - unknown text, bare return, and interrupt remain "not run" and
+              switch nothing;
+            - a non-interactive (scripted) approver still refuses everything.
+
+          Done = PR merged (open via open_pr, drive gates green).
+    - name: verify
+      kind: check
+      agentType: leartech-agent-go
+      dependsOn:
+        - impl
+      inputs:
+        name: shell-approval-switch-verify
+        repo: mikelear/leartech-ba-service
+        branch: feat/verify-approval-switch
+        goal: >-
+          Verification only on main after the impl PR merges: do NOT open a PR and
+          do NOT modify the repo. Run the repo's own gates (`make test` and
+          `make lint`, adjusting to the Makefile's real targets) and report pass/fail
+          with the coverage delta if `make test-coverage` exists.
+
+          Then read cmd/leartech/approve.go + approvemode.go on merged main and
+          assert, quoting the code, that: (a) the prompt offers y/N/write/auto;
+          (b) a switch writes sessionApprover's set (no second state object);
+          (c) askContinue is untouched; (d) the non-interactive path still returns
+          DenyAll. Report each assertion explicitly; FAIL (exit non-zero) if any
+          fails or if any behaviour the Plan header says DO NOT TOUCH has changed.
