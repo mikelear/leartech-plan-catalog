@@ -815,3 +815,67 @@ spec:
         repo: ${repo}
 `
 }
+
+// TestR23SeesARepoDeclaredUnderInputs pins the shape R23 was blind to.
+//
+// R23 exists to reject a hand-authored `use: verify-release-flow` after a
+// deployable PR step, because the platform injects that verification itself and
+// the hand-authored copy duplicates it. It found the PR step by reading
+// step-level `repo` only — but the natural dev-agent shape R21 asks for puts the
+// repo under `inputs`, and plan-api's injection trigger accepts either.
+//
+// So a Plan written the way R21 tells you to write it slipped past R23 and got
+// its verification twice: once hand-authored, once injected. The rule was real
+// and it was looking in one of the two places the value lives.
+func TestR23SeesARepoDeclaredUnderInputs(t *testing.T) {
+	doc := `apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: p
+spec:
+  paused: true
+  steps:
+    - name: ship
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: ship
+        repo: leartech-plan-api
+        branch: feat/x
+        goal: do the thing
+    - name: verify
+      use: verify-release-flow
+      dependsOn: [ship]
+      with:
+        repo: mikelear/leartech-plan-api
+`
+	assertErr(t, lintYAML(t, doc), "R23")
+}
+
+// TestR23StillFiresOnAStepLevelRepo guards the case that already worked, so the
+// fix widens the rule rather than moving it.
+func TestR23StillFiresOnAStepLevelRepo(t *testing.T) {
+	doc := `apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: p
+spec:
+  paused: true
+  steps:
+    - name: ship
+      kind: pr
+      agentType: leartech-agent-go
+      repo: mikelear/leartech-plan-api
+      inputs:
+        name: ship
+        repo: leartech-plan-api
+        branch: feat/x
+        goal: do the thing
+    - name: verify
+      use: verify-release-flow
+      dependsOn: [ship]
+      with:
+        repo: mikelear/leartech-plan-api
+`
+	assertErr(t, lintYAML(t, doc), "R23")
+}
