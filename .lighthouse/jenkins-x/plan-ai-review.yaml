@@ -16,6 +16,18 @@ spec:
             value: /tekton/home
           # The gateway endpoint is not a secret — set it here (the :8080 port is
           # required). The virtual key comes from the ExternalSecret below.
+          # The review panel, from the SAME ConfigMap the PR review and the
+          # weekly code audit read. It was hardcoded in
+          # scripts/plan-ai-review.sh with REVIEW_MODELS set nowhere, so
+          # changing which models review a Plan meant editing a script in this
+          # repo. optional:true so an unprovisioned cluster falls back to the
+          # script's default rather than failing the step.
+          - name: PLAN_REVIEWERS
+            valueFrom:
+              configMapKeyRef:
+                name: ai-review-cluster-config
+                key: PLAN_REVIEWERS
+                optional: true
           - name: AI_GATEWAY_URL
             value: http://leartech-ai-gateway.ai-gateway.svc.cluster.local:8080
           # Which cluster this run is on (gcp/az) — stamped on the sticky comment
@@ -63,30 +75,57 @@ spec:
         # ADVISORY multi-model review via the OWNED gateway. Never fails the
         # build (exits 0). Posts a sticky PR comment scoring design quality a
         # linter can't judge, and feeds our Plan-quality model flywheel.
-        - image: python:3.12-alpine
+        # THE SHARED REVIEW IMAGE, not python:3.12-alpine.
+        #
+        # This step used to `apk add bash curl git` and `pip install pyyaml` on
+        # every run. That is a dependency nothing versions, and it has already
+        # failed silently: pyyaml was missing until 2026-08-12, so criterion 7
+        # never ran and the only symptom was the reviewer reporting the absent
+        # template catalogue as a defect in the Plan under review.
+        #
+        # ai-review-worker carries git, curl, pyyaml and httpx baked in and is
+        # the same image the PR review and the weekly code audit run. Three
+        # review paths, one toolchain.
+        #
+        # `latest`, matching leartech-code-audit and the ai-review-eval cron
+        # (the catalog tasks pin a version; the release pushes both tags). A
+        # pinned tag here would have to be bumped every time the image gains
+        # something this step needs — which is exactly what happened on the
+        # first attempt: pinned 0.51.4, and curl arrives in the NEXT release.
+        - image: ghcr.io/mikelear/ai-review-worker:latest
           name: plan-ai-review
           resources:
             requests:
               cpu: 200m
               memory: 256Mi
           script: |
-            #!/bin/sh
+            #!/bin/bash
             set +e
-            # git is REQUIRED, not incidental: scripts/plan-ai-review.sh scopes the
-            # review to the PR's own diff, and python:3.12-alpine ships no git. Without
-            # it the script cannot resolve a base and silently falls back to reviewing
-            # every plan in the repo — the exact behaviour the scoping removed.
-            apk add --no-cache bash curl git >/dev/null 2>&1
-            # pyyaml is REQUIRED, not optional. Without it the script's template-catalog
-            # loader falls through to "(template catalog unavailable — pyyaml missing)" and
-            # criterion 7 cannot run. That was silently true on EVERY review until
-            # 2026-08-12; the only symptom was the reviewer reporting the missing catalog
-            # as though it were a defect in the Plan under review.
-            # Alpine's py3-yaml apk targets the system python, not this image's
-            # /usr/local python, so it must come from pip. A musllinux wheel exists for
-            # cp312, so no build toolchain is needed (~2s).
-            pip install --quiet --no-input pyyaml >/dev/null 2>&1 \
-              || echo "plan-ai-review: WARNING — pip install pyyaml failed; template catalog will be degraded"
+            # NO RUNTIME INSTALLS. git, curl and pyyaml come from the image.
+            # Asserted rather than assumed, because their absence is what made
+            # this step degrade silently before: a missing pyyaml turned
+            # criterion 7 off and reported the missing catalogue as a Plan
+            # defect. A hard failure here is a pipeline someone fixes; a soft
+            # one is a review that quietly checks less than it claims.
+            missing=""
+            for t in git curl python3; do
+              command -v "$t" >/dev/null 2>&1 || missing="$missing $t"
+            done
+            python3 -c "import yaml" 2>/dev/null || missing="$missing pyyaml"
+            if [ -n "$missing" ]; then
+              echo "=============================================================="
+              echo "plan-ai-review SKIPPED — the image is missing:$missing"
+              echo
+              echo "  This step needs them from ai-review-worker. It is NOT running"
+              echo "  a partial review: a reviewer that quietly checks less is how"
+              echo "  criterion 7 stayed off from an unnoticed pyyaml gap until"
+              echo "  2026-08-12, reporting the absent catalogue as a Plan defect."
+              echo
+              echo "  Exiting 0. This step is ADVISORY by design and does not gate"
+              echo "  merges; skipping loudly is the behaviour, not blocking."
+              echo "=============================================================="
+              exit 0
+            fi
             bash scripts/plan-ai-review.sh || true
   podTemplate:
     tolerations:
