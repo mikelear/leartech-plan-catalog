@@ -1,0 +1,73 @@
+# Fix mikelear/leartech-go-common#37 — agentloop's cache marker lands on the
+# tool result, which the gateway's claude adapter then drops.
+#
+# THE BUG. agentloop.toWire marks the LAST message of each request as the cache
+# breakpoint, and lastMarkable accepts a message of ANY role. After a tool call
+# the last message is the tool result, so it is sent as
+# content: [{type: "text", text, cache_control}] instead of a string — a shape
+# the gateway's claude adapter drops (filed as mikelear/leartech-ai-gateway#114,
+# with a live A/B). Net effect: on claude every agentloop consumer loses the
+# tool result a turn ends on, and the model answers as if the tool returned
+# nothing ("notes.md exists but is empty").
+#
+# THE FIX IS ONE PREDICATE. Skip role == "tool" in lastMarkable so the marker
+# lands on the newest user or system message with content. The cached prefix
+# ends one message earlier on a tool turn; everything before it is still read
+# from cache and nothing depends on the adapter's handling of array content.
+# mikelear/leartech-ba-service#130 already ships this exact behaviour as a
+# client-side shim with tests (cmd/ship-proven/toolblocks.go) — mirror the
+# behaviour, not the shim.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-go-common-37-lastmarkable
+spec:
+  paused: true
+  steps:
+    - name: fix-lastmarkable
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: fix-lastmarkable
+        repo: mikelear/leartech-go-common
+        branch: fix/lastmarkable-skips-tool-roles
+        goal: |
+          Fix mikelear/leartech-go-common issue #37: "agentloop: toWire puts the
+          cache marker on the tool result, so it is sent as content blocks
+          (dropped by claude)".
+
+          CONFIRM THE PREMISE FIRST. In pkg/agentloop/runner.go read toWire and
+          lastMarkable. Confirm lastMarkable has NO role check (it returns the
+          last message with non-empty Content of any role), so after a tool call
+          the marker lands on the tool result and toWire emits it as
+          [{type: "text", text, cache_control: {type: "ephemeral"}}] instead of
+          a string. State what you found in the PR description. If the code has
+          moved on since v1.5.0 and the marker no longer reaches a tool result,
+          STOP and say so.
+
+          THE FIX — ONE PREDICATE, NO SECOND PATH. lastMarkable skips messages
+          with role == "tool", so the marker lands on the newest user or system
+          message that has content. The cached prefix then ends one message
+          earlier on a tool turn; the whole history before it is still read from
+          cache, and nothing depends on the adapter's handling of array content.
+          Do not restructure toWire, do not add a new message type, and do not
+          try to keep the marker on the tool result — that exact shape is what
+          the claude adapter drops (mikelear/leartech-ai-gateway#114).
+
+          REFERENCE IMPLEMENTATION: mikelear/leartech-ba-service#130 is the same
+          change as a client-side shim, with tests, in
+          cmd/ship-proven/toolblocks.go. Mirror its behaviour; do not port the
+          shim into go-common.
+
+          TESTS. Table tests for lastMarkable/toWire covering: (1) a history
+          ending in a tool result marks the newest NON-tool message with content,
+          not the tool result; (2) a plain user turn is unchanged — the last
+          message still carries the marker and the content stays a string;
+          (3) a history whose only content is tool results returns -1 (nothing
+          marked); (4) a system message is markable when it is the newest
+          non-tool content. Update any existing toWire tests that assert the old
+          marker position. Run `go test ./...` — all green, no skips.
+
+          Done = PR merged (open via open_pr, drive gates green). The PR body
+          says "Closes #37" and cross-references
+          mikelear/leartech-ai-gateway#114.
