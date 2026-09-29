@@ -111,7 +111,7 @@ spec:
       kind: check
       agentType: leartech-agent-infra
       inputs:
-        action: release-health-check
+        action: deploy-health
         service: x
 `
 
@@ -145,7 +145,7 @@ spec:
       kind: check
       agentType: leartech-agent-infra
       inputs:
-        action: release-health-check
+        action: deploy-health
         service: x
 `
 	assertErr(t, lintYAML(t, plan), "R22")
@@ -744,7 +744,7 @@ spec:
       kind: check
       agentType: leartech-agent-infra
       inputs:
-        action: release-health-check
+        action: deploy-health
         service: leartech-plan-api
 `
 	assertNoErr(t, lintYAML(t, doc), "R21")
@@ -768,4 +768,50 @@ spec:
 	if len(f.Errors) != 0 {
 		t.Fatalf("a use: step should be valid without kind/agentType, got %v", f.Errors)
 	}
+}
+
+// TestR21RejectsAnActionNoAgentImplements is the check that was missing when
+// three dead action names reached a shipped template. R21 required the `action`
+// key and never looked at its value, so `scaffold-pr` and `release-health-check`
+// — the retired Python infra agent's vocabulary — linted clean and would have
+// exited 1 at run time with "unknown check action".
+func TestR21RejectsAnActionNoAgentImplements(t *testing.T) {
+	for _, action := range []string{"release-health-check", "scaffold-pr", "chart-config", "totally-made-up"} {
+		t.Run(action, func(t *testing.T) {
+			doc := infraTemplateWithAction(action)
+			assertErr(t, lintYAML(t, doc), "R21")
+		})
+	}
+}
+
+// TestR21AcceptsEveryActionInfraGoImplements is the other half: the allowlist is
+// a mirror of the binary's const blocks, so a real action must not be rejected.
+// Without this, tightening R21 would quietly break verify-release-flow.
+func TestR21AcceptsEveryActionInfraGoImplements(t *testing.T) {
+	for _, action := range knownInfraActions() {
+		t.Run(action, func(t *testing.T) {
+			assertNoErr(t, lintYAML(t, infraTemplateWithAction(action)), "R21")
+		})
+	}
+}
+
+// infraTemplateWithAction builds the smallest PlanTemplate carrying one infra
+// step, so the action is the only thing under test.
+func infraTemplateWithAction(action string) string {
+	return `apiVersion: agent.leartech.io/v1alpha1
+kind: PlanTemplate
+metadata:
+  name: t
+spec:
+  params:
+    - name: repo
+      required: true
+  steps:
+    - name: s
+      kind: check
+      agentType: leartech-agent-infra-go
+      inputs:
+        action: ` + action + `
+        repo: ${repo}
+`
 }

@@ -1,0 +1,119 @@
+# bootstrap-authed-service — stand up a NEW authed Go service from an existing
+# template repo: create -> register(gcp,az) -> scaffold(-> main) -> dev(ONE PR).
+#
+# WHY THE FIRST FOUR STEPS RUN ON leartech-agent-infra-go. They are not judgement
+# calls. "Create a repo named X", "append X to this cluster's source-config",
+# "render this template into that repo" each have one correct outcome and a typed
+# result, and infra-go executes them by calling the repofactory functions
+# in-process — no model, no MCP hop, no transcription of a verdict into prose.
+# The one step that IS a judgement call (adapt the scaffold and drive a PR green)
+# runs on a dev agent, which is what a dev agent is for.
+#
+# HISTORY WORTH KEEPING. These steps were briefly pointed at leartech-agent-go
+# while infra-go had only its four read checks, so the actions they name had no
+# implementation anywhere: `newRepo`, `scaffold-pr` and `release-health-check`
+# were the PYTHON infra agent's vocabulary, which nothing has spoken since it was
+# retired. plan-lint accepted them because it required an `action` key without
+# checking that the action exists — fixed alongside this template.
+#
+# NO VERIFY STEP HERE, BY CONSTRUCTION. Nested templates are rejected by
+# ExpandPlanSteps, so this template cannot `use: verify-release-flow`. That is a
+# feature: verification composes at the PLAN level, where a Plan lists both
+# templates and makes the dependency explicit —
+#
+#   steps:
+#     - name: bootstrap
+#       use: bootstrap-authed-service
+#       with: {name: my-svc, templateRepo: mikelear/leartech-plan-api, namespace: jx-staging}
+#     - name: verify
+#       use: verify-release-flow
+#       with: {repo: mikelear/my-svc}
+#       dependsOn: [bootstrap]
+#
+# — rather than each template growing its own private copy of the release checks.
+apiVersion: agent.leartech.io/v1alpha1
+kind: PlanTemplate
+metadata:
+  name: bootstrap-authed-service
+spec:
+  params:
+    - name: name
+      required: true # the new service name; becomes the repo name and the auth audience
+    - name: templateRepo
+      required: true # owner/name to render from (e.g. mikelear/leartech-plan-api, so JWKS/Hydra auth comes baked in)
+    - name: namespace
+      required: false # deploy namespace for the service; defaults to jx-staging downstream
+  steps:
+    # Create the repo under the OWNER account. infra-go refuses this action when
+    # GITHUB_OWNER_ADMIN_PAT is absent rather than falling back to the bot token:
+    # POST /user/repos creates under the token's own identity, so a bot token
+    # would succeed into the bot's account and report a green step.
+    - name: create
+      kind: apply
+      agentType: leartech-agent-infra-go
+      inputs:
+        action: create-repo
+        repo: "mikelear/${name}"
+    # Register into each cluster's source-config. Both run from wherever the Plan
+    # runs: the cluster param selects which GitOps REPO is edited, and that is a
+    # GitHub write, not a cluster write. No `repo` input — the GitOps repo is
+    # derived from the cluster, and passing one would be a value nothing reads.
+    - name: register-gcp
+      kind: pr
+      agentType: leartech-agent-infra-go
+      repo: mikelear/jx-build-cluster-gsm
+      dependsOn: [create]
+      inputs:
+        action: register-source-config
+        cluster: gcp
+        service: "${name}"
+    - name: register-az
+      kind: pr
+      agentType: leartech-agent-infra-go
+      repo: mikelear/jx-build-cluster-akv
+      dependsOn: [create]
+      inputs:
+        action: register-source-config
+        cluster: az
+        service: "${name}"
+    # Seed main straight from the template (to_main) — NO PR. The first commit
+    # MUST land .lighthouse/ onto main, because Lighthouse reads triggers from the
+    # BASE branch: a repo whose triggers arrive by PR can never gate that PR. The
+    # dev step below then owns the one and only PR.
+    - name: scaffold
+      kind: apply
+      agentType: leartech-agent-infra-go
+      dependsOn: [register-gcp, register-az]
+      inputs:
+        action: scaffold
+        repo: "mikelear/${name}"
+        name: "${name}"
+        template: "${templateRepo}"
+        to_main: "true"
+    - name: dev
+      kind: pr
+      agentType: leartech-agent-go
+      repo: "mikelear/${name}"
+      dependsOn: [scaffold]
+      inputs:
+        name: "${name}-dev"
+        repo: "${name}"
+        branch: "dev-${name}"
+        goal: |
+          The ${name} Go service is already scaffolded onto main (from ${templateRepo}).
+          Do the normal, self-contained dev lifecycle: open ONE PR that adapts the scaffold and
+          drive it green, then it merges. PUBLISH the PR with the `open_pr` MCP tool — NOT raw
+          `gh` — so it is tracked (open_pr records targetPR/headBranch; a raw gh PR is invisible
+          to the controller and leaves the step stuck). Drive BOTH clusters' gates green; when
+          `wait_for_terminal` reports all_passed, YOUR JOB IS DONE — STOP this turn. Do NOT wait
+          for or poll the release/promote (a verify-release-flow step owns that; waiting causes a
+          runaway overrun). If you CANNOT reach all_passed (blocked, or a gate you can't fix),
+          STOP and say so in your summary — do NOT merge. Opening a PR is not success; reaching
+          green is, and a blocked run is recorded as a failure so it recycles.
+          KEEP the inherited auth middleware (JWKS/Hydra) — the service audience must be ${name}.
+          KEEP whatever the template wired (auth already noted; also DB, backing clients, etc.) —
+          do NOT rip it out. The service MUST reach /health green: if ANY inherited dependency
+          isn't provisioned yet (a DB/CNPG secret, a backing service), make that connection
+          lazy/optional so /health is green WITHOUT it — full enablement of such dependencies is
+          a follow-up plan.
+          No new features — just adapt the scaffold and make it green.
