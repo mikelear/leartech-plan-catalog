@@ -45,6 +45,27 @@ spec:
         - image: uses:jenkins-x/jx3-pipeline-catalog/tasks/git-clone/git-clone-pr.yaml@versionStream
           name: ""
           resources: {}
+        # The sync's comment stripper, tested where its tools exist.
+        #
+        # It cannot be a Go test: the plan-lint step below runs golang:1.26-alpine,
+        # which has neither bash nor python3, so a Go test could only skip — and a
+        # check that skips reports the same green as one that ran. The sync itself
+        # runs in python:3.12-alpine, so this runs in that kind of image too.
+        #
+        # Before the plan-lint step because that one ends `exit 0` (it defers its
+        # verdict to the report step), so a failure placed after it would be
+        # reported but not gate.
+        - image: python:3.12-alpine
+          name: sync-strip-selftest
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          script: |
+            #!/bin/sh
+            set -eu
+            apk add --no-cache bash >/dev/null 2>&1
+            bash scripts/strip-selftest.sh
         # The HARD GATE. All deterministic (non-LLM) checks are Go. Runs with
         # set +e so a failure still lets the report step post feedback; the
         # overall verdict is written to .plan-lint.status and re-applied there.
