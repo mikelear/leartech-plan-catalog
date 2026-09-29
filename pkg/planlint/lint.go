@@ -97,7 +97,7 @@ var (
 )
 
 // infraAgentPrefix matches the privileged infra agents (release-verify /
-// deploy-health / chart-config). Concrete steps using one are allowed ONLY in
+// deploy-health / create-repo). Concrete steps using one are allowed ONLY in
 // PlanTemplates (R22): a plain catalog Plan must compose infra via a use:
 // template, never hand-author it.
 //
@@ -173,10 +173,53 @@ func lintInputs(agentType string, s map[string]any, sw string, f *Findings) {
 			}
 		}
 	case isInfraAgent(agentType):
-		if asStr(inp["action"]) == "" {
-			f.err("R21", sw, "infra-agent step inputs need `action` (e.g. chart-config, release-health-check) — the infra agent is action-driven, not goal-driven")
+		action := asStr(inp["action"])
+		if action == "" {
+			f.err("R21", sw, "infra-agent step inputs need `action` (e.g. deploy-health, create-repo) — the infra agent is action-driven, not goal-driven")
+			break
+		}
+		if !infraActions[action] {
+			f.err("R21", sw, fmt.Sprintf("infra-agent action %q is not one infra-go implements — it dispatches on an exact "+
+				"string and exits 1 with \"unknown check action\" for anything else. Known: %s",
+				action, strings.Join(knownInfraActions(), ", ")))
 		}
 	}
+}
+
+// infraActions is every action leartech-agent-infra-go dispatches on, mirroring
+// the const blocks in leartech-mcp-servers cmd/infra-go (main.go: the four read
+// checks; build.go: the three build actions).
+//
+// Requiring the key without checking the VALUE is how three actions that no
+// agent implements reached a shipped template: `newRepo`, `scaffold-pr` and
+// `release-health-check` were the retired Python infra agent's vocabulary. They
+// linted clean and would have failed at run time with "unknown check action" —
+// the lint could not reach the thing it was supposedly checking.
+//
+// This list is a MIRROR, so it can drift. It drifts SAFE: a new action added in
+// mcp-servers and not here is rejected until someone adds it, which is a
+// one-line PR against a loud error. The opposite drift — an action removed there
+// and left here — is the one to watch, and is why the error quotes the binary's
+// own failure mode rather than paraphrasing it.
+var infraActions = map[string]bool{
+	"release-pipeline-status": true,
+	"promote-status":          true,
+	"bootjob-for-commit":      true,
+	"deploy-health":           true,
+	"create-repo":             true,
+	"register-source-config":  true,
+	"scaffold":                true,
+}
+
+// knownInfraActions returns the allowlist sorted, so the error message is stable
+// across runs (map iteration order would otherwise reshuffle it each time).
+func knownInfraActions() []string {
+	out := make([]string, 0, len(infraActions))
+	for a := range infraActions {
+		out = append(out, a)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // stepTargetRepo returns the repo a concrete step acts on — step-level `repo`
