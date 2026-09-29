@@ -1,0 +1,64 @@
+# Fix mikelear/leartech-ai-gateway#114 — the claude adapter drops a tool result
+# whose content is an array of content blocks instead of a plain string.
+#
+# THE BUG. When a request's tool-result message carries its content as content
+# blocks (e.g. [{type: "text", text, cache_control: {type: "ephemeral"}}]
+# rather than a plain string), the claude adapter drops the tool result
+# entirely. That shape is legitimately produced: leartech-go-common's agentloop
+# toWire emits it after every tool call (mikelear/leartech-go-common#37), with a
+# live A/B in that issue. Net effect on claude: the model loses the tool result
+# the turn ends on and answers as if the tool returned nothing.
+#
+# DEFENCE IN DEPTH, BOTH SIDES. go-common#37 stops agentloop emitting the shape;
+# this plan makes the gateway TOLERATE it. The two land independently — the
+# gateway must accept both a plain string and a block array for the same role.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fix-ai-gateway-114-tool-result-blocks
+spec:
+  paused: true
+  steps:
+    - name: fix-claude-adapter
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: fix-claude-adapter
+        repo: mikelear/leartech-ai-gateway
+        branch: fix/claude-adapter-tool-result-blocks
+        goal: |
+          Fix mikelear/leartech-ai-gateway issue #114: the claude adapter drops
+          a tool result whose content arrives as an ARRAY of content blocks
+          instead of a plain string, so on claude the model never sees the tool
+          result the turn ends on.
+
+          CONFIRM THE PREMISE FIRST. Find the claude adapter's request
+          translation and the exact branch that discards the tool result when
+          its content is a block array. Write the failing test FIRST — a
+          tool-result message with content
+          [{type: "text", text: "...", cache_control: {type: "ephemeral"}}] —
+          and show it fails on main (the tool result does not reach the
+          upstream request). State the file/line you found in the PR
+          description. If the adapter already forwards that shape, STOP and say
+          so.
+
+          THE FIX. Handle block-array tool-result content the same way the
+          adapter already handles block content on other roles: forward the tool
+          result upstream with its text, preserving any cache_control, instead
+          of discarding the message. Do not special-case the ephemeral marker
+          beyond passing it through, and do not reject the shape — clients
+          legitimately send it (mikelear/leartech-go-common#37 emits it after
+          every tool call; the client-side fix lands separately), so the gateway
+          must tolerate BOTH a plain string and a block array for the same
+          message.
+
+          TESTS. Adapter tests, no network: (1) tool result as a plain string —
+          behaviour unchanged; (2) tool result as a text-block array with
+          cache_control — the content reaches the upstream request with the
+          marker intact; (3) a tool result with an empty block array does not
+          panic and degrades sanely (empty content, message still present).
+          Run `go test ./...` — all green, no skips.
+
+          Done = PR merged (open via open_pr, drive gates green). The PR body
+          says "Closes #114" and cross-references
+          mikelear/leartech-go-common#37.
