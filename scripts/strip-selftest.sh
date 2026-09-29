@@ -24,7 +24,10 @@ cd "$(dirname "$0")/.."
 SYNC=scripts/sync-templates-to-controller.sh
 [ -f "$SYNC" ] || { echo "FAIL: $SYNC not found — this self-test cannot pass by failing to find it"; exit 1; }
 eval "$(sed -n '/^strip_yaml_comments() {/,/^}/p' "$SYNC")"
-type strip_yaml_comments >/dev/null 2>&1 || { echo "FAIL: could not extract strip_yaml_comments from $SYNC"; exit 1; }
+eval "$(sed -n '/^emit_template() {/,/^}/p' "$SYNC")"
+for f in strip_yaml_comments emit_template; do
+  type "$f" >/dev/null 2>&1 || { echo "FAIL: could not extract $f from $SYNC — this self-test cannot pass by examining nothing"; exit 1; }
+done
 
 fail=0
 say() { printf '  %s\n' "$*"; }
@@ -48,7 +51,7 @@ for line in out:
 '
 
 
-echo "==> 1/3 the filter only removes lines (subsequence check)"
+echo "==> 1/4 the filter only removes lines (subsequence check)"
 checked=0
 for src in templates/*.yaml; do
   [ -e "$src" ] || { echo "FAIL: no templates to examine"; exit 1; }
@@ -62,7 +65,7 @@ for src in templates/*.yaml; do
 done
 say "examined $checked template(s)"
 
-echo "==> 2/3 no whole-line comment survives"
+echo "==> 2/4 no whole-line comment survives"
 for src in templates/*.yaml; do
   left=$(strip_yaml_comments < "$src" | grep -cE "^[[:space:]]*#" || true)
   if [ "$left" != "0" ]; then
@@ -73,7 +76,7 @@ for src in templates/*.yaml; do
   fi
 done
 
-echo "==> 3/3 a # inside a block scalar is content, not a comment"
+echo "==> 3/4 a # inside a block scalar is content, not a comment"
 fixture=$(cat <<'YAML'
 # a real comment, must go
 apiVersion: agent.leartech.io/v1alpha1
@@ -102,6 +105,27 @@ case "$got" in
   *"other: value"*) ;;
   *) say "FAIL: the key after the block scalar was lost"; fail=1 ;;
 esac
+
+echo "==> 4/4 the FILE the sync writes costs nothing against the comment gate"
+# The assertion that was missing. 1-3 test the filter; this tests the artefact.
+# controller#199 went red a second time with a correct filter, because the
+# emitted file still opened with a `---` separator and the gate's commentRe
+# includes `--` (for SQL), so the YAML document separator counted as prose.
+for src in templates/*.yaml; do
+  b=$(basename "$src" .yaml)
+  counted=$(emit_template "$b" "$src" | grep -vE "Code generated" | grep -cE "^[[:space:]]*(//|#|--)" || true)
+  if [ "$counted" != "0" ]; then
+    say "FAIL: the generated $b file has $counted line(s) the gate counts as prose:"
+    emit_template "$b" "$src" | grep -vE "Code generated" | grep -nE "^[[:space:]]*(//|#|--)" | sed 's/^/      /'
+    fail=1
+  else
+    say "$b: generated file has 0 gate-counted lines"
+  fi
+  case "$(emit_template "$b" "$src")" in
+    *"Code generated"*) ;;
+    *) say "FAIL: the generated $b file has no exempt marker"; fail=1 ;;
+  esac
+done
 
 [ "$fail" = 0 ] && echo "==> strip self-test: PASS" || echo "==> strip self-test: FAIL"
 exit "$fail"
