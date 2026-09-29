@@ -580,7 +580,12 @@ func lintAutoInject(steps []any, where string, f *Findings) {
 		if has(s, "use") || truthy(s["fanIn"]) {
 			continue
 		}
-		if normalizeKind(asStr(s["kind"])) == "pr" && asStr(s["repo"]) != "" {
+		// stepTargetRepo, not s["repo"]: plan-api injects after a deployable PR
+		// step, and it reads the repo from EITHER place. Reading only the step
+		// level made R23 blind to the shape R21 asks authors to use — repo under
+		// inputs — so a Plan written as instructed got its verification twice,
+		// once hand-authored and once injected. // proven-by: TestR23SeesARepoDeclaredUnderInputs
+		if normalizeKind(asStr(s["kind"])) == "pr" && stepTargetRepo(s) != "" {
 			if n := asStr(s["name"]); n != "" {
 				prSteps[n] = true
 			}
