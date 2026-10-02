@@ -1,0 +1,44 @@
+# Infra end-to-end evaluation, leg 1: stand up ONE repo through the boot-job
+# template, so the full path catalog-PR -> plan-api -> controller -> agents ->
+# gates has a real subject to be evaluated against.
+#
+# WHY A THROWAWAY-STYLE PROBE REPO, AND WHY THROUGH THE TEMPLATE ANYWAY
+# This Plan exists to be evaluated, not to deliver a feature. It creates
+# leartech-e2e-probe via bootstrap-authed-service — the boot-job template: its
+# scaffold step seeds main DIRECTLY from leartech-go-service-template (to_main),
+# so .lighthouse/ triggers are on the BASE branch before the first PR exists and
+# the repo is gated by Lighthouse + boot from commit one. Creating the repo by
+# hand would skip exactly the machinery under test.
+#
+# WHAT THE TEMPLATE RUNS (one use: step expands to five)
+#   create        repo mikelear/leartech-e2e-probe (infra-go, in-process)
+#   register-gcp  source-config on jx-build-cluster-gsm
+#   register-az   source-config on jx-build-cluster-akv
+#   scaffold      template render onto main (no PR — deliberate, see template)
+#   dev           ONE PR adapting the scaffold, driven green on BOTH clusters
+# The first four are deterministic infra actions; only dev is an agent turn-loop.
+# verify-release-flow is NOT hand-authored here: the platform auto-injects it
+# after the dev PR step (R23), wired to the real merged PR.
+#
+# SEQUENCING WITH THE FOLLOW-UP PLAN
+# infra-e2e-probe-change targets this repo and is submitted separately; unpause
+# it only after this Plan reaches terminal success. Cross-Plan dependsOn does
+# not exist — the ordering is a human decision at unpause time (Gate 3).
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: infra-e2e-bootstrap
+spec:
+  paused: true
+  steps:
+    # kind: apply is required, not decorative: an omitted kind is "" which the
+    # CRD treats as "pr", and plan-api then rejects a first pr-step with no
+    # agentType — which a use: step cannot declare (the template supplies it).
+    # Same shape as lighthouse-pr-events-producer's first step.
+    - name: bootstrap
+      kind: apply
+      use: bootstrap-authed-service
+      with:
+        name: leartech-e2e-probe
+        templateRepo: leartech-go-service-template
+        namespace: jx-staging
