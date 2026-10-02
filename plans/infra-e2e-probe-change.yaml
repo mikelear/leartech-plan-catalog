@@ -1,0 +1,64 @@
+# Infra end-to-end evaluation, leg 2: one small, real PR change against the
+# probe repo that leg 1 (infra-e2e-bootstrap) created — the same repo the
+# end2end suite hack touches, but driven as a REAL Plan through the controller.
+#
+# WHAT THIS IS
+# The evaluation vehicle: a dev agent opens ONE small PR against
+# mikelear/leartech-e2e-probe, drives both clusters' gates green, and the
+# platform auto-injects verify-release-flow wired to that merged PR (R23) — so
+# the change is evaluated from catalog to full end-to-end (release, promote PR,
+# boot job, deploy health) by the controller, not by a test script.
+#
+# NO HAND-AUTHORED PRE-CHECK (learned from R22 on the first submission): an
+# infra deploy-health step cannot live in a plain Plan — infra steps are
+# template-only. The prerequisite that leg 1 be terminal-success is a Gate-3
+# human unpause decision, and the injected verify-release-flow's deploy-healthy
+# check is itself the authoritative fail-closed landed signal.
+#
+# THE CHANGE ITSELF IS DELIBERATELY SMALL
+# A go-service-template scaffold carries a /health handler. This step adds one
+# /readyz endpoint that returns the same shape. That is enough to exercise every
+# gate (lint, test, swag, image build, both clusters' end2end, release, promote,
+# boot, deploy-health) while staying reviewable in one diff. It changes no
+# behavior any other service depends on — the repo exists only as this probe.
+#
+# PREREQUISITE
+# infra-e2e-bootstrap must be terminal-success and the repo on main with a green
+# scaffold before this Plan is unpaused. Cross-Plan dependsOn does not exist;
+# this ordering is a Gate-3 human decision, not a DAG edge.
+#
+# HOW A FAILURE IS JUDGED
+# verify-release-flow steps are kind:check on the infra agent — they FAIL
+# CLOSED on a typed verdict (R25), so a red release/promote/deploy shows up as a
+# failed check step, not green prose. That failed step is the evaluation result.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: infra-e2e-probe-change
+spec:
+  paused: true
+  steps:
+    - name: readyz
+      kind: pr
+      agentType: leartech-agent-go
+      repo: mikelear/leartech-e2e-probe
+      inputs:
+        name: probe-readyz
+        repo: mikelear/leartech-e2e-probe
+        branch: feat/readyz-endpoint
+        goal: |-
+          Add a GET /readyz endpoint to the leartech-e2e-probe service that returns
+          the same response shape as the existing /health handler. One small,
+          self-contained PR — nothing else changes.
+
+          PUBLISH the PR with the `open_pr` MCP tool — NOT raw `gh` — so it is
+          tracked by the controller (a raw gh PR is invisible and leaves the step
+          stuck). Drive BOTH clusters' gates green; when `wait_for_terminal`
+          reports all_passed, STOP this turn. Do NOT wait for or poll the
+          release/promote — the auto-injected verify-release-flow owns that;
+          waiting causes a runaway overrun.
+
+          Register the route on the gin router beside /health, give it a
+          handler_test that asserts 200 + body, and update the swagger annotations
+          (@Router, @Success) then run `make swag` and commit the regenerated
+          docs/. `make pre-push` must pass in full. Do not touch anything else.
