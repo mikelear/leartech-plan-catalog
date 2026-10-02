@@ -9,6 +9,12 @@
 # the change is evaluated from catalog to full end-to-end (release, promote PR,
 # boot job, deploy health) by the controller, not by a test script.
 #
+# NO HAND-AUTHORED PRE-CHECK (learned from R22 on the first submission): an
+# infra deploy-health step cannot live in a plain Plan — infra steps are
+# template-only. The prerequisite that leg 1 be terminal-success is a Gate-3
+# human unpause decision, and the injected verify-release-flow's deploy-healthy
+# check is itself the authoritative fail-closed landed signal.
+#
 # THE CHANGE ITSELF IS DELIBERATELY SMALL
 # A go-service-template scaffold carries a /health handler. This step adds one
 # /readyz endpoint that returns the same shape. That is enough to exercise every
@@ -32,24 +38,10 @@ metadata:
 spec:
   paused: true
   steps:
-    - name: probe-readiness
-      kind: check
-      agentType: leartech-agent-infra-go
-      inputs:
-        action: deploy-health
-        repo: mikelear/leartech-e2e-probe
-        service: leartech-e2e-probe
-        namespace: jx-staging
-      onFailure:
-        escalate: ba
-        context:
-          hint: "leg 1 (infra-e2e-bootstrap) is not terminal-success yet, or the scaffold's release never landed — check its Plan phase before unpausing this one"
     - name: readyz
       kind: pr
       agentType: leartech-agent-go
       repo: mikelear/leartech-e2e-probe
-      dependsOn:
-        - probe-readiness
       inputs:
         name: probe-readyz
         repo: mikelear/leartech-e2e-probe
