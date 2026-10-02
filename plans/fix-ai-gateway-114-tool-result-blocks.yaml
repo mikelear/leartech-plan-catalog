@@ -19,9 +19,13 @@ metadata:
 spec:
   paused: true
   steps:
+    # budgetIter raised 5 -> 10: iteration 1 completed with no targetPR (the
+    # agent stopped without publishing) and the step failed "no targetPR". A
+    # recycling iteration needs headroom above the AgentType default of 5.
     - name: fix-claude-adapter
       kind: pr
       agentType: leartech-agent-go
+      budgetIter: 10
       inputs:
         name: fix-claude-adapter
         repo: mikelear/leartech-ai-gateway
