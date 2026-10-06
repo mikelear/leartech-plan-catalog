@@ -245,3 +245,5 @@ spec:
 
           PUBLISH the PR with open_pr — NOT raw gh. Drive BOTH clusters green;
           all_passed then STOP. Do not wait for release/promote.
+
+# resubmit: stale Failed CR deleted 2026-10-06T23:09:40Z
