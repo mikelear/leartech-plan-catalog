@@ -53,6 +53,23 @@
 # than minting fresh state — that is what "the chain has finalised and has
 # activity" means here, and it is already true.
 #
+# RE-RUN CONTEXT (2026-10-06, second submission)
+# The first run of this Plan terminal-failed at read-endpoints for an
+# ENVIRONMENTAL reason, now fixed and deployed: the agent spent its 112 turns
+# reading and hit the 120-call tool budget — exiting 1 (outcome=budget-stop)
+# with its branch committed and pushed but no PR opened — and the controller
+# terminal-failed the run with no respawn offered. Fixed on both halves:
+#   - orchestrator-controller v0.0.200: respawn on BackoffLimitExceeded
+#     within BudgetIter (delivered work, TargetPR set, still settles
+#     Succeeded ahead of the respawn branch)
+#   - the agent toolset 0.53.45 (ship-proven 0.0.160): the budget stop now
+#     COMMITS uncommitted work to the run's branch before the push, and
+#     run_end carries outcome=budget-stop for the controller to key on
+#   - the agent's model env is glm-via-fireworks (was glm)
+# The Plan itself is unchanged — the contract, the steps and the goals below
+# are exactly what #90 merged. The on-cluster Plan CR was deleted at failure
+# time, so this merge submits it fresh and PAUSED for a new Gate-3 unpause.
+#
 # REFERENCES — READ THESE BEFORE WRITING CODE
 #   leartech-mcp-servers internal/blockchainserver/   the MCP half of the contract
 #   leartech-plan-api    internal/plans/handler.go    the estate's reference for
