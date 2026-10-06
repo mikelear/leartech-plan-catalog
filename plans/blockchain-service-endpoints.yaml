@@ -34,6 +34,25 @@
 # (blockchain.rpcURL), NEVER a hardcoded literal, and default the chainId
 # config from eth_chainId at startup rather than a baked constant.
 #
+# TEST DATA ALREADY ON THE CHAIN — THE PREVIEW PIPELINE SEEDED IT
+# leartech-evm-network's OWN preview pipeline (.lighthouse/jenkins-x/
+# pullrequest.yaml) proves the chain healthy before this service exists:
+#   Phase 1 waits for BEACON finalization (finalized epoch > 0, ~2-3 epochs
+#   after genesis for a fresh chain; hard gate)
+#   Phase 2 sends a 1-ether transfer from the genesis-funded account (derived
+#   from the genesis mnemonic in leartech-ethereum-config-chains
+#   scripts/genesis/mnemonic.txt) so BlockScout has a TX_HASH to index
+#   Phase 3 deploys MockOracle + MockConsumer (leartech-oracle-contracts
+#   image), triggers askValue(), and proves the listener fulfils on-chain —
+#   the canonical reference for the event-listen → write-back shape this
+#   service's get_events/read_contract expose.
+# So the chain carries a finalized epoch, at least one mined transfer, and
+# deployed oracle contracts with publish events. The read-endpoints tests
+# should assert against those EXISTING artifacts (chainId 3151909, the oracle
+# contracts' addresses in the deployed-addresses ConfigMap pattern) rather
+# than minting fresh state — that is what "the chain has finalised and has
+# activity" means here, and it is already true.
+#
 # REFERENCES — READ THESE BEFORE WRITING CODE
 #   leartech-mcp-servers internal/blockchainserver/   the MCP half of the contract
 #   leartech-plan-api    internal/plans/handler.go    the estate's reference for
@@ -128,6 +147,17 @@ spec:
           no JOSE dependency, no internal/auth package, no hand-rolled JWKS
           (artifact-api PR #3 was closed for exactly that). Tenant from
           validated claims; deployments filtered by tenant.
+
+          VERIFY AGAINST THE SEEDED CHAIN, NOT FRESH STATE. The chain already
+          carries test data the evm-network preview pipeline minted: a
+          finalized beacon epoch, a mined 1-ether transfer, and MockOracle +
+          MockConsumer deployed (leartech-oracle-contracts, addresses in the
+          deployed-addresses ConfigMap pattern). The contract catalog seed
+          should reference THOSE addresses, and one end-to-end assertion in
+          the PR description should show chain_status reporting the live
+          chainId (3151909) + block height, and get_events returning the
+          oracle's publish events. That is the proof the read surface is
+          wired to the real chain and not a stub.
 
           ISOLATE TESTING: handler tests with a fake JSON-RPC seam and a fake
           store — 401 unauthenticated, 403 wrong scope, 404 unknown
