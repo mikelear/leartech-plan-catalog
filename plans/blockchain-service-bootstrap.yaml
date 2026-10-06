@@ -1,0 +1,65 @@
+# Bootstrap the leartech-blockchain-api repo — the service the
+# ship_proven_blockchain MCP (leartech-mcp-servers PR #137, merged 2026-10-05)
+# has been waiting for.
+#
+# WHY A BOOTSTRAP PLAN AT ALL
+# The MCP shipped DORMANT by design: ten tools, an endpoint mapping pinned by
+# test, and no service behind them — every tool call returns
+# "LEARTECH_BLOCKCHAIN_API_URL is not set". This Plan creates the service repo
+# through the standard boot template so the repo exists, is Lighthouse-gated
+# from commit one, and deploys green to BOTH clusters. It deliberately does NOT
+# implement blockchain functionality — that is the follow-up Plan
+# (blockchain-service-endpoints), unpaused after this one is terminal-success.
+# The two-Plan split is the same shape as infra-e2e-bootstrap →
+# infra-e2e-probe-change: bootstrap is deterministic infra work, the feature
+# work is a separate judged Plan against a repo that then exists.
+#
+# WHAT THE TEMPLATE RUNS (one use: step expands to five)
+#   create        repo mikelear/leartech-blockchain-api (infra-go, in-process)
+#   register-gcp  source-config on jx-build-cluster-gsm
+#   register-az   source-config on jx-build-cluster-gck
+#   scaffold      leartech-go-service-template render onto main (to_main, no PR)
+#   dev           ONE PR adapting the scaffold, driven green on BOTH clusters
+#
+# WHY leartech-go-service-template AND NOT leartech-plan-api AS THE templateRepo
+# The template is the golden Go service shape: .lighthouse/ triggers, bus-common
+# auth middleware (JWKS/Hydra), /health + /healthz, charts, the lint gate. The
+# service must come out of it with the scaffold INTACT — the dev step's goal
+# says so explicitly. leartech-plan-api is the REFERENCE for the dev step, not
+# the seed: this service will be a thin authed REST surface over an EVM node,
+# exactly as plan-api is over the K8s API and artifact-api is over GCS, and the
+# dev agent should pattern-match its handler/middleware/layout against that
+# repo. Seeding FROM plan-api would drag its CRD watchers and controller
+# runtime along, none of which applies here.
+#
+# AUDIENCE — WIRE IT NOW, NOT LATER
+# The MCP forwards the caller's Bearer with target audience
+# "leartech-blockchain-api" (charts/leartech-mcp-servers values:
+# blockchainApiAudience, default exactly that string). The scaffolded service
+# MUST end up with LEARTECH_AUTH_AUDIENCE=leartech-blockchain-api in its chart
+# values so its middleware binds the same audience. Getting this wrong surfaces
+# only as a live 401 through the MCP months later; the dev goal pins it.
+#
+# SEQUENCING WITH THE FOLLOW-UP PLAN
+# blockchain-service-endpoints implements the ten endpoints. Cross-Plan
+# dependsOn does not exist — the ordering is a human decision at unpause time
+# (Gate 3): unpause THIS Plan first, and only unpause the follow-up after this
+# one reaches terminal success and the repo is on main, green, deployed.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: blockchain-service-bootstrap
+spec:
+  paused: true
+  steps:
+    # kind: apply is required, not decorative: an omitted kind is "" which the
+    # CRD treats as "pr", and plan-api then rejects a first pr-step with no
+    # agentType — which a use: step cannot declare (the template supplies it).
+    # Same shape as infra-e2e-bootstrap's first step.
+    - name: bootstrap
+      kind: apply
+      use: bootstrap-authed-service
+      with:
+        name: leartech-blockchain-api
+        templateRepo: leartech-go-service-template
+        namespace: jx-staging

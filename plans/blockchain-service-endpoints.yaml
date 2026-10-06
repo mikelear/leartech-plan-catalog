@@ -1,0 +1,195 @@
+# Implement leartech-blockchain-api: the ten endpoints the
+# ship_proven_blockchain MCP forwards to — chain status, contract catalog,
+# deployments, view reads, simulation, transactions and events.
+#
+# PREREQUISITE (Gate-3 human decision, not a DAG edge)
+# blockchain-service-bootstrap must be terminal-success: the repo exists at
+# mikelear/leartech-blockchain-api, scaffolded from the golden Go template,
+# deployed green on BOTH clusters, audience leartech-blockchain-api bound in
+# its chart values. Unpause THIS Plan only after that.
+#
+# THE CONTRACT ALREADY EXISTS — IMPLEMENT IT, DO NOT INVENT IT
+# The MCP (internal/blockchainserver in leartech-mcp-servers, PR #137) pinned
+# the surface before this service existed. Every outbound (method, path) it
+# issues derives from ONE place — the Path* constants in tools.go — and its
+# TestToolEndpointMapping pins them. Read those files FIRST; this Plan is the
+# service catching up to that contract, not the other way round. The mapping:
+#
+#   GET  /api/v1/chain/status                 chain_status
+#   GET  /api/v1/contracts                    list_contracts   (?name= &kind=)
+#   POST /api/v1/deployments/plan             plan_deployment  (dry-run)
+#   POST /api/v1/deployments                  deploy_contract  (real)
+#   POST /api/v1/contracts/{address}/read     read_contract    (view call)
+#   POST /api/v1/transactions/simulate        simulate_transaction
+#   POST /api/v1/transactions                 write_contract
+#   GET  /api/v1/transactions/{hash}          get_transaction
+#   GET  /api/v1/events                       get_events       (filters)
+#   GET  /api/v1/deployments                  get_deployments  (filters)
+#
+# THE CHAIN (verified live 2026-10-05)
+#   RPC      https://rpc-shipproven-blockchain.jx.leartech.com   (JSON-RPC 2.0)
+#   chainId  0x301825 / net_version 3151909
+#   Explorer https://explorer-shipproven-blockchain.jx.leartech.com (BlockScout)
+# The service talks to that RPC over JSON-RPC. Make the RPC URL a chart value
+# (blockchain.rpcURL), NEVER a hardcoded literal, and default the chainId
+# config from eth_chainId at startup rather than a baked constant.
+#
+# REFERENCES — READ THESE BEFORE WRITING CODE
+#   leartech-mcp-servers internal/blockchainserver/   the MCP half of the contract
+#   leartech-plan-api    internal/plans/handler.go    the estate's reference for
+#     an authed thin REST service: bus-common middleware, scope gates on the
+#     route, tenant from validated claims, handler tests with a fake seam
+#   leartech-artifact-api internal/storage + handlers the same pattern over a
+#     different backing store; also the cautionary tale (its PR #3 was closed
+#     unmerged for hand-rolling JWT validation instead of using go-common)
+#
+# AUTH — THE LOAD-BEARING PART
+# The MCP forwards the caller's Bearer and does NOT decide authorisation
+# (internal/blockchainserver/client.go: precedence forward → RFC 8693 exchange
+# → s2s-when-no-caller, never widening authority). The service is where the
+# decision actually lands:
+#   - LEARTECH_AUTH_AUDIENCE = leartech-blockchain-api (matches the MCP's
+#     blockchainApiAudience target; a mismatch surfaces as a live 401 months
+#     later)
+#   - middleware from github.com/mikelear/leartech-go-common/pkg/auth ONLY —
+#     no go-jose, no hand-rolled JWKS, no internal/auth package. Fail-closed
+#     on init failure (401 every request; pod stays up for /health).
+#   - scopes: TODAY the MCP gates on leartechapi:mcp:read / :mcp:write, so the
+#     service accepts those (read tools ← read-or-write, write tools ← write).
+#     Deliberately NO leartechapi:blockchain:* scopes yet: the MCP host
+#     publishes scopes_supported as the UNION across public servers and Hydra's
+#     DCR gate refuses an unregistered scope (400 invalid_scope, no partial
+#     grant), so dedicated scopes must be deployed to auth-service's
+#     dcr.allowedScopes + dcr.defaultScopes FIRST, then the MCP constants swap.
+#     Note that swap as a follow-up in the PR description; do not half-do it.
+#   - derive tenant from validated claims; deployments and transactions are
+#     tenant-scoped records.
+#
+# SECRETS — THE ONE REAL DEPLOYMENT DECISION
+# deploy_contract and write_contract sign transactions, which needs a funded
+# key. Where it lives is chart-level: an ExternalSecret in the service's chart
+# (blockchain.signerSecret), projected as env, read at startup, ABSENT =
+# write endpoints 503 with a clear message rather than failing the pod.
+# /health must be green WITHOUT the signer (a read-only deployment is a
+# legitimate posture); /readyz may gate on it. Never log the key material.
+# The bootstrap Plan's dev step left dependencies lazy for exactly this shape.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: blockchain-service-endpoints
+spec:
+  paused: true
+  steps:
+    # ── 1. Read surface: status, catalog, view reads, events, lookups ────────
+    - name: read-endpoints
+      kind: pr
+      agentType: leartech-agent-go
+      repo: mikelear/leartech-blockchain-api
+      inputs:
+        name: read-endpoints
+        repo: mikelear/leartech-blockchain-api
+        branch: feat/read-endpoints
+        goal: |-
+          Implement the read half of the contract the ship_proven_blockchain MCP
+          already forwards: GET /api/v1/chain/status, GET /api/v1/contracts
+          (name/kind filters), POST /api/v1/contracts/{address}/read,
+          GET /api/v1/transactions/{hash}, GET /api/v1/events (address, event,
+          from_block, to_block, tx_hash filters), GET /api/v1/deployments
+          (contract, chain, address filters).
+
+          READ THE CONTRACT FIRST. The MCP half lives in leartech-mcp-servers
+          internal/blockchainserver/tools.go — the Path* constants and
+          TestToolEndpointMapping ARE the contract; this service implements
+          them, it does not reinterpret them. List endpoints wrap collections
+          as {items:[...]} (the MCP's decodeList accepts that envelope).
+
+          EVM ACCESS. Talk to https://rpc-shipproven-blockchain.jx.leartech.com
+          over JSON-RPC (chainId 0x301825). RPC URL from a chart value
+          (blockchain.rpcURL), never a literal. Prefer a thin JSON-RPC client
+          of your own over a heavy SDK — the endpoints here are eth_chainId,
+          eth_blockNumber, eth_call, eth_getTransactionReceipt and
+          eth_getLogs; pick a Go eth client lib only if it earns its weight.
+
+          CONTRACT CATALOG + DEPLOYMENTS STORE: a small Postgres store
+          (CNPG is the estate pattern) holding known contracts and the
+          deployment history. Seed the catalog with whatever the chain team's
+          stable-coin/oracle contracts repo (leartech-oracle-contracts,
+          stable-coin) documents; exact ABI JSON per contract, not summaries.
+          If the DB is not provisioned yet, make it LAZY so /health stays
+          green without it (the bootstrap Plan set this posture) and return
+          {items:[]} rather than erroring.
+
+          EVENTS: eth_getLogs against the RPC with the supplied filters,
+          decoded through the catalog's ABIs. No local indexer in this step —
+          live queries only; an indexer is a follow-up if latency demands it.
+
+          AUTHZ: leartechapi:mcp:read (or :mcp:write, or Admin) gates every
+          endpoint above. Middleware from leartech-go-common/pkg/auth ONLY —
+          no JOSE dependency, no internal/auth package, no hand-rolled JWKS
+          (artifact-api PR #3 was closed for exactly that). Tenant from
+          validated claims; deployments filtered by tenant.
+
+          ISOLATE TESTING: handler tests with a fake JSON-RPC seam and a fake
+          store — 401 unauthenticated, 403 wrong scope, 404 unknown
+          address/hash, filter combinations, the {items:[...]} envelope, the
+          lazy-DB degradation. No real chain, no real Hydra. Non-negative
+          coverage delta.
+
+          PUBLISH the PR with the open_pr MCP tool — NOT raw gh. Drive BOTH
+          clusters' gates green; when wait_for_terminal reports all_passed,
+          STOP this turn. Do NOT wait for the release/promote.
+
+    # ── 2. Write surface: plan/deploy, simulate, submit ──────────────────────
+    - name: write-endpoints
+      kind: pr
+      agentType: leartech-agent-go
+      repo: mikelear/leartech-blockchain-api
+      dependsOn:
+        - read-endpoints
+      inputs:
+        name: write-endpoints
+        repo: mikelear/leartech-blockchain-api
+        branch: feat/write-endpoints
+        goal: |-
+          Implement the write half of the contract: POST /api/v1/deployments/plan
+          (dry-run), POST /api/v1/deployments (real), POST
+          /api/v1/transactions/simulate, POST /api/v1/transactions (real).
+
+          AUTHZ: leartechapi:mcp:write (or Admin) on all four. Same
+          go-common middleware; tenant from claims; deployment records
+          tenant-scoped (the read step's store).
+
+          SIGNER. deploy + write sign transactions with a funded key from the
+          blockchain.signerSecret ExternalSecret. ABSENT key = 503 with a
+          clear message naming the missing secret — the pod stays up,
+          /health stays green, /readyz may gate. Never log key material.
+          plan_deployment and simulate_transaction need NO signer: they are
+          eth_call/eth_estimateGas against the node and must work on a
+          read-only deployment.
+
+          PLAN-THEN-DEPLOY IS THE REVIEW SHAPE. plan_deployment returns
+          bytecode/args/gas estimate and validation findings WITHOUT touching
+          the chain; deploy_contract submits. That split mirrors the estate's
+          whole review philosophy (propose, review, ship) — preserve it; do
+          not collapse the two endpoints into one.
+
+          SIMULATION: eth_call with state override or a debug_traceCall where
+          the node supports it — return the decoded result, gas estimate and
+          revert reason. Nothing broadcast.
+
+          SUBMISSION: broadcast, record the tx hash + deployment row, return
+          immediately with status pending. get_transaction (read step) is how
+          a caller follows up. Do NOT block on mining.
+
+          NONCE MANAGEMENT: a simple per-signer sequential nonce with retry on
+          underpriced/nonce errors; document the limitation (no mempool
+          replacement) in the PR description rather than building a tx pool.
+
+          ISOLATE TESTING: fake signer seam (records the unsigned tx, never
+          signs), fake JSON-RPC seam — 403 wrong scope, 503 no signer, the
+          plan/deploy split (plan never broadcasts), simulate never
+          broadcasts, submission returns pending with a hash. Non-negative
+          coverage delta.
+
+          PUBLISH the PR with open_pr — NOT raw gh. Drive BOTH clusters green;
+          all_passed then STOP. Do not wait for release/promote.
