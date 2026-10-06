@@ -65,7 +65,12 @@
 #   - the agent toolset 0.53.45 (ship-proven 0.0.160): the budget stop now
 #     COMMITS uncommitted work to the run's branch before the push, and
 #     run_end carries outcome=budget-stop for the controller to key on
-#   - the agent's model env is glm-via-fireworks (was glm)
+#   - the agent's model env is claude (was glm-via-fireworks): the
+#     Fireworks account was suspended and every leartech-agent-go run
+#     failed before its first turn with upstream 412 PRECONDITION_FAILED,
+#     terminal-failing read-endpoints across all 5 controller respawns.
+#     The go AgentType now renders LEARTECH_AIGW_MODEL=claude (gitops
+#     jx-build-cluster-gsm).
 # The Plan itself is unchanged — the contract, the steps and the goals below
 # are exactly what #90 merged. The on-cluster Plan CR was deleted at failure
 # time, so this merge submits it fresh and PAUSED for a new Gate-3 unpause.
