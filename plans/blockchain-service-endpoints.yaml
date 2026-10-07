@@ -246,4 +246,4 @@ spec:
           PUBLISH the PR with open_pr — NOT raw gh. Drive BOTH clusters green;
           all_passed then STOP. Do not wait for release/promote.
 
-# resubmit: stale Failed CR deleted 2026-10-07T09:22:28Z — gateway api_key budget for this caller raised 5e6 -> 2e8 micros (was over its $5 cap); re-run with headroom
+# resubmit: stale Failed CR deleted 2026-10-07T10:27:03Z — budget raised to 2e9 micros on the caller key AND the per-run default is being raised 5->50 USD (orchestrator-controller #225); re-run with real headroom
