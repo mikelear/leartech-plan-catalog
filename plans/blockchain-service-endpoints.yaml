@@ -246,4 +246,4 @@ spec:
           PUBLISH the PR with open_pr — NOT raw gh. Drive BOTH clusters green;
           all_passed then STOP. Do not wait for release/promote.
 
-# resubmit: stale Failed CR deleted 2026-10-07T10:27:03Z — budget raised to 2e9 micros on the caller key AND the per-run default is being raised 5->50 USD (orchestrator-controller #225); re-run with real headroom
+# resubmit: stale Failed CR deleted 2026-10-07T13:49:01Z — re-run with the full fix set: agent-go on glm (z.ai), per-run default budget 50 USD + caller key at 2e9, and toolset 0.53.47 (handoff flush-on-exit + resume-from-pushed-branch). This is the live test of the resume path across iterations.
