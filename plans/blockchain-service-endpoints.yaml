@@ -246,4 +246,4 @@ spec:
           PUBLISH the PR with open_pr — NOT raw gh. Drive BOTH clusters green;
           all_passed then STOP. Do not wait for release/promote.
 
-# resubmit: stale Failed CR deleted 2026-10-07T13:49:01Z — re-run with the full fix set: agent-go on glm (z.ai), per-run default budget 50 USD + caller key at 2e9, and toolset 0.53.47 (handoff flush-on-exit + resume-from-pushed-branch). This is the live test of the resume path across iterations.
+# resubmit: stale CR deleted 2026-10-07T20:33:55Z — full fix set RELEASED: controller 0.0.205, agent-go toolset 0.53.50 (handoff flush + PR-first resume brief + .shipproven/CONTINUE.md handover) on glm/z.ai, per-run default 50 USD. This run is the live end-to-end test of the resume-across-iterations path.
