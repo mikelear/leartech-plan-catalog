@@ -246,4 +246,4 @@ spec:
           PUBLISH the PR with open_pr — NOT raw gh. Drive BOTH clusters green;
           all_passed then STOP. Do not wait for release/promote.
 
-# resubmit: stale CR deleted 2026-10-07T20:33:55Z — full fix set RELEASED: controller 0.0.205, agent-go toolset 0.53.50 (handoff flush + PR-first resume brief + .shipproven/CONTINUE.md handover) on glm/z.ai, per-run default 50 USD. This run is the live end-to-end test of the resume-across-iterations path.
+# resubmit: on-cluster CR deleted 2026-10-08T13:22:57Z for a clean re-run — testing the resume-across-iterations path with budgets sorted (per-run default raised). Plan body unchanged from the merged #98; this submits it fresh and PAUSED for a new Gate-3 unpause.
