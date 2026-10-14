@@ -246,4 +246,4 @@ spec:
           PUBLISH the PR with open_pr — NOT raw gh. Drive BOTH clusters green;
           all_passed then STOP. Do not wait for release/promote.
 
-# resubmit: on-cluster CR deleted 2026-10-08T13:22:57Z for a clean re-run — testing the resume-across-iterations path with budgets sorted (per-run default raised). Plan body unchanged from the merged #98; this submits it fresh and PAUSED for a new Gate-3 unpause.
+# resubmit: on-cluster CR deleted 2026-10-14T11:21:53Z for a clean re-run. read-endpoints is merged (PR #5). write-endpoints exited budget-stop across 5 iterations with 16 commits pushed to feat/write-endpoints but never reached open_pr; PR #9 was opened by hand from that branch. On re-run the write-endpoints step resolves its branch (feat/write-endpoints, from the step's branch field) and finds the OPEN PR #9, so iteration 1 reads CONTINUE.md + the diff and iterates the PR to green rather than starting over. Plan body unchanged from merged #99; submitted fresh and PAUSED for a new Gate-3 unpause.
