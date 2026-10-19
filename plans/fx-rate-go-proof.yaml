@@ -1,20 +1,20 @@
-# Plan-only end-to-end proof: a Go backend service stood up entirely by the
-# bootstrap-authed-service template — create -> register(gcp,az) -> scaffold ->
-# dev(one PR) — with the register steps opting in to pr-stuck BA escalation
-# (inherited from the template) and the Go dev agent now licensed to push when a
-# local check is unfixable-in-pod (CI is the authority). This is exactly what the
-# Project workflow emits; hand-authored here to prove the Plan path hands-off.
+# Plan-only end-to-end proof: a Go backend stood up by the bootstrap-authed-service
+# template — create -> register(gcp,az) -> scaffold -> dev(one PR) — with register
+# steps opting in to pr-stuck BA escalation and the Go dev agent licensed to push
+# when a local check is unfixable-in-pod (CI is the authority). Exactly what the
+# Project emits; hand-authored to prove the Plan path hands-off.
 apiVersion: agent.leartech.io/v1alpha1
 kind: Plan
 metadata:
   name: fx-rate-go-proof
 spec:
-  paused: true # created paused; Gate 3 (unpause) is the human start
+  paused: true
   steps:
     - name: bootstrap
+      kind: apply
       use: bootstrap-authed-service
       with:
         name: leartech-fx-rate-go
-        templateRepo: mikelear/leartech-plan-api
-        namespace: jx-staging
+        templateRepo: leartech-go-service-template
         language: go
+        namespace: jx-staging
