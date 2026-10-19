@@ -119,6 +119,12 @@ spec:
           /usr/local/share/leartech-${mkLang}.mk. Run `make -f /usr/local/share/leartech-${mkLang}.mk ci`
           (lint + test + build + vuln) and fix what it reports BEFORE you push — a failure you can
           see locally in seconds costs a pipeline cycle if you let CI find it.
+          BUT CI IS THE AUTHORITY, NOT THE POD. If a local check fails for a reason that is NOT
+          reproducible in CI — a toolchain/version skew in THIS pod (e.g. golangci-lint cannot
+          decode the stdlib's export-data version), or k8s-injected env (LEARTECH_* from Service
+          discovery) leaking into a test — do NOT loop trying to fix the pod's environment. Say so
+          once, PUSH, open the PR, and let CI judge. Looping on an unfixable-in-pod local check
+          burns the whole budget without ever reaching a PR, which is worse than a PR CI can grade.
           Drive BOTH clusters' gates green; when `wait_for_terminal` reports all_passed, YOUR JOB
           IS DONE — STOP this turn. Do NOT wait for or poll the release/promote (a
           verify-release-flow step owns that; waiting causes a runaway overrun). If you CANNOT
