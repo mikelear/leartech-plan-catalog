@@ -77,6 +77,19 @@ spec:
         action: register-source-config
         cluster: gcp
         service: "${name}"
+      onFailure:
+        escalate: ba # a source-config PR that opens but won't merge (rebase conflict,
+                     # flaked verify, renovate-enrolment) sits at AwaitingReview, not Failed;
+                     # the pr-stuck grace escalates it to a BA to shepherd it to merge.
+        context:
+          repo-kind: gitops
+          guidance: >-
+            Source-config register PR against a cluster GitOps repo
+            (jx-build-cluster-*). If open-but-not-merging: rebase onto the base
+            branch if behind, retrigger a flaked verify/qa-gate, and enrol the
+            service in Renovate (helmfiles/renovate/configs/renovate.yaml) if
+            verify-renovate-enrolment failed. Do NOT self-merge a GitOps PR —
+            drive its gates green or escalate to a human.
     - name: register-az
       kind: pr
       agentType: leartech-agent-infra-go
@@ -86,6 +99,19 @@ spec:
         action: register-source-config
         cluster: az
         service: "${name}"
+      onFailure:
+        escalate: ba # a source-config PR that opens but won't merge (rebase conflict,
+                     # flaked verify, renovate-enrolment) sits at AwaitingReview, not Failed;
+                     # the pr-stuck grace escalates it to a BA to shepherd it to merge.
+        context:
+          repo-kind: gitops
+          guidance: >-
+            Source-config register PR against a cluster GitOps repo
+            (jx-build-cluster-*). If open-but-not-merging: rebase onto the base
+            branch if behind, retrigger a flaked verify/qa-gate, and enrol the
+            service in Renovate (helmfiles/renovate/configs/renovate.yaml) if
+            verify-renovate-enrolment failed. Do NOT self-merge a GitOps PR —
+            drive its gates green or escalate to a human.
     # Seed main straight from the template (to_main) — NO PR. The first commit
     # MUST land .lighthouse/ onto main, because Lighthouse reads triggers from the
     # BASE branch: a repo whose triggers arrive by PR can never gate that PR. The
