@@ -1,5 +1,7 @@
-# bootstrap-authed-service — stand up a NEW authed Go service from an existing
-# template repo: create -> register(gcp,az) -> scaffold(-> main) -> dev(ONE PR).
+# bootstrap-authed-service — stand up a NEW authed service (any supported
+# language) from a template repo: create -> register(gcp,az) -> scaffold(-> main)
+# -> dev(ONE PR). The `language` param (optional, default go) selects the dev
+# agent + baked CI Makefile; create/register/scaffold are language-agnostic.
 #
 # WHY THE FIRST FOUR STEPS RUN ON leartech-agent-infra-go. They are not judgement
 # calls. "Create a repo named X", "append X to this cluster's source-config",
@@ -43,6 +45,14 @@ spec:
       required: true # owner/name to render from (e.g. mikelear/leartech-plan-api, so JWKS/Hydra auth comes baked in)
     - name: namespace
       required: false # deploy namespace for the service; defaults to jx-staging downstream
+    - name: language
+      required: false # service language (go|angular). OPTIONAL — omitted defaults to
+                      # go, so existing Go bootstraps are unchanged. The PLATFORM
+                      # derives the dev agentType + baked Makefile from it
+                      # (controller buildSubst languageAgent): the Plan expresses
+                      # INTENT (a language), the platform owns MECHANISM (which
+                      # privileged agent), keeping R22's boundary. New languages
+                      # are one map entry in the controller.
   steps:
     # Create the repo under the OWNER account. infra-go refuses this action when
     # GITHUB_OWNER_ADMIN_PAT is absent rather than falling back to the bot token:
@@ -92,7 +102,7 @@ spec:
         to_main: "true"
     - name: dev
       kind: pr
-      agentType: leartech-agent-go
+      agentType: "${devAgentType}"
       repo: "mikelear/${name}"
       dependsOn: [scaffold]
       inputs:
@@ -100,16 +110,21 @@ spec:
         repo: "${name}"
         branch: "dev-${name}"
         goal: |
-          The ${name} Go service is already scaffolded onto main (from ${templateRepo}).
+          The ${name} service is already scaffolded onto main (from ${templateRepo}).
           Do the normal, self-contained dev lifecycle: open ONE PR that adapts the scaffold and
           drive it green, then it merges. PUBLISH the PR with the `open_pr` MCP tool — NOT raw
           `gh` — so it is tracked (open_pr records targetPR/headBranch; a raw gh PR is invisible
-          to the controller and leaves the step stuck). Drive BOTH clusters' gates green; when
-          `wait_for_terminal` reports all_passed, YOUR JOB IS DONE — STOP this turn. Do NOT wait
-          for or poll the release/promote (a verify-release-flow step owns that; waiting causes a
-          runaway overrun). If you CANNOT reach all_passed (blocked, or a gate you can't fix),
-          STOP and say so in your summary — do NOT merge. Opening a PR is not success; reaching
-          green is, and a blocked run is recorded as a failure so it recycles.
+          to the controller and leaves the step stuck).
+          REPRODUCE CI LOCALLY FIRST: this image bakes the CI-equivalent Makefile at
+          /usr/local/share/leartech-${mkLang}.mk. Run `make -f /usr/local/share/leartech-${mkLang}.mk ci`
+          (lint + test + build + vuln) and fix what it reports BEFORE you push — a failure you can
+          see locally in seconds costs a pipeline cycle if you let CI find it.
+          Drive BOTH clusters' gates green; when `wait_for_terminal` reports all_passed, YOUR JOB
+          IS DONE — STOP this turn. Do NOT wait for or poll the release/promote (a
+          verify-release-flow step owns that; waiting causes a runaway overrun). If you CANNOT
+          reach all_passed (blocked, or a gate you can't fix), STOP and say so in your summary —
+          do NOT merge. Opening a PR is not success; reaching green is, and a blocked run is
+          recorded as a failure so it recycles.
           KEEP the inherited auth middleware (JWKS/Hydra) — the service audience must be ${name}.
           KEEP whatever the template wired (auth already noted; also DB, backing clients, etc.) —
           do NOT rip it out. The service MUST reach /health green: if ANY inherited dependency
