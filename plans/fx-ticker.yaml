@@ -1,0 +1,29 @@
+# Graduated from the fx-ticker Project (leartech-project-fx-ticker) — the FULL
+# split. Two services from one Project: the Go rate backend and the Angular
+# dashboard front end (whose design artefact dda5437e was published + linked in
+# the Project before graduation, Decision 5). Both bootstrap in the SAME Plan, so
+# they register into source-config concurrently — the contention that exercises
+# the pr-stuck BA escalation if a register PR sticks.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: fx-ticker
+spec:
+  paused: true
+  steps:
+    - name: rate-api
+      kind: apply
+      use: bootstrap-authed-service
+      with:
+        name: leartech-fx-ticker-rate-api
+        templateRepo: leartech-go-service-template
+        language: go
+        namespace: jx-staging
+    - name: dashboard
+      kind: apply
+      use: bootstrap-authed-service
+      with:
+        name: leartech-fx-ticker-dashboard
+        templateRepo: leartech-angular-service-template
+        language: angular
+        namespace: jx-staging
