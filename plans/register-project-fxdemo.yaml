@@ -1,0 +1,20 @@
+# Onboard the fxdemo Project repo: create the GitHub repo, register it in
+# both clusters' Lighthouse source-config, and scaffold PROJECT.md onto main.
+#
+# Composes register-project (use:), so the privileged infra steps live in the
+# reviewed template (R22). Lands PAUSED on merge (R5); unpause_plan runs it.
+# This is the estate half of `ship-proven project new` — the half a laptop
+# is not standing in: no service template is used; the Project repo is scaffolded small.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: register-project-fxdemo
+spec:
+  paused: true
+  steps:
+    - name: register
+      kind: apply
+      use: register-project
+      with:
+        name: fxdemo
+        tenant: test-platform
