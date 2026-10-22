@@ -1,0 +1,23 @@
+# Bootstrap leartech-demo-rates — the go back end of the demo-work Project.
+#
+# Graduated from leartech-project-demo-work: domain "rates", persistence "postgres".
+# Rationale: fetches GBP/USD spot from ExchangeRate-API (see research/) and serves it over a small REST API; postgres caches the last rate + as-of time
+#
+# Bootstrap only: create from the golden template, register both clusters,
+# scaffold, drive ONE green PR. verify-release-flow is auto-injected (R23).
+# The service FEATURE is a separate judged Plan against the repo this creates.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: demo-work-demo-rates-bootstrap
+spec:
+  paused: true
+  steps:
+    - name: bootstrap
+      kind: apply
+      use: bootstrap-authed-service
+      with:
+        name: leartech-demo-rates
+        templateRepo: leartech-go-service-template
+        language: go
+        namespace: jx-staging

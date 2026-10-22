@@ -1,0 +1,23 @@
+# Bootstrap leartech-demo-dashboard — the angular front end of the demo-work Project.
+#
+# Graduated from leartech-project-demo-work: domain "overview", persistence "none".
+# Rationale: a single-screen dashboard that reads demo-rates and shows the live GBP/USD rate + its as-of time; no store of its own
+#
+# Bootstrap only: create from the golden template, register both clusters,
+# scaffold, drive ONE green PR. verify-release-flow is auto-injected (R23).
+# The service FEATURE is a separate judged Plan against the repo this creates.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: demo-work-demo-dashboard-bootstrap
+spec:
+  paused: true
+  steps:
+    - name: bootstrap
+      kind: apply
+      use: bootstrap-authed-service
+      with:
+        name: leartech-demo-dashboard
+        templateRepo: leartech-angular-service-template
+        language: angular
+        namespace: jx-staging
