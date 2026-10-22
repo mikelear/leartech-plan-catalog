@@ -164,3 +164,65 @@ spec:
           lazy/optional so /health is green WITHOUT it — full enablement of such dependencies is
           a follow-up plan.
           No new features — just adapt the scaffold and make it green.
+    # Release verification, inlined. The deployable PR this template produces is
+    # the `dev` step, INSIDE this template — so plan-api's auto-injection (which
+    # only sees top-level submitted steps) does not attach verify-release-flow
+    # to it. Without these steps a bootstrapped service's release/promote failures
+    # (e.g. a promote PR failing the Renovate-enrolment gate) have no step to
+    # escalate from, so they fall to a human. A PlanTemplate MAY hand-author infra
+    # steps (R22 bars that only in plain Plans). The ${steps.dev.pr} token is
+    # namespaced to the expanded dev step at expansion time by the controller.
+    - name: release-passed
+      kind: check
+      agentType: leartech-agent-infra-go
+      dependsOn: [dev]
+      inputs:
+        action: release-pipeline-status
+        repo: "mikelear/${name}"
+        pr: "${steps.dev.pr}"
+      onFailure:
+        escalate: ba
+        context:
+          hint: "read the release Tekton PipelineRun's failing step; a missing run means the main-push trigger/webhook did not fire"
+    - name: promote-merged
+      kind: check
+      agentType: leartech-agent-infra-go
+      dependsOn: [release-passed]
+      inputs:
+        action: promote-status
+        repo: "mikelear/${name}"
+        service: "${name}"
+      onFailure:
+        escalate: ba
+        context:
+          hint: >-
+            Inspect the promote PR's qa-gate/verify on the failing cluster's GitOps repo.
+            A persistent red gate is a cross-plan hand-off. If verify fails with
+            "deployed repo outside Renovate's scope", enrol the service by adding
+            "mikelear/${name}" to helmfiles/renovate/configs/renovate.yaml repositories
+            (enrolment is preferred over exemption) and open that GitOps PR for a human to merge.
+    - name: bootjob-ran
+      kind: check
+      agentType: leartech-agent-infra-go
+      dependsOn: [promote-merged]
+      inputs:
+        action: bootjob-for-commit
+        repo: "mikelear/${name}"
+        pr: "${steps.dev.pr}"
+      onFailure:
+        escalate: ba
+        context:
+          hint: "check the jx-boot Job logs in jx-git-operator; NO boot at all means the promote merge did not reconcile (deploy-healthy is the authoritative landed signal)"
+    - name: deploy-healthy
+      kind: check
+      agentType: leartech-agent-infra-go
+      dependsOn: [promote-merged]
+      inputs:
+        action: deploy-health
+        repo: "mikelear/${name}"
+        service: "${name}"
+        namespace: jx-staging
+      onFailure:
+        escalate: ba
+        context:
+          hint: "compare the running Deployment image tag vs the promoted version per cluster; check pod events + whether the boot applied it"
