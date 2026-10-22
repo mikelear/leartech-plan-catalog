@@ -879,3 +879,14 @@ spec:
 `
 	assertErr(t, lintYAML(t, doc), "R23")
 }
+
+// The webhook onboarding actions (and scaffold-project) must be in the
+// infra-action allowlist, or plan-lint rejects the register/bootstrap templates
+// that use them. Mirrors leartech-mcp-servers cmd/infra-go.
+func TestInfraActions_IncludesWebhookAndScaffoldProject(t *testing.T) {
+	for _, a := range []string{"create-webhook", "webhook-ready", "scaffold-project"} {
+		if !infraActions[a] {
+			t.Errorf("infraActions missing %q — register/bootstrap templates using it would fail R21", a)
+		}
+	}
+}
