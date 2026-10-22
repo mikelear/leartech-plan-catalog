@@ -209,6 +209,9 @@ var infraActions = map[string]bool{
 	"create-repo":             true,
 	"register-source-config":  true,
 	"scaffold":                true,
+	"scaffold-project":        true,
+	"create-webhook":          true,
+	"webhook-ready":           true,
 }
 
 // knownInfraActions returns the allowlist sorted, so the error message is stable

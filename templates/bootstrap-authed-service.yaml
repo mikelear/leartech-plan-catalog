@@ -126,6 +126,30 @@ spec:
         name: "${name}"
         template: "${templateRepo}"
         to_main: "true"
+    # Webhook onboarding — boot's --fast webhook pass does not reliably POST the
+    # GitHub Lighthouse hook for a new repo, so create it deterministically and
+    # verify it (escalate:ba re-runs create-webhook on a miss). Without it the
+    # service repo's PRs may not reach the platform.
+    - name: create-webhook
+      kind: apply
+      agentType: leartech-agent-infra-go
+      dependsOn: [scaffold]
+      inputs:
+        action: create-webhook
+        repo: "mikelear/${name}"
+    - name: webhook-ready
+      kind: check
+      agentType: leartech-agent-infra-go
+      dependsOn: [create-webhook]
+      inputs:
+        action: webhook-ready
+        repo: "mikelear/${name}"
+      onFailure:
+        escalate: ba
+        context:
+          hint: >-
+            The repo is missing a Lighthouse webhook. Run the create-webhook infra
+            action for mikelear/${name} to POST the gcp + az Lighthouse hooks.
     - name: dev
       kind: pr
       agentType: "${devAgentType}"
