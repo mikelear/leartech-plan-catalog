@@ -116,6 +116,68 @@ spec:
     # MUST land .lighthouse/ onto main, because Lighthouse reads triggers from the
     # BASE branch: a repo whose triggers arrive by PR can never gate that PR. The
     # dev step below then owns the one and only PR.
+    # Routing + first-promotion config. Routing is central (Envoy Gateway /
+    # cluster-routes), so a new service needs an HTTPRoute entry in addition to
+    # source-config; a Go resource server needs a per-cluster auth overlay before
+    # its first promote renders. Each is a deterministic, idempotent GitOps PR.
+    - name: route-gcp
+      kind: apply
+      agentType: leartech-agent-infra-go
+      repo: mikelear/jx-build-cluster-gsm
+      dependsOn: [register-gcp]
+      inputs:
+        action: register-cluster-route
+        cluster: gcp
+        service: "${name}"
+        language: "${language}"
+      onFailure:
+        escalate: ba
+        context:
+          repo-kind: gitops
+          hint: "add the missing cluster-routes entry for mikelear/${name} and drive its gates green"
+    - name: route-az
+      kind: apply
+      agentType: leartech-agent-infra-go
+      repo: mikelear/jx-build-cluster-akv
+      dependsOn: [register-az]
+      inputs:
+        action: register-cluster-route
+        cluster: az
+        service: "${name}"
+        language: "${language}"
+      onFailure:
+        escalate: ba
+        context:
+          repo-kind: gitops
+          hint: "add the missing cluster-routes entry for mikelear/${name} and drive its gates green"
+    - name: auth-overlay
+      kind: apply
+      agentType: leartech-agent-infra-go
+      repo: mikelear/jx-build-cluster-gsm
+      dependsOn: [register-gcp]
+      inputs:
+        action: register-auth-overlay
+        cluster: gcp
+        service: "${name}"
+        language: "${language}"
+    - name: auth-overlay-az
+      kind: apply
+      agentType: leartech-agent-infra-go
+      repo: mikelear/jx-build-cluster-akv
+      dependsOn: [register-az]
+      inputs:
+        action: register-auth-overlay
+        cluster: az
+        service: "${name}"
+        language: "${language}"
+    - name: renovate-enrolment
+      kind: apply
+      agentType: leartech-agent-infra-go
+      repo: mikelear/jx-build-cluster-gsm
+      dependsOn: [register-gcp]
+      inputs:
+        action: register-renovate-enrolment
+        service: "${name}"
     - name: scaffold
       kind: apply
       agentType: leartech-agent-infra-go
@@ -211,7 +273,7 @@ spec:
     - name: promote-merged
       kind: check
       agentType: leartech-agent-infra-go
-      dependsOn: [release-passed]
+      dependsOn: [release-passed, route-gcp, route-az, auth-overlay, auth-overlay-az, renovate-enrolment]
       inputs:
         action: promote-status
         repo: "mikelear/${name}"
