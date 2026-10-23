@@ -888,5 +888,9 @@ func TestInfraActions_IncludesWebhookAndScaffoldProject(t *testing.T) {
 		if !infraActions[a] {
 			t.Errorf("infraActions missing %q — register/bootstrap templates using it would fail R21", a)
 		}
+	for _, a := range []string{"register-cluster-route", "register-auth-overlay", "register-renovate-enrolment"} {
+		if !infraActions[a] {
+			t.Errorf("infraActions missing %q — bootstrap routing/auth templates using it would fail R21", a)
+		}
 	}
 }

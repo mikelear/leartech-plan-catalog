@@ -202,16 +202,19 @@ func lintInputs(agentType string, s map[string]any, sw string, f *Findings) {
 // and left here — is the one to watch, and is why the error quotes the binary's
 // own failure mode rather than paraphrasing it.
 var infraActions = map[string]bool{
-	"release-pipeline-status": true,
-	"promote-status":          true,
-	"bootjob-for-commit":      true,
-	"deploy-health":           true,
-	"create-repo":             true,
-	"register-source-config":  true,
-	"scaffold":                true,
-	"scaffold-project":        true,
-	"create-webhook":          true,
-	"webhook-ready":           true,
+	"release-pipeline-status":     true,
+	"promote-status":              true,
+	"bootjob-for-commit":          true,
+	"deploy-health":               true,
+	"create-repo":                 true,
+	"register-source-config":      true,
+	"scaffold":                    true,
+	"scaffold-project":            true,
+	"create-webhook":              true,
+	"webhook-ready":               true,
+	"register-cluster-route":      true,
+	"register-auth-overlay":       true,
+	"register-renovate-enrolment": true,
 }
 
 // knownInfraActions returns the allowlist sorted, so the error message is stable
