@@ -1,0 +1,25 @@
+# Bootstrap leartech-demo-board — the angular front end of the demo-clone Project.
+#
+# Graduated from leartech-project-demo-clone: domain "overview", persistence "none".
+# Rationale: the live GBP/USD ticker the operator watches
+# Design: sealed artefact 8e3f5bcf-3f1f-4f96-9c9b-5045f431f99f (Project design/demo-board.md) — the follow-up feature
+# Plan builds the UI to this; Decision-5 hold is cleared.
+#
+# Bootstrap only: create from the golden template, register both clusters,
+# scaffold, drive ONE green PR. verify-release-flow is auto-injected (R23).
+# The service FEATURE is a separate judged Plan against the repo this creates.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: demo-clone-demo-board-bootstrap
+spec:
+  paused: true
+  steps:
+    - name: bootstrap
+      kind: apply
+      use: bootstrap-authed-service
+      with:
+        name: leartech-demo-board
+        templateRepo: leartech-angular-service-template
+        language: angular
+        namespace: jx-staging
