@@ -158,7 +158,7 @@ Every rule the deterministic `plan-lint` gate enforces. Errors block merge; a fa
 
 **Why:** A step's inputs are consumed by the agent runtime, so they must match the agentType's contract or the agent Job fails at run time. Dev agents (go/ng/rust/py) consume an Initiative (name + goal + repo + branch, or a repos: list); the infra agent is action-driven (action + per-action fields), not goal-driven.
 
-**Fix:** Dev steps: inputs {name, repo, branch, goal} (branch required for the legacy single-repo shape; or use repos:[{repo,branch}]). Infra steps: inputs {action, …} where action is one leartech-agent-infra-go implements (release-pipeline-status, promote-status, bootjob-for-commit, deploy-health, create-repo, register-source-config, scaffold). See AGENTS.md.
+**Fix:** Dev steps: inputs {name, repo, branch, goal} (branch required for the legacy single-repo shape; or use repos:[{repo,branch}]). Infra steps: inputs {action, …} where action is one leartech-agent-infra-go implements (release-pipeline-status, promote-status, bootjob-for-commit, deploy-health, create-repo, register-source-config, scaffold, register-cluster-route, register-auth-overlay, register-renovate-enrolment). See AGENTS.md.
 
 ## R22 — Infra steps live in templates
 
