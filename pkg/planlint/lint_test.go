@@ -884,13 +884,11 @@ spec:
 // infra-action allowlist, or plan-lint rejects the register/bootstrap templates
 // that use them. Mirrors leartech-mcp-servers cmd/infra-go.
 func TestInfraActions_IncludesWebhookAndScaffoldProject(t *testing.T) {
-	for _, a := range []string{"create-webhook", "webhook-ready", "scaffold-project"} {
+	actions := []string{"create-webhook", "webhook-ready", "scaffold-project",
+		"register-cluster-route", "register-auth-overlay", "register-renovate-enrolment"}
+	for _, a := range actions {
 		if !infraActions[a] {
 			t.Errorf("infraActions missing %q — register/bootstrap templates using it would fail R21", a)
-		}
-	for _, a := range []string{"register-cluster-route", "register-auth-overlay", "register-renovate-enrolment"} {
-		if !infraActions[a] {
-			t.Errorf("infraActions missing %q — bootstrap routing/auth templates using it would fail R21", a)
 		}
 	}
 }
