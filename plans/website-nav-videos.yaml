@@ -1,0 +1,66 @@
+# Add Videos to the website nav — a clean full-loop test of the fixed
+# agent platform.
+#
+# WHY THIS IS THE RIGHT TEST. Every fix from the website-first-video
+# incident is now LIVE on the cluster:
+#   - dev agents mount design, platform_capabilities, third_party
+#     (controller#297)
+#   - the s2s client GRANTS leartechapi:artifact:read (auth-service#280)
+#     and the agent REQUESTS it (controller#298)
+#   - MCP config is required + fail-closed (ba-service#204)
+#   - run_report pod-scopes its query (mcp-servers#161)
+# This Plan exercises the whole chain on real work with a visible,
+# checkable outcome: the Videos hub (live at /videos since PRs #41+#42)
+# becomes reachable from the landing page nav.
+#
+# THE WORK (small, deterministic, gate-verified):
+#   1. Landing nav gains a Videos item linking to /videos (a routerLink,
+#      not an anchor — it is a route, not a section id). Desktop bar
+#      before the More ••• overflow; mobile drawer same position.
+#   2. The footer's product links row gains the same /videos link.
+#   3. end2end-ui gains one spec: nav item present, routerLinks to
+#      /videos, and /videos renders the playlist (regression-proofing
+#      the discoverability this adds).
+#
+# REAL DATA, per the golden rule: read the live hub first
+# (mcp__design__get_artifact on 387e8929-…4a2 or the site's own
+# public/videos/catalog.json) and link to what is actually there.
+# Staging only — the site is not live.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: website-nav-videos
+spec:
+  paused: true
+  steps:
+    - name: nav-videos
+      kind: pr
+      agentType: leartech-agent-ng
+      repo: mikelear/leartech-ship-proven-website
+      inputs:
+        name: nav-videos
+        repo: mikelear/leartech-ship-proven-website
+        branch: feat/nav-videos
+        goal: |
+          Add Videos to the website navigation. The video hub already exists
+          at /videos (prerendered route, live since PRs #41 + #42) — it is
+          just not reachable from the nav.
+          Read the live hub FIRST: mcp__design__get_artifact
+          (artifact_id 387e8929-4a91-49e3-9aac-51a36e9a64a2) or the repo's
+          public/videos/catalog.json — link to what is actually there.
+          1. landing.component.ts navItems: add { id: 'videos', label: 'Videos' }
+             rendered as a routerLink to /videos (a route, NOT a #section
+             anchor — the nav template hard-codes [href]="'#'+item.id", so
+             give this item its own link shape or add a 'route' field).
+             Desktop bar before the More ••• overflow; mobile drawer same
+             position. data-testid="nav-videos".
+          2. Footer product-links row: same /videos routerLink,
+             data-testid="footer-link-videos".
+          3. end2end-ui: one spec asserting the nav item exists,
+             routerLinks to /videos, and /videos renders the playlist
+             count from the hub.
+          PUBLISH the PR with open_pr — NOT raw gh. Reproduce CI locally
+          first if cheap (ng build), but CI is the authority. When
+          wait_for_terminal reports all_passed, STOP — do not wait for
+          release/promote. This site is staging-only; no content changes
+          beyond the nav links and the spec.
