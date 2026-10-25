@@ -1,0 +1,48 @@
+# Re-run website-first-video under the fixed agent platform — the controlled
+# experiment for the agent-efficiency work.
+#
+# WHAT THE FIRST RUN MEASURED (2026-10-25, run_report + gateway):
+#   877 gateway turns, 70.7M prompt tokens, 10 pods / 3 iterations.
+#   Two gateway 502s, four budget-stops, one success — and the success
+#   iteration only finished because earlier iterations had pushed their
+#   work to the branch. The deliverable DID ship (website PR #41, 23 gates
+#   green, Tide-merged) but the Plan step recorded Failed: the agent never
+#   opened the PR itself (budget-stop) and never saw the gates.
+#
+# ROOT CAUSES FIXED SINCE (all merged):
+#   1. ba-service#204  — MCP config is required + fail-closed; no baked
+#      default. The run needed `design` (its goal names an artifact guid)
+#      and got the dev default instead, then spent ~70M tokens hand-rolling
+#      GCS JWT auth for bytes one get_artifact call returns.
+#   2. controller#297  — every AgentType names its MCP set; dev agents add
+#      design, platform_capabilities, third_party.
+#   3. mcp-servers#161 — run_report pod-scopes the structured query, so
+#      advertised_tools is no longer truncated away and the recorder can
+#      actually verify which tools the agent had.
+#
+# WHAT THIS RUN PROVES IF THE FIXES WORK: the same brief completes in a
+# fraction of the turns with MCP-first tool use — the recorder's
+# advertised_not_called / called_not_advertised analysis becomes readable
+# for the first time on a same-shape run.
+#
+# mode=append this time: the hub exists (PR #41) and the holding video
+# page is on main (PR #42); this Plan appends the holding video AS a
+# catalog entry pointing at its real video-bundle artifact — the first
+# true bundle delivered through the template.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: website-first-video-redo
+spec:
+  paused: true
+  steps:
+    - name: append-holding
+      use: deploy-video-site
+      kind: apply
+      with:
+        repo: mikelear/leartech-ship-proven-website
+        artifactId: 387e8929-4a91-49e3-9aac-51a36e9a64a2
+        slug: ship-proven-in-one-minute
+        mode: append
+        holdingVideo: v-holding
+        devAgentType: leartech-agent-ng
