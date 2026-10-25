@@ -1,0 +1,31 @@
+# Deliver the first ShipProven video to the website — the initial hub release.
+#
+# Prerequisite (done, design loop): the holding video is built against the
+# demo-videos feature vocabulary and published as a sealed video-bundle
+# artifact; the hub design (Option B, config-driven) is sealed as artifact
+# 387e8929-4a91-49e3-9aac-51a36e9a64a2 (label ship-proven/video-hub).
+#
+# This Plan is the first ever use of the deploy-video-site template: mode=first
+# scaffolds the /videos hub on leartech-ship-proven-website with exactly ONE
+# catalog entry — the holding video. Later videos are mode=append Plans that
+# append one entry each; the catalog grows without bound, nothing is a literal.
+#
+# verify-release-flow is auto-injected after the PR step (R23).
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: website-first-video
+spec:
+  paused: true
+  steps:
+    - name: first-video
+      use: deploy-video-site
+      with:
+        repo: mikelear/leartech-ship-proven-website
+        artifactId: 387e8929-4a91-49e3-9aac-51a36e9a64a2
+        slug: ship-proven-in-one-minute
+        mode: first
+        holdingVideo: v-holding
+        deepDiveId: ""
+        deepDiveRow: ""
+        devAgentType: leartech-agent-ng

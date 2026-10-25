@@ -1,0 +1,80 @@
+# deploy-video-site — deliver a sealed video-bundle artifact to a website hub.
+#
+# The delivery half of the ship-proven video process. A video produced by the
+# design loop publishes as a kind: video-bundle artifact (self-playing HTML +
+# audio/* + SPEC.md, sealed). This template turns "that video should be on the
+# site" into ONE reviewed PR on the site repo — the same mechanism for the very
+# first video (scaffold the hub) and every later one (append one entry).
+#
+# THE video-hub-kit CONTRACT (artifact label `ship-proven/video-hub`) is the
+# source of truth for the files this PR touches:
+#   public/videos/<slug>/   the bundle's files, copied verbatim from the sealed revision
+#   catalog.json            one appended entry per video (id, title, blurb, duration,
+#                           panels, active, topic, published, artifactRef, href)
+#   hub.config.json         holdingVideo + deepDives[] — the ONLY two human choices
+# The hub page renders counts, chapter bar and auto-advance chain FROM the
+# catalog at prerender; nothing is ever a literal count.
+#
+# WHY ONE TEMPLATE, NOT TWO. mode=first and mode=append are the same three
+# moves (copy files → append entry → maybe bump config); "first" additionally
+# scaffolds the hub page, route and nav. A param keeps one OWNERS-reviewed
+# mechanism instead of two that drift. mode=first with an empty catalog is the
+# initial release: the hub renders a playlist of one, deep dives empty.
+#
+# WHY A DEV AGENT, NOT INFRA. This is an ordinary PR on an ordinary app repo —
+# judgement work (render the kit's layout in the site's stack, keep the
+# prerender + SEO gates green), not a privileged cross-cutting action. No
+# infra steps → nothing R22-gated; verify-release-flow auto-injects after the
+# PR step (R23) exactly as for any deployable PR step.
+#
+# SINGLE-VIDEO INITIAL RELEASE. mode=first with the first bundle: the PR
+# scaffolds the hub with exactly one catalog entry and sets holdingVideo to it.
+# Every subsequent video is mode=append; the catalog grows without bound and
+# the hub never changes shape.
+apiVersion: agent.leartech.io/v1alpha1
+kind: PlanTemplate
+metadata:
+  name: deploy-video-site
+spec:
+  params:
+    - name: repo # required — target website repo, owner/name
+    - name: artifactId # required — sealed video-bundle artifact id (guid); provenance, not fetched at runtime
+    - name: slug # required — site-local slug: public/videos/<slug>/
+    - name: mode # required — first | append
+    - name: holdingVideo # optional — catalog id to feature as the holding video
+    - name: deepDiveId # optional — catalog id to add to the deep-dive picks
+    - name: deepDiveRow # optional — row label for the deep-dive pick (e.g. "Safety & gates")
+    - name: devAgentType # required — the site repo's dev agent (leartech-agent-ng for the Angular website)
+  steps:
+    - name: deliver
+      kind: pr
+      agentType: "${devAgentType}"
+      repo: "${repo}"
+      inputs:
+        name: deliver-video-${slug}
+        repo: "${repo}"
+        branch: video-${slug}
+        goal: |
+          Deliver the sealed video-bundle artifact ${artifactId} to this site's video hub
+          (contract: video-hub-kit artifact, label `ship-proven/video-hub`; its SPEC.md §6
+          is the delivery flow this PR implements). Mode: ${mode}.
+          mode=first: scaffold the hub per the kit — public/videos/${slug}/ with the
+          bundle's files verbatim, catalog.json with this ONE entry (artifactRef recorded
+          for provenance, href = /videos/${slug}/), hub.config.json with
+          holdingVideo=${holdingVideo}, the /videos route + nav item + sitemap entry, all
+          rendering in the PRERENDER pass (no JS-only content; the SEO gate reads raw HTML).
+          mode=append: copy the bundle's files into public/videos/${slug}/ and append
+          exactly ONE entry to catalog.json — no counts, no chapter bars, no literals
+          anywhere in markup; everything derived at build. Do not touch existing entries.
+          If holdingVideo is set, point it at this entry. If deepDiveId is set, add
+          {id, row} to hub.config.json deepDives.
+          PUBLISH the PR with the `open_pr` MCP tool — NOT raw `gh` — so it is tracked.
+          Drive the site's own gates green (lint, tests, prerender, SEO gate). When
+          wait_for_terminal reports all_passed, STOP — do not wait for release/promote;
+          auto-injected verify-release-flow owns that.
+          Do not edit anything under public/videos/ other than <slug>/; do not rewrite
+          the bundle's files — they are sealed bytes from the artifact, copied verbatim.
+    # Release verification auto-injects after the `deliver` PR step (R23):
+    # release → promote → boot → deploy-health per cluster. A static site's
+    # deploy may make some checks vacuous, but the injection is harmless and
+    # the deploy-health read is still the authoritative "the new hub is live".
