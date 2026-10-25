@@ -1,14 +1,17 @@
-# Deliver the first ShipProven video to the website — the initial hub release.
+# Deliver the first ShipProven video hub to the website — the initial release.
 #
-# Prerequisite (done, design loop): the holding video is built against the
-# demo-videos feature vocabulary and published as a sealed video-bundle
-# artifact; the hub design (Option B, config-driven) is sealed as artifact
-# 387e8929-4a91-49e3-9aac-51a36e9a64a2 (label ship-proven/video-hub).
+# Prerequisite (done, design loop): the hub design (Option B, config-driven) is
+# sealed as artifact 387e8929-4a91-49e3-9aac-51a36e9a64a2 (label
+# ship-proven/video-hub) — SPEC.md + catalog/config schema + the reference
+# hub page. For mode=first the artifact delivered IS the kit: the PR scaffolds
+# the hub and the single catalog entry's href serves the kit's reference page.
+# The first true video-bundle (a self-playing page from the video process)
+# arrives later via mode=append. holdingVideo names the catalog entry id
+# (v-holding), not an artifact id — it is hub.config.json's key.
 #
-# This Plan is the first ever use of the deploy-video-site template: mode=first
-# scaffolds the /videos hub on leartech-ship-proven-website with exactly ONE
-# catalog entry — the holding video. Later videos are mode=append Plans that
-# append one entry each; the catalog grows without bound, nothing is a literal.
+# kind: pr on the use: step is REQUIRED for plan-api to accept it: the first
+# submitted step must declare agentType or kind (a use: step may not carry
+# agentType), the same shape rule example-verify-release.yaml learned.
 #
 # verify-release-flow is auto-injected after the PR step (R23).
 apiVersion: agent.leartech.io/v1alpha1
@@ -20,12 +23,11 @@ spec:
   steps:
     - name: first-video
       use: deploy-video-site
+      kind: pr
       with:
         repo: mikelear/leartech-ship-proven-website
         artifactId: 387e8929-4a91-49e3-9aac-51a36e9a64a2
         slug: ship-proven-in-one-minute
         mode: first
         holdingVideo: v-holding
-        deepDiveId: ""
-        deepDiveRow: ""
         devAgentType: leartech-agent-ng
