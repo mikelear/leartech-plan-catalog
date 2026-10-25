@@ -9,9 +9,9 @@
 # arrives later via mode=append. holdingVideo names the catalog entry id
 # (v-holding), not an artifact id — it is hub.config.json's key.
 #
-# kind: pr on the use: step is REQUIRED for plan-api to accept it: the first
-# submitted step must declare agentType or kind (a use: step may not carry
-# agentType), the same shape rule example-verify-release.yaml learned.
+# kind: apply on the use: step is REQUIRED for plan-api to accept it: the first
+# submitted step may not be kind:pr without agentType (which a use: step may
+# not carry). apply matches the bootstrap use: pattern; see validator.go first-step invariant.
 #
 # verify-release-flow is auto-injected after the PR step (R23).
 apiVersion: agent.leartech.io/v1alpha1
@@ -23,7 +23,7 @@ spec:
   steps:
     - name: first-video
       use: deploy-video-site
-      kind: pr
+      kind: apply
       with:
         repo: mikelear/leartech-ship-proven-website
         artifactId: 387e8929-4a91-49e3-9aac-51a36e9a64a2
