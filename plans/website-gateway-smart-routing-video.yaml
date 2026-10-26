@@ -2,6 +2,13 @@
 # website AND make it the holding video, rewording the hub to be Ship-Proven-led
 # (not video-tool instruction copy).
 #
+# RE-SUBMIT NOTE: the first run (2026-10-26) failed because the deliver step's
+# mcp__design__get_artifact BY ID returned 404 against the pre-#42 artifact-api —
+# platform/internal_services (empty-tenant) reads were honoured by List but not
+# by Get-by-id. leartech-artifact-api#42 fixes the latestManifestFor guard
+# (empty tenant = platform-read marker) and is deployed to staging as 0.0.32.
+# This Plan is byte-identical in intent; it simply runs against the fixed API.
+#
 # TWO steps, deliberately separate so the choice is reusable:
 #
 #  1. deliver — use: deploy-video-site (mode=append). Copies the sealed
