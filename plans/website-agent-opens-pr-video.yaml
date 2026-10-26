@@ -1,0 +1,36 @@
+# Deliver the "The agent opens a PR, the pipeline judges it" video to the
+# ShipProven website hub and make it the holding (featured) video.
+#
+# FIRST clean end-to-end run of the deploy-video-site template AFTER the fetch
+# tooling was fixed:
+#   - catalog #160 pointed the template goal at mcp__design__read_artifact_file
+#     (resolve fresh URL + fetch + verify sha256 server-side), so the deliver
+#     agent no longer shells out curl against a presigned GCS URL — the exact
+#     failure that made the previous two deliveries commit an AccessDenied body.
+#   - mcp-servers #163 shipped read_artifact_file (deployed as 0.0.156).
+# So this Plan is the real proof the delivery path runs clean through the agent.
+#
+# mode=append: the hub exists and is live; this copies the sealed bundle into
+# public/videos/agent-opens-pr/, appends ONE catalog entry, and points
+# hub.config.json holdingVideo at it (featuring this video; the gateway-smart-
+# routing video stays in the reel, renumbered by published order).
+#
+# kind: apply on the use: step is REQUIRED (plan-api first-step invariant).
+# verify-release-flow auto-injects after the PR step (R23).
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: website-agent-opens-pr-video
+spec:
+  paused: true
+  steps:
+    - name: deliver
+      use: deploy-video-site
+      kind: apply
+      with:
+        repo: mikelear/leartech-ship-proven-website
+        artifactId: 463d628d-9b9d-4819-ac94-9e54677fb6a2
+        slug: agent-opens-pr
+        mode: append
+        holdingVideo: v-agent-opens-pr
+        devAgentType: leartech-agent-ng
