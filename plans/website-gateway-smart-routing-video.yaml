@@ -1,0 +1,99 @@
+# Deliver the "One shell. Any model. Smart routing." video to the ShipProven
+# website AND make it the holding video, rewording the hub to be Ship-Proven-led
+# (not video-tool instruction copy).
+#
+# TWO steps, deliberately separate so the choice is reusable:
+#
+#  1. deliver — use: deploy-video-site (mode=append). Copies the sealed
+#     video-bundle artifact 01da2fd7-… into public/videos/gateway-smart-routing/,
+#     appends ONE catalog.json entry (artifactRef for provenance, href
+#     /videos/gateway-smart-routing/), and points hub.config.json holdingVideo
+#     at it. This replaces v-holding as the featured video. The template never
+#     edits the hub page copy or other catalog entries.
+#
+#  2. reword-hub — a plain dev PR on the same repo that rewrites the hub page
+#     copy (src/app/videos/videos.component.html) to be about Ship Proven, not
+#     the video tooling. This is the "change the text of what was deployed"
+#     half, kept as its own step so it can run against the holding part
+#     independently of any one video delivery.
+#
+# kind: apply on the first use: step is REQUIRED (plan-api first-step invariant,
+# matches website-first-video). verify-release-flow auto-injects after each PR
+# step (R23) — not hand-authored here.
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: website-gateway-smart-routing-video
+spec:
+  paused: true
+  steps:
+    - name: deliver
+      use: deploy-video-site
+      kind: apply
+      with:
+        repo: mikelear/leartech-ship-proven-website
+        artifactId: 01da2fd7-1268-46de-9acd-87b1baf970b5
+        slug: gateway-smart-routing
+        mode: append
+        holdingVideo: v-gateway-smart-routing
+        devAgentType: leartech-agent-ng
+    - name: reword-hub
+      kind: pr
+      agentType: leartech-agent-ng
+      repo: mikelear/leartech-ship-proven-website
+      dependsOn: [deliver]
+      inputs:
+        name: reword-video-hub-ship-proven
+        repo: mikelear/leartech-ship-proven-website
+        branch: feat/reword-video-hub-ship-proven
+        goal: |
+          Reword the /videos hub page (src/app/videos/videos.component.html, and
+          matching copy in videos.component.spec.ts) so it is ABOUT SHIP PROVEN —
+          marketing-led, not instructions about the video tooling. Keep ALL
+          derived-from-catalog behaviour and every data-testid intact; change
+          only human-visible copy. Specifically:
+
+          1. Heading + lede (videos-heading / videos-lede): make it Ship Proven's
+             story, and say Ship Proven BUILT the system you are watching — it
+             built the platform, the gateway, the shell AND this very video /
+             video-build demo system that produced the page you are on. Replace
+             the current "Watch it ship itself." + "Every video is a single
+             self-playing page built from real plans, PRs and gate results…"
+             with Ship-Proven marketing copy to that effect.
+
+          2. The featured player caption/blurb must describe THIS new holding
+             video ("One shell. Any model. Smart routing underneath." — start a
+             shell, drive any gateway model, switch model mid-session and watch
+             context, cache and tokens carry across). The holding video is now
+             the catalog entry id `v-gateway-smart-routing` (delivered in the
+             prior step); the player renders whatever hub.config.json holdingVideo
+             points at, so no id is hard-coded — just make the surrounding copy
+             fit a flagship Ship Proven feature video, not a generic "terminal →
+             PR → gates" overview.
+
+          3. REMOVE the tooling-instruction note at the bottom of the player
+             column (the "<p class='grow'>Unlimited: this list is every entry in
+             catalog.json…</p>" paragraph) — it is video-package mechanics, not
+             marketing. The playlist count + chapter bar stay (they are derived),
+             only that explanatory paragraph goes.
+
+          4. REMOVE the bottom "<p class='videos-note'>The hub is a published
+             package — the video-hub-kit artifact…</p>" paragraph entirely; it is
+             internal packaging detail, not visitor copy.
+
+          5. Replace the playlist header area / "The reel" footer feel with a
+             short, Ship-Proven marketing line that this reel grows as new Ship
+             Proven features ship — new capabilities arrive here as videos. Keep
+             it one sentence, no catalog.json / hub.config.json mechanics in
+             visitor-facing text.
+
+          Do NOT change catalog.json, hub.config.json, video-catalog.ts, or any
+          bundle under public/videos/. Keep the prerender contract (no JS-only
+          content; the SEO gate reads raw HTML) and keep every existing
+          data-testid so the e2e specs still resolve — update only the asserted
+          TEXT in the specs where copy changed.
+
+          PUBLISH the PR with the open_pr MCP tool (not raw gh). Drive the site's
+          own gates green (lint, unit, prerender, SEO gate). When
+          wait_for_terminal reports all_passed, STOP — the auto-injected
+          verify-release-flow owns release/promote/deploy-health.
