@@ -11,6 +11,8 @@ passes the gate — and how to read the gate's feedback and self-correct.
    - **`plan-lint`** — the deterministic HARD gate (rules R1–R27 + kubeconform; must pass).
    - **`plan-cluster-verify`** — server-side dry-run against the live CRD (must pass).
    - **`plan-ai-review`** — an advisory model review (never blocks).
+   - **`plan-arch-review`** — an advisory ARCHITECTURE-FIT review against the
+     Cartographer's dossiers (never blocks; runs with `plan-ai-review`).
 3. Read the feedback (see "Reading feedback" below), fix, push again.
 4. A human maintainer merges. On merge the release **auto-submits** your Plan to
    `plan-api` as a **paused proposal** (both clusters) — merging does **not** run
@@ -46,8 +48,10 @@ The `plan-lint` PR comment contains a fenced ```json block with this shape — p
 ```
 
 For each error: apply `fix`, consult `doc`, re-validate against the schema, push.
-`plan-ai-review` adds advisory design feedback (verdict + specifics) — address it
-where sound, but only `plan-lint` blocks the merge.
+`plan-ai-review` adds advisory design feedback, and `plan-arch-review` adds
+advisory architecture-fit findings (does the Plan duplicate a domain, ignore a
+published SDK, cross dossier boundaries) — address each where sound, but only
+`plan-lint` blocks the merge.
 
 ## Hard requirements (the ones that most often fail)
 

@@ -19,6 +19,15 @@ spec:
     always_run: true
     optional: true
     source: plan-ai-review.yaml
+  # ADVISORY — the architecture-fit lane (issue #155): does this Plan fit the
+  # ESTATE? Judges against the Cartographer's dossiers (leartech-architecture),
+  # injected as evidence. Its own <cluster>/plan-arch-review context, optional so
+  # it never blocks; the deterministic floor stays in plan-lint.
+  - name: plan-arch-review
+    context: "plan-arch-review"
+    always_run: true
+    optional: true
+    source: plan-arch-review.yaml
   # Authoritative CRD check — server-side dry-run against the live cluster (persists
   # nothing). Complements the offline Go rules; catches anything the vendored schema
   # misses. Required-eligible once proven green.

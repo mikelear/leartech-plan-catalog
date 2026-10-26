@@ -1,0 +1,96 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  creationTimestamp: null
+  name: plan-arch-review
+spec:
+  pipelineSpec:
+    tasks:
+    - name: plan-arch-review
+      resources: {}
+      taskSpec:
+        metadata: {}
+        stepTemplate:
+          env:
+          - name: HOME
+            value: /tekton/home
+          # The architecture-fit panel. SEPARATE from PLAN_REVIEWERS (the
+          # design-quality list), same ConfigMap, different key — an operator
+          # repoints either panel without a code edit. optional:true so an
+          # unprovisioned cluster falls back to the script's default.
+          - name: ARCH_REVIEWERS
+            valueFrom:
+              configMapKeyRef:
+                name: ai-review-cluster-config
+                key: ARCH_REVIEWERS
+                optional: true
+          - name: AI_GATEWAY_URL
+            value: http://leartech-ai-gateway.ai-gateway.svc.cluster.local:8080
+          - name: CLUSTER_ID
+            valueFrom:
+              configMapKeyRef:
+                name: jx-cluster-config
+                key: CLUSTER_ID
+                optional: true
+          - name: GIT_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: tekton-git
+                key: password
+                optional: true
+          - name: GIT_USER
+            valueFrom:
+              secretKeyRef:
+                name: tekton-git
+                key: username
+                optional: true
+          envFrom:
+          # The same virtual key plan-ai-review uses — one key per repo, not
+          # per lane. optional:true so this pipeline runs (and self-skips)
+          # before the key is provisioned.
+          - secretRef:
+              name: leartech-plan-catalog-ai-key
+              optional: true
+          name: ""
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+          workingDir: /workspace/source
+        steps:
+        - image: uses:jenkins-x/jx3-pipeline-catalog/tasks/git-clone/git-clone-pr.yaml@versionStream
+          name: ""
+          resources: {}
+        # Same image as plan-ai-review: git, curl and pyyaml baked in, one
+        # toolchain for all three review paths. The dossier fetch is plain
+        # curl against the GitHub contents API.
+        - image: ghcr.io/mikelear/ai-review-worker:latest
+          name: plan-arch-review
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+          script: |
+            #!/bin/bash
+            set +e
+            missing=""
+            for t in git curl python3; do
+              command -v "$t" >/dev/null 2>&1 || missing="$missing $t"
+            done
+            if [ -n "$missing" ]; then
+              echo "=============================================================="
+              echo "plan-arch-review SKIPPED — the image is missing:$missing"
+              echo "  Exiting 0; this lane is ADVISORY and does not gate merges."
+              echo "=============================================================="
+              exit 0
+            fi
+            bash scripts/plan-arch-review.sh || true
+  podTemplate:
+    tolerations:
+    - key: sku
+      operator: Equal
+      value: build
+      effect: NoSchedule
+  serviceAccountName: tekton-bot
+  timeout: 30m0s
+status: {}
