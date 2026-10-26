@@ -31,6 +31,19 @@
 # scaffolds the hub with exactly one catalog entry and sets holdingVideo to it.
 # Every subsequent video is mode=append; the catalog grows without bound and
 # the hub never changes shape.
+#
+# TWO OPERATIONAL LESSONS baked into the goal below (both cost a wasted run):
+#   1. SIGNED URLS EXPIRE. get_artifact returns presigned GCS download URLs with
+#      a ~15-minute TTL. A URL fetched early in a long session is dead by the
+#      time curl runs — the fetch then returns an "AccessDenied" XML body, and
+#      an unguarded copy commits THAT as the file. So: re-call get_artifact for
+#      a fresh URL immediately before each download, and verify sha256 against
+#      the manifest before committing. Never commit an error body.
+#   2. FAIL FAST ON CI. The Lighthouse fork cancels in-flight checks the moment
+#      a new commit lands, so sitting through every gate with wait_for_terminal
+#      wastes pipeline runs that are about to be superseded — and leaves the
+#      agent idling. Use wait_for_first_failure_or_all_pass: on all_pass STOP;
+#      on the first failure fix that ONE check, push one commit, re-check.
 apiVersion: agent.leartech.io/v1alpha1
 kind: PlanTemplate
 metadata:
@@ -58,6 +71,18 @@ spec:
           Deliver the sealed video-bundle artifact ${artifactId} to this site's video hub
           (contract: video-hub-kit artifact, label `ship-proven/video-hub`; its SPEC.md §6
           is the delivery flow this PR implements). Mode: ${mode}.
+
+          FETCH THE BYTES SAFELY (a prior run committed an expired-URL error body):
+          call mcp__design__get_artifact(${artifactId}) to get the manifest (file list +
+          sha256 per file) and fresh presigned downloadURLs. Those URLs expire in ~15
+          minutes, so download each file IMMEDIATELY after the get_artifact call — do not
+          reuse a URL from an earlier turn. After each download, verify the bytes:
+          sha256 MUST equal the manifest value and the size MUST match. If a download
+          returns non-2xx, looks like an XML <Error>…</Error> body, or the sha mismatches,
+          re-call get_artifact for a fresh URL and retry. NEVER commit a file whose sha
+          does not match the manifest — that is how the last run shipped an AccessDenied
+          page as index.html.
+
           mode=first: scaffold the hub per the kit — public/videos/${slug}/ with the
           bundle's files verbatim, catalog.json with this ONE entry (artifactRef recorded
           for provenance, href = /videos/${slug}/), hub.config.json with
@@ -68,10 +93,18 @@ spec:
           anywhere in markup; everything derived at build. Do not touch existing entries.
           If holdingVideo is set, point it at this entry. If deepDiveId is set, add
           {id, row} to hub.config.json deepDives.
+
           PUBLISH the PR with the `open_pr` MCP tool — NOT raw `gh` — so it is tracked.
-          Drive the site's own gates green (lint, tests, prerender, SEO gate). When
-          wait_for_terminal reports all_passed, STOP — do not wait for release/promote;
-          auto-injected verify-release-flow owns that.
+
+          FAIL FAST on CI (critical — saves Tekton AND your budget): after open_pr, call
+          mcp__jx3_flow__wait_for_first_failure_or_all_pass ONCE. If it reports all_pass,
+          STOP — do not wait for release/promote; the auto-injected verify-release-flow
+          owns that. If it reports a FIRST FAILURE, read that one failing check, push ONE
+          fix commit for it, then call wait_for_first_failure_or_all_pass again. Do NOT
+          call wait_for_terminal to sit through every gate: the Lighthouse fork cancels
+          the remaining in-flight checks when your fix commit lands, so waiting wastes
+          pipeline runs that are about to re-run anyway. One failure → one fix → re-check.
+
           Do not edit anything under public/videos/ other than <slug>/; do not rewrite
           the bundle's files — they are sealed bytes from the artifact, copied verbatim.
     # Release verification auto-injects after the `deliver` PR step (R23):

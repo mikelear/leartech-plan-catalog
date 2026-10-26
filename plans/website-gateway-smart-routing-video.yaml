@@ -1,32 +1,25 @@
 # Deliver the "One shell. Any model. Smart routing." video to the ShipProven
-# website AND make it the holding video, rewording the hub to be Ship-Proven-led
-# (not video-tool instruction copy).
+# website AND make it the holding video, rewording the hub to be Ship-Proven-led.
 #
-# RE-SUBMIT NOTE: the first run (2026-10-26) failed because the deliver step's
-# mcp__design__get_artifact BY ID returned 404 against the pre-#42 artifact-api —
-# platform/internal_services (empty-tenant) reads were honoured by List but not
-# by Get-by-id. leartech-artifact-api#42 fixes the latestManifestFor guard
-# (empty tenant = platform-read marker) and is deployed to staging as 0.0.32.
-# This Plan is byte-identical in intent; it simply runs against the fixed API.
+# RE-SUBMIT (2). History:
+#   run 1 (PR #45 branch from catalog #157/#158): the deliver step reused an
+#   EXPIRED presigned GCS download URL and committed the "AccessDenied" XML
+#   error body AS index.html / SPEC.md. Root cause: the signed URL from a
+#   get_artifact call made ~5 min earlier had passed its 899s expiry by the
+#   time curl ran; the agent never re-fetched a fresh URL right before the
+#   download, and never verified the bytes against the manifest sha256.
+#   artifact-api#42 (platform-read Get-by-id) IS fixed and deployed (0.0.32) —
+#   get_artifact itself returns 200; the bug this run hit is URL staleness,
+#   not the identity 404 that killed run 0.
 #
-# TWO steps, deliberately separate so the choice is reusable:
+# This re-submit adds explicit fetch + fail-fast guidance to the goals. The
+# Plan shape is otherwise identical.
 #
-#  1. deliver — use: deploy-video-site (mode=append). Copies the sealed
-#     video-bundle artifact 01da2fd7-… into public/videos/gateway-smart-routing/,
-#     appends ONE catalog.json entry (artifactRef for provenance, href
-#     /videos/gateway-smart-routing/), and points hub.config.json holdingVideo
-#     at it. This replaces v-holding as the featured video. The template never
-#     edits the hub page copy or other catalog entries.
+# TWO steps, deliberately separate so the choice is reusable (deliver the
+# holding part via the template; change the deployed wording independently).
 #
-#  2. reword-hub — a plain dev PR on the same repo that rewrites the hub page
-#     copy (src/app/videos/videos.component.html) to be about Ship Proven, not
-#     the video tooling. This is the "change the text of what was deployed"
-#     half, kept as its own step so it can run against the holding part
-#     independently of any one video delivery.
-#
-# kind: apply on the first use: step is REQUIRED (plan-api first-step invariant,
-# matches website-first-video). verify-release-flow auto-injects after each PR
-# step (R23) — not hand-authored here.
+# kind: apply on the first use: step is REQUIRED (plan-api first-step invariant).
+# verify-release-flow auto-injects after each PR step (R23).
 apiVersion: agent.leartech.io/v1alpha1
 kind: Plan
 metadata:
@@ -72,35 +65,45 @@ spec:
              video ("One shell. Any model. Smart routing underneath." — start a
              shell, drive any gateway model, switch model mid-session and watch
              context, cache and tokens carry across). The holding video is now
-             the catalog entry id `v-gateway-smart-routing` (delivered in the
-             prior step); the player renders whatever hub.config.json holdingVideo
-             points at, so no id is hard-coded — just make the surrounding copy
-             fit a flagship Ship Proven feature video, not a generic "terminal →
-             PR → gates" overview.
+             the catalog entry id `v-gateway-smart-routing`; the player renders
+             whatever hub.config.json holdingVideo points at, so no id is
+             hard-coded — just make the surrounding copy fit a flagship Ship
+             Proven feature video, not a generic "terminal → PR → gates" overview.
 
           3. REMOVE the tooling-instruction note at the bottom of the player
              column (the "<p class='grow'>Unlimited: this list is every entry in
-             catalog.json…</p>" paragraph) — it is video-package mechanics, not
-             marketing. The playlist count + chapter bar stay (they are derived),
-             only that explanatory paragraph goes.
+             catalog.json…</p>" paragraph) — video-package mechanics, not
+             marketing. The playlist count + chapter bar stay (derived).
 
           4. REMOVE the bottom "<p class='videos-note'>The hub is a published
-             package — the video-hub-kit artifact…</p>" paragraph entirely; it is
-             internal packaging detail, not visitor copy.
+             package — the video-hub-kit artifact…</p>" paragraph entirely.
 
-          5. Replace the playlist header area / "The reel" footer feel with a
-             short, Ship-Proven marketing line that this reel grows as new Ship
-             Proven features ship — new capabilities arrive here as videos. Keep
-             it one sentence, no catalog.json / hub.config.json mechanics in
-             visitor-facing text.
+          5. Make the reel line a short Ship-Proven marketing sentence that the
+             reel grows as new Ship Proven features ship — no catalog.json /
+             hub.config.json mechanics in visitor-facing text.
 
           Do NOT change catalog.json, hub.config.json, video-catalog.ts, or any
           bundle under public/videos/. Keep the prerender contract (no JS-only
-          content; the SEO gate reads raw HTML) and keep every existing
-          data-testid so the e2e specs still resolve — update only the asserted
-          TEXT in the specs where copy changed.
+          content) and every existing data-testid; update only asserted TEXT in
+          the specs where copy changed.
 
-          PUBLISH the PR with the open_pr MCP tool (not raw gh). Drive the site's
-          own gates green (lint, unit, prerender, SEO gate). When
-          wait_for_terminal reports all_passed, STOP — the auto-injected
-          verify-release-flow owns release/promote/deploy-health.
+          PUBLISH the PR with the open_pr MCP tool (not raw gh).
+
+          FAIL-FAST on CI (critical — do not waste Tekton or your own budget):
+          after open_pr, call mcp__jx3_flow__wait_for_first_failure_or_all_pass
+          ONCE. If it returns all_pass, STOP — the auto-injected
+          verify-release-flow owns release/promote/deploy-health. If it returns
+          a FIRST FAILURE, read that one failing check, push ONE fix commit
+          addressing it, then call wait_for_first_failure_or_all_pass again.
+          Never call wait_for_terminal to sit through every gate — the
+          Lighthouse fork CANCELS the remaining in-flight checks the moment your
+          fix commit lands, so waiting for them wastes pipeline runs that are
+          about to be superseded anyway. One failure → one fix → re-check.
+    # The deliver step's goal is supplied by the deploy-video-site template.
+    # The template already instructs: copy the sealed bytes verbatim and
+    # wait_for_terminal→all_passed. The known failure mode to avoid (documented
+    # for the operator here, enforced in the template text): fetch each file's
+    # download URL from get_artifact IMMEDIATELY before curl (signed URLs expire
+    # in ~15 min), and verify the downloaded sha256 against the manifest before
+    # committing — never commit an error body. If a fetch returns non-2xx or the
+    # sha mismatches, re-call get_artifact for a fresh URL and retry.
