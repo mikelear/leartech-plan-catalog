@@ -138,7 +138,7 @@ spec:
     - name: demo-rates-gbpusd-spot
       namespace: jx-staging
   steps:
-    - name: verify-release-restored
+    - name: verify
       kind: check
       use: verify-release-flow
       with:
