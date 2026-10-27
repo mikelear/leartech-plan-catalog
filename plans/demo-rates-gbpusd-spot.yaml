@@ -1,0 +1,44 @@
+# Plan: demo-rates GBP/USD spot-rate endpoint + cache (feature; from issue #7).
+#
+# Sourced from leartech-project-demo evidence:
+#   - research/fx-provider-gbp-usd-spot-rate.md (Frankfurter; merged finding)
+#   - architecture/services.md (demo-rates owns the rates domain)
+#   - design/demo-board.md (artefact 8e3f5bcf-…; front end only)
+#
+# verify-release-flow is AUTO-INJECTED after every deployable PR step (R23) —
+# do NOT hand-author it (R23: "do not author release-verify by hand; use:
+# verify-release-flow"). A hand-authored `use: verify-release-flow` step that
+# dependsOn a PR step therefore duplicates that injection — two
+# verify-release-flow expansions — and typically also carries a broken
+# hand-set sha. (A standalone verify-release-flow that does NOT dependsOn a PR
+# step — verifying an already-deployed service by explicit sha — is
+# legitimate and allowed.)
+
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: demo-rates-gbpusd-spot
+  labels:
+    leartech.io/feature-issue: "7"
+spec:
+  paused: true
+  steps:
+    - name: fetch-spot-rate
+      kind: pr
+      agentType: leartech-agent-go
+      inputs:
+        name: demo-rates-gbpusd-spot
+        repo: mikelear/leartech-demo-rates
+        branch: feat/demo-rates-gbpusd-spot
+        goal: >-
+          Implement the GBP/USD spot-rate fetch + cache the Project researched:
+          expose GET /api/v1/rates/gbp-usd on the leartech-demo-rates Go service
+          that returns the cached Frankfurter GBP/USD spot rate (per the merged
+          Project research finding), backed by the research finding's contract:
+          GET https://api.frankfurter.dev/v2/rate/gbp/usd → 200
+          {"date":"2026-10-23","base":"GBP","quote":"USD","rate":1.3392}
+          (verified live 2026-10-23; date = observation date, rate = USD per 1 GBP).
+          Keep auth + OpenAPI publishing (the house SDK + generated OpenAPI
+          obligation: a back-end feature keeps the repo publishing its SDK +
+          generated OpenAPI — that is a house rule).
+          Open ONE PR, drive BOTH clusters' gates green, do not self-merge.
