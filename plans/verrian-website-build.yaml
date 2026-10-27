@@ -1,0 +1,64 @@
+# Build the Verrian company holding site from the approved design.
+#
+# RUN THIS AFTER verrian-website-bootstrap has created + deployed the repo
+# skeleton (leartech-verrian-website). This is the FEATURE Plan: a single dev PR
+# that implements the sealed design — Option A (Institutional) from the
+# verrian/holding-site-design artifact (0ff81ad5) — as the site's landing page.
+#
+# The design bundle holds DESIGN.md (the written spec) + option-a-institutional.html
+# (the approved prototype). The agent fetches both with read_artifact_file and
+# renders them in the site's Angular stack, prerendered + SEO-clean.
+#
+# A plain kind: pr dev step (leartech-agent-ng). No infra steps (R22 clean).
+# verify-release-flow auto-injects after the PR step (R23).
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: verrian-website-build
+spec:
+  paused: true
+  steps:
+    - name: landing
+      kind: pr
+      agentType: leartech-agent-ng
+      repo: mikelear/leartech-verrian-website
+      inputs:
+        name: verrian-holding-landing
+        repo: mikelear/leartech-verrian-website
+        branch: feat/holding-landing
+        goal: |
+          Build the Verrian company holding site's landing page from the sealed
+          design bundle, artifact 0ff81ad5-3b69-4612-9ca8-efc3169fa575 (label
+          verrian/holding-site-design). Fetch its files with
+          mcp__design__read_artifact_file (NOT curl against a signed URL):
+            - read_artifact_file(artifact_id=0ff81ad5-…, path="DESIGN.md") — the
+              written spec: sections, tokens, copy, the chosen Option A.
+            - read_artifact_file(artifact_id=0ff81ad5-…, path="option-a-institutional.html")
+              — the approved prototype (the look to match).
+
+          Implement that design as THIS site's landing page in the Angular stack
+          (same approach as leartech-ship-proven-website): a single prerendered
+          route at '/'. Match Option A — serif display headings, the gold
+          institutional accent, the dark palette, and the exact section order in
+          DESIGN.md:
+            1) hero "We build the trust layer for autonomous software." (Verrian Ltd · UK)
+            2) About — focused engineering company, fintech-native, 2025, multi-cloud, regulated-grade
+            3) Ship Proven (flagship) — the product card + the ai-review proof box,
+               linking OUT to the Ship Proven product site (do NOT embed it)
+            4) Approach — the three principles
+            5) Contact — sales@verrian.co.uk
+            6) Footer — the REAL registration: Verrian Ltd, company number 17376222,
+               Registered office High Sleights Farm, Acklam, Malton, England, YO17 9RP,
+               and "Ship Proven is a product of Verrian Ltd".
+
+          The hero + section copy and the registration footer are REAL and MUST
+          appear verbatim in the PRERENDERED HTML (the seo-preview gate reads raw
+          HTML, no browser). Keep SEO tags (title, description, og:*, canonical)
+          for the Verrian landing. Do not hard-code anything that belongs in the
+          site's SEO/prerender config.
+
+          PUBLISH the PR with the open_pr MCP tool (not raw gh). After open_pr,
+          call mcp__jx3_flow__wait_for_first_failure_or_all_pass ONCE: on all_pass
+          STOP (the auto-injected verify-release-flow owns release/promote/deploy);
+          on the first failure, fix that ONE check, push one commit, re-check. Do
+          NOT sit through every gate with wait_for_terminal.
