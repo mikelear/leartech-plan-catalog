@@ -1,3 +1,4 @@
+# resubmit: 2026-10-27 — re-run after the GitOps overlay/renovate actions stabilised (first run failed at auth-overlay/renovate-enrolment).
 # Bootstrap leartech-demo-board — the angular front end of the demo-clone Project.
 #
 # Graduated from leartech-project-demo-clone: domain "overview", persistence "none".
