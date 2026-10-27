@@ -44,6 +44,17 @@ spec:
                 name: tekton-git
                 key: username
                 optional: true
+          # The dossier repo is PRIVATE: the evidence fetch (GitHub contents
+          # API) 404s anonymously, which degraded the very first lane run to
+          # "missing evidence" — honest but blind. Reuse tekton-git (the same
+          # credential the sticky comment posts with); the script reads it as
+          # ARCH_GH_TOKEN.
+          - name: ARCH_GH_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: tekton-git
+                key: password
+                optional: true
           envFrom:
           # The same virtual key plan-ai-review uses — one key per repo, not
           # per lane. optional:true so this pipeline runs (and self-skips)
