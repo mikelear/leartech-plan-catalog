@@ -1,4 +1,5 @@
 # Plan: demo-rates GBP/USD spot-rate endpoint + cache (feature; from issue #7).
+# resubmit: 2026-10-27 — re-run after the tool-budget fix (controller #309).
 #
 # Sourced from leartech-project-demo evidence:
 #   - research/fx-provider-gbp-usd-spot-rate.md (Frankfurter; merged finding)
