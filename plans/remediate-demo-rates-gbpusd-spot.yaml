@@ -1,0 +1,147 @@
+# Remediate demo-rates-gbpusd-spot — the 0.0.2 promote failed closed on BOTH
+# halves of the estate: gcp's verify is red (missing auth overlay) and az never
+# released at all (lost source-config registration). This plan re-runs the exact
+# deterministic verification that failed (verify-release-flow, standalone — R23
+# allows the no-dependsOn form for an already-deployed service) and, when it
+# passes, flips demo-rates-gbpusd-spot to Resolved (Spec.Remediates).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ROOT CAUSE (diagnosed 2026-10-27 from the failed AgentRun
+# demo-rates-gbpusd-spot-fetch-spot-rate-verify-re-8933e9c4, action promote-status,
+# plus the promote PRs and both GitOps repos)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# WHAT THE STEP SAW. The feature PR (mikelear/leartech-demo-rates#2) merged at
+# 2026-10-27T18:50:43Z; the gcp release pipeline fired and passed
+# (leartech-demo-rates-main-release-tl252, tag v0.0.2-gcp); jx promote opened
+# jx-build-cluster-gsm#2607 "chore: promote leartech-demo-rates to version
+# 0.0.2". promote-status then failed closed on BOTH clusters:
+#
+#   gcp/verify on #2607 = FAILURE — helmfile render of
+#     helmfiles/jx-staging/helmfile.yaml fails with the chart's fail-closed
+#     guard "auth.issuer is required — a resource server that cannot name its
+#     issuer must not start". #2607 adds ONLY the bare release entry
+#     (chart dev/leartech-demo-rates, version 0.0.2) — jx promote generates no
+#     values — and the per-cluster auth overlay configs/leartech-demo-rates.yaml
+#     no longer exists on main.
+#   az = NO PROMOTE PR AT ALL — no az release ever fired for this service
+#     (no v*-az tag, no az/release status context on the merge commit), so
+#     promote_status has nothing to find on az.
+#
+# WHY THE OVERLAY WAS GONE (gcp). The demo-work E2E teardown on 2026-10-23
+# removed it: gsm#2546 (run-9 teardown: source-config + cluster-routes +
+# renovate + THE AUTH OVERLAY) and gsm#2547 (completes the teardown: removes
+# both demo helmfile release entries because they referenced the deleted
+# overlay, so boot's regen failed). That was correct teardown-of-a-dead-demo
+# hygiene at the time — but the repo was re-registered (gsm#2552) and the
+# feature Plan kept running against it. The promote tooling then re-added the
+# helmfile entry WITHOUT the overlay: jx promote cannot know a chart marks
+# auth.issuer required, and nothing re-seeds the overlay after a teardown.
+# The chart's `required` guard is working exactly as designed (fail closed,
+# never serve /api/v1 unauthenticated) — the regression is GitOps state, not
+# the chart. PR #2532 created this overlay on 2026-10-22 with the note "the
+# 'first promotion needs its auth overlay' step the bootstrap should seed;
+# follow-up: have register seed this for go resource servers."
+#
+# WHY AZ NEVER RELEASED. The akv (az) source-config registration was LOST to
+# a merge-order clobber: akv#2279 registered leartech-demo-rates at
+# 14:07:24Z on 2026-10-23 (commit aa3663f8), but akv#2280 (register
+# leartech-demo-board) was cut from a branch based BEFORE that merge and its
+# merge at 14:17:34Z REPLACED the demo-rates line with demo-board (commit
+# 388dca93 diff: "- name: leartech-demo-rates / + name: leartech-demo-board").
+# Current akv main has demo-board but NOT demo-rates. The feature PR merged
+# four days later with the repo invisible to az's Lighthouse, so no az
+# postsubmit release fired and no az promote PR was ever opened. akv also
+# never had the demo-rates auth overlay or a helmfile release entry — there
+# was never an az promotion of this service to remove or restore.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# GITOPS PREREQUISITES ARE AN OPERATOR PROCEDURE — NOT STEPS IN THIS PLAN
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# plan-lint R26 hard-blocks any step targeting jx-build-cluster-* from a plain
+# Plan, and R22 blocks hand-authored infra agentTypes — the sanctioned homes
+# for GitOps edits are OWNERS-gated PlanTemplates or an operator. This is a
+# ONE-OFF restoration (needs-human:gitops-overlay), recorded here as the
+# procedure (the agent-gcs-artifact-read precedent for exactly this shape):
+#
+#   GCP (jx-build-cluster-gsm) — ALREADY OPEN AND GREEN:
+#     #2608 "chore: restore the leartech-demo-rates staging release (overlay +
+#     helmfile entry)" restores configs/leartech-demo-rates.yaml verbatim from
+#     the 0.0.1 promote and adds the release entry at 0.0.2 WITH the overlay
+#     in its values list. Its gcp/verify + gcp/qa-gate are green. It needs
+#     human approval + merge; then /test verify on #2607 (or a fresh promote)
+#     turns the promote PR green.
+#   AZ (jx-build-cluster-akv) — TO BE OPENED:
+#     1. Re-register leartech-demo-rates in .jx/gitops/source-config.yaml
+#        under the mikelear/ group (it was clobbered by #2280). One line,
+#        beside leartech-demo-board.
+#     2. Add helmfiles/jx-staging/configs/leartech-demo-rates.yaml with the AZ
+#        issuer (mirror leartech-third-party-api's akv overlay):
+#            auth:
+#              issuer: "https://hydra-jx-staging.az.leartech.com"
+#              audience: "leartech-demo-rates"
+#     3. Once registered, push an empty commit to the service repo's main (or
+#        re-push the release sha) so the az postsubmit release fires; it will
+#        tag its cluster-suffixed version and jx promote will open the akv
+#        promote PR, which must carry the overlay in its values list (see #2608
+#        for the shape) and drive az/verify + az/qa-gate green.
+#     Source-only edits — never config-root (R27): boot re-renders it.
+#   ORDER: land the akv registration + overlay BEFORE (or with) the az
+#     release trigger, so the az promote PR can reference the overlay on its
+#     first render. Merge #2608 before re-running /test verify on #2607.
+#
+# SYSTEMIC FOLLOW-UP (out of scope here, recorded so it is not lost): the
+# bootstrap-authed-service template's register-auth-overlay action seeds the
+# overlay ONCE at bootstrap; nothing re-seeds it after a teardown+re-register
+# cycle, and jx promote cannot know a chart requires an overlay. A follow-up
+# Plan/PlanTemplate should make the promote path fail EARLY (or the
+# register action idempotently re-assert the overlay), so the next
+# teardown+re-register does not rediscover this the hard way. Same for the
+# akv merge-order clobber: #2280 was cut before #2279 — rebase-before-merge
+# on the GitOps repos would have prevented it.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# WHAT THIS PLAN EXECUTES
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ONE standalone verify-release-flow expansion (R23: a use: verify-release-flow
+# that does NOT dependsOn a PR step — verifying an already-deployed service by
+# explicit PR — is legitimate; there is no deployable PR step here for the
+# platform's auto-injection to duplicate). It re-runs the four deterministic
+# checks that failed, per cluster, against the merged feature PR #2:
+#   release-passed   — release fired + passed (gcp already green; az once
+#                      registered + triggered)
+#   promote-merged   — promote PRs opened on BOTH GitOps repos, green, merged
+#                      (this is the check that failed closed)
+#   bootjob-ran      — a boot Job reconciled the promote commit
+#   deploy-healthy   — the NEW promoted version is deployed + healthy per
+#                      cluster, version-matched (fails closed, never
+#                      version-blind)
+# Each carries onFailure: escalate ba (from the template), so a still-red
+# estate escalates rather than silently passing. When ALL FOUR pass the Plan
+# Succeeds and the controller flips demo-rates-gbpusd-spot to Resolved with
+# ResolvedBy pointing here.
+#
+# Hold-by-default (R5): this catalog Plan is a PROPOSAL. It lands paused; a
+# human unpauses it AFTER the operator prerequisites above have merged (at
+# minimum gsm#2608; ideally the akv pair too, so the az checks can pass on the
+# first run instead of escalating).
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: remediate-demo-rates-gbpusd-spot
+  namespace: jx-staging
+spec:
+  paused: true
+  remediates:
+    - name: demo-rates-gbpusd-spot
+      namespace: jx-staging
+  steps:
+    - name: verify
+      kind: check
+      use: verify-release-flow
+      with:
+        repo: mikelear/leartech-demo-rates
+        pr: "2"
+        service: leartech-demo-rates
