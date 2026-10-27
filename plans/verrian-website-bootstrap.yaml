@@ -1,0 +1,29 @@
+# Bootstrap the Verrian company holding site — a brand-new Angular service.
+#
+# create the repo -> register source-config in both clusters -> scaffold onto
+# main -> one dev PR that stands up the deployable skeleton. Same shape as the
+# demo-board / ship-proven-website bootstraps; language: angular selects the
+# Angular dev agent + baked CI.
+#
+# This is the ESTATE half (repo + routes + deploy skeleton). The actual Verrian
+# look-and-feel lands as a SEPARATE feature Plan (verrian-website-build) once
+# the repo exists, built from the sealed design-bundle 0ff81ad5 (Option A).
+#
+# Composes bootstrap-authed-service (use:), so the privileged infra steps live
+# in the reviewed template (R22). Lands PAUSED on merge (R5); unpause_plan runs it.
+# verify-release-flow auto-injects after the dev PR step (R23).
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: verrian-website-bootstrap
+spec:
+  paused: true
+  steps:
+    - name: bootstrap
+      use: bootstrap-authed-service
+      kind: apply
+      with:
+        name: leartech-verrian-website
+        templateRepo: leartech-angular-service-template
+        language: angular
+        namespace: jx-staging
