@@ -1,0 +1,110 @@
+# Remediate demo-clone-demo-board-bootstrap — the bootstrap's gcp register-source-config
+# step failed closed NOT because the registration was missing, but because it was
+# ALREADY DONE. The register action is idempotent by design (repofactory.RegisterSourceConfig:
+# "Idempotent: no-op + no PR if already registered"), and leartech-demo-board has been
+# registered in jx-build-cluster-gsm's source-config since gsm#2553 (merged 2026-10-23).
+# The deterministic run read main, found `- name: leartech-demo-board` present, and
+# correctly returned "already registered — no PR needed" — so the AgentRun exited 0 with
+# no PR to publish. The Plan's 2m report-back grace then fired its failure: a repo-backed
+# step produced no targetPR, and the controller failed the step closed.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ROOT CAUSE (diagnosed 2026-10-27 from AgentRun
+# demo-clone-demo-board-bootstrap-bootstrap-register-gcp, both GitOps repos, and PR history)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# WHAT THE RUN SAW. The Plan (from bootstrap-authed-service via `use:`) ran the
+# register-gcp step: AgentRun demo-clone-demo-board-bootstrap-bootstrap-register-gcp,
+# action register-source-config, cluster gcp, service leartech-demo-board,
+# repo mikelear/jx-build-cluster-gsm. The Job started 23:16:31Z and completed
+# 23:16:38Z (7s — the shape of a no-op), phase Succeeded, and status.targetPR EMPTY.
+# register-az (the same action against jx-build-cluster-akv) did the same: Succeeded,
+# no targetPR, and akv also already carries the entry (akv#2280). At 23:18:39Z the
+# pr-stuck grace escalated: "completed 2m1s ago with no targetPR — repo-backed step
+# produced no PR, so no deliverable".
+#
+# WHY NO PR. Not a flake, not a webhook miss, not a report-back failure — a SUCCESS
+# that the step's contract cannot distinguish from a failure:
+#   * .jx/gitops/source-config.yaml on gsm main line 215 carries `- name: leartech-demo-board`,
+#     landed by gsm#2553 "chore: register leartech-demo-board in source-config"
+#     (merged 2026-10-23T14:35Z, approved + Tide-merged). The catalog Plan re-ran a
+#     bootstrap whose deterministic steps are IDEMPOTENT, against a service that had
+#     already been bootstrapped once (create-repo likewise adopted its own prior work).
+#   * register-source-config then exits 0 with Registered=false, and the
+#     `kind: pr` step has no PR to record on AgentRun.status.targetPR.
+#   * The controller's deliverable contract for a repo-backed step is a PR; an
+#     idempotent no-op produces none. FAIL-CLOSED is the right default — the
+#     alternative (treating a completed-no-PR run as Succeeded silently) would mask
+#     genuine PR-loss — but it mis-fires on the re-bootstrap case.
+#
+# THE PR IT ASKED FOR DOES NOT NEED TO EXIST. The deliverable the step exists to
+# produce ("leartech-demo-board is registered in gsm's source-config") is ALREADY
+# TRUE on main — gsm#2553 merged four days before the Plan ran. Nothing needs to be
+# re-registered; a new register PR would be a no-op diff that verify would reject.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# GITOPS PREREQUISITE IS AN OPERATOR PROCEDURE — NOT A STEP IN THIS PLAN
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# plan-lint R26 hard-blocks steps targeting jx-build-cluster-* in a plain Plan, and
+# R22 blocks hand-authored infra agentTypes, so the outstanding GitOps work is
+# recorded here as the procedure (the remediate-demo-rates-gbpusd-spot precedent
+# for exactly this shape — needs-human:gitops-overlay):
+#
+#   AZ (jx-build-cluster-akv) — akv#2282 "fix(routes): add missing cluster-routes
+#   entry for leartech-demo-board (remediates demo-clone-demo-board-bootstrap)" is
+#   OPEN and green (az/verify PASS, az/qa-gate PASS). It is the route-gcp/route-az
+#   half of the bootstrap that never ran because the Plan stopped at register-gcp.
+#   It needs a HUMAN /approve + merge (the escalation guidance is explicit: do NOT
+#   self-merge a GitOps PR). akv#2284 (demo-rates route) is similarly green+waiting.
+#
+#   GCP (jx-build-cluster-gsm) — the equivalent gcp route entry for
+#   leartech-demo-board is missing from helmfiles/jx-staging/configs/cluster-routes.yaml
+#   (source-only edit, never config-root — R27): add
+#     - name: leartech-demo-board
+#       hostname: leartech-demo-board-jx-staging.jx.leartech.com
+#       serviceName: leartech-demo-board
+#   An operator (or the BA that owns this remediation) should open that PR; drive
+#   verify/qa-gate green and let a human merge. The remaining bootstrap actions
+#   (auth-overlay for an angular UI: none needed; renovate-enrolment: add
+#   "mikelear/leartech-demo-board" to helmfiles/renovate/configs/renovate.yaml
+#   repositories) follow the same source-only path.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# WHAT THIS PLAN EXECUTES
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ONE standalone verify-release-flow expansion (R23: a use: verify-release-flow
+# that does NOT dependsOn a PR step — verifying an already-deployed service by
+# explicit commit sha — is legitimate; there is no deployable PR step in this
+# Plan for the platform's auto-injection to duplicate). The bootstrap's dev PR
+# was never driven to merge (the Plan failed upstream of the dev step), so the
+# verification targets the scaffold commit on main (34f197a) explicitly — R24
+# allows an explicit sha for a service NOT produced by a PR step in this Plan.
+# The checks fail closed (escalate: ba) until the
+# release/promote path actually ran, which is exactly what we want: this Plan
+# cannot Succeed — and therefore cannot flip demo-clone-demo-board-bootstrap to
+# Resolved — until the service is genuinely registered, routed, released and
+# healthy on both clusters.
+#
+# Hold-by-default (R5): this catalog Plan is a PROPOSAL. It lands paused; a human
+# unpauses it AFTER the operator prerequisites above have landed (at minimum the
+# akv#2282 merge and the gcp route entry).
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: remediate-demo-clone-demo-board-bootstrap
+  namespace: jx-staging
+spec:
+  paused: true
+  remediates:
+    - name: demo-clone-demo-board-bootstrap
+      namespace: jx-staging
+  steps:
+    - name: verify
+      kind: check
+      use: verify-release-flow
+      with:
+        repo: mikelear/leartech-demo-board
+        sha: 34f197abedb1829478b3fa56780170e3a582e74a
+        service: leartech-demo-board
