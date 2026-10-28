@@ -1,6 +1,7 @@
 # resubmit: 2026-10-27 — re-run after the GitOps overlay/renovate actions stabilised (first run failed at auth-overlay/renovate-enrolment).
 # Bootstrap leartech-demo-board — the angular front end of the demo-clone Project.
 #
+# resubmit: 2026-10-28 (3) — controller 0.0.275 + infra-go 0.0.157 live; the no-pr-expected fix makes registers settle Succeeded.
 # resubmit: 2026-10-28 (2) — the prior CRs needed deleting before the create would take (409 dedup); akv#2282 merged, akv#2339 pending.
 # resubmit: 2026-10-28 — retry after akv#2282 (route) merges; the register steps are idempotent no-ops now, route/scaffold/dev finally run. Root cause of the prior failure: controller#310.
 #
