@@ -106,5 +106,5 @@ spec:
       use: verify-release-flow
       with:
         repo: mikelear/leartech-demo-board
-        sha: 34f197abedb1829478b3fa56780170e3a582e74a
+        sha: 9099a54c8145
         service: leartech-demo-board
