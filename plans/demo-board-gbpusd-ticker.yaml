@@ -1,0 +1,123 @@
+# Plan: demo-board GBP/USD ticker — the live rates view (feature; from issue #9
+# on mikelear/leartech-project-demo).
+#
+# Sourced from the Project repo's evidence:
+#   - research/fx-provider-gbp-usd-spot-rate.md (the merged Frankfurter finding
+#     behind demo-rates; the ticker consumes the RESULT of that research — the
+#     demo-rates API — not the provider directly)
+#   - architecture/services.md (demo-board owns the overview front end, angular;
+#     demo-rates owns rates — the ticker does not re-implement that domain)
+#   - design/demo-board.md (sealed artefact 8e3f5bcf-…; chosen option-a)
+#
+# TARGET STATE (per the leartech-demo-board dossier): bootstrapped + deployed
+# 0.0.2, still template-adapted only — no ticker, and the house rule
+# front-ends-consume-published-sdks is flagged NOT yet wired. This Plan wires
+# it: ONE dev PR that adds the ticker consuming the LIVE demo-rates API through
+# its published contract.
+#
+# verify-release-flow is AUTO-INJECTED after this deployable PR step (R23) —
+# do NOT hand-author it. No infra steps (R22), no GitOps steps (R26).
+#
+# GITOPS PREREQUISITE — an OPERATOR procedure, deliberately NOT a step here
+# (R26 keeps jx-build-cluster-* edits out of a plain Plan; the
+# remediate-demo-rates-gbpusd-spot Plan records the same shape as a comment):
+# the browser's call from the demo-board origin to demo-rates needs CORS on
+# demo-rates' staging route. The fleet peers answer preflight through the
+# staging CORS allowlist pattern (jx-build-cluster-gsm#399 / akv#242 — "adding
+# a new Angular SPA caller means appending to this list"); demo-rates' staging
+# overlay (helmfiles/jx-staging/configs/leartech-demo-rates.yaml on gsm; akv
+# has no demo-rates overlay yet) carries NO CORS annotations today — verified
+# live 2026-10-28: OPTIONS preflight → 404 with no access-control-* headers,
+# while the leartech-go-service-template peer answers 200 with them. Until an
+# operator appends the demo-board origin to demo-rates' allowlist on both
+# clusters (via the estate's current gateway-CORS mechanism — demo-rates serves
+# through the Envoy HTTPRoute on staging, so the nginx-annotation pattern may
+# not apply as-is), the ticker renders its graceful-unavailable state; the
+# page must not hard-fail.
+
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: demo-board-gbpusd-ticker
+  labels:
+    leartech.io/feature-issue: "9"
+spec:
+  paused: true
+  steps:
+    - name: build-ticker
+      kind: pr
+      agentType: leartech-agent-ng
+      inputs:
+        name: demo-board-gbpusd-ticker
+        repo: mikelear/leartech-demo-board
+        branch: feat/demo-board-gbpusd-ticker
+        goal: |
+          Build the live GBP/USD ticker the demo Project designed into
+          mikelear/leartech-demo-board — the Angular overview front end,
+          currently a template-adapted clone with no ticker (its dossier says
+          so; do not re-derive that). Make the ticker the board's overview —
+          the landing route unless the design's density demands a dedicated
+          route; either way keep per-route SEO clean.
+
+          DESIGN SOURCE — the SEALED design artefact
+          8e3f5bcf-3f1f-4f96-9c9b-5045f431f99f (label demo-board-design, target
+          mikelear/leartech-demo-board, chosen option-a "dense trading view").
+          Fetch its files with mcp__design__read_artifact_file (NOT curl against
+          a signed URL):
+            - read_artifact_file(artifact_id=8e3f5bcf-3f1f-4f96-9c9b-5045f431f99f,
+              path="DESIGN.md") — the written spec: the live GBP/USD ticker,
+              option-a, source frankfurter.dev (daily ECB rate, shown with its
+              date).
+            - read_artifact_file(artifact_id=8e3f5bcf-3f1f-4f96-9c9b-5045f431f99f,
+              path="option-a.html") — the approved prototype: the look to match
+              (dark palette #0b0e14/#e6edf3, the large 72px rate readout, the
+              muted meta lines).
+          Match option-a's LOOK. The prototype's bid/ask and % change numbers
+          are MOCK styling — do not invent data the API does not serve; render
+          what the published contract provides (the rate with its observation
+          date and cached_at, per DESIGN.md "shown with its date").
+
+          DATA SOURCE — the leartech-demo-rates rates API, LIVE (per the merged
+          Project research finding research/fx-provider-gbp-usd-spot-rate.md
+          and the Issue):
+            GET https://leartech-demo-rates-jx-staging.jx.leartech.com/api/v1/rates/gbp-usd
+            Bearer-authenticated -> 200 {date, base, quote, rate, cached_at}
+            (rate = USD per 1 GBP, date = the observation date, cached_at = the
+            fetch instant; OpenAPI at /openapi.json — GBPUSDResponse).
+          Consume it through the service's PUBLISHED CONTRACT, never hand-rolled
+          assumptions (house rule front-ends-consume-published-sdks): use the
+          generated Angular SDK @mikelear/leartech-demo-rates-angular (GitHub
+          Packages; published by demo-rates' release openapi-generation step
+          once its az release fires) IF it is published at a version you can
+          build against — otherwise type the call strictly to the published
+          OpenAPI spec's GBPUSDResponse fields and note the SDK swap as a
+          follow-up. Do NOT re-implement rates fetching or caching (the
+          demo-rates service owns that domain) and do NOT call Frankfurter from
+          the UI.
+
+          WIRING (all in-repo): add leartech-demo-rates to public/api.conf.json
+          AND the chart's charts/leartech-demo-board/values.yaml runtime
+          config: the peers map (service name -> base URL, consumed via
+          EnvironmentService — never hard-coded in source, same contract as the
+          fleet-status page) and auth.audiences (the OIDC authorize call must
+          request the leartech-demo-rates audience so the bearer carries it —
+          mirror the angular template's audiences list shape).
+
+          BEHAVIOUR: the rate is an authenticated runtime fetch. The
+          prerendered HTML must not depend on it — SSR/prerender never calls
+          the authenticated endpoint; render option-a's static shell prerendered
+          with per-route SEO (title + description in the route data, matching
+          the seo-preview gate's raw-HTML read) and hydrate the live rate
+          client-side, with a graceful unavailable/signed-out state (the
+          fleet-status pattern renders 401 as a state, never a crash). For
+          end2end-ui, follow the staging-only pattern (03-fleet-status.spec.ts:
+          skip in PR preview via STAGING_URL absence) — PR previews deploy no
+          demo-rates.
+
+          Open ONE PR, drive BOTH clusters' gates green, do not self-merge.
+          Publish the PR with the open_pr MCP tool (not raw gh). After open_pr,
+          call mcp__jx3_flow__wait_for_first_failure_or_all_pass ONCE: on
+          all_pass STOP (the auto-injected verify-release-flow owns
+          release/promote/deploy); on the first failure, fix that ONE check,
+          push one commit, re-check. Do NOT sit through every gate with
+          wait_for_terminal.
