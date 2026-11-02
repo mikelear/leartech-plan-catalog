@@ -24,6 +24,16 @@ when used well; only one does when they're not.
    `--artifact-id` opens a new revision on the sealed one rather than a new
    artifact.
 
+## Return the links when a round finishes
+
+When a render round is done, **list every option back in the reply as
+pasteable links** — one `file://` absolute path per HTML file (or the
+`http://` URL if they're served), so the operator can copy-paste straight into
+a browser instead of hunting the working folder. Do it every time options are
+written or revised, before asking for feedback: step 3 is a conversation, and
+it can't start until the operator can actually see what was built. One link per
+option, in the order they were created, is enough.
+
 ## Why publish is the point
 
 The registry is where dev agents already look. A design that ends as a file on
