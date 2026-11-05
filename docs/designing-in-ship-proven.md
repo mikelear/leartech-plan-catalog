@@ -12,9 +12,14 @@ when used well; only one does when they're not.
    gateway: egress and spend are the platform's, not the laptop's.
 2. **Render** — write HTML option pages under the working folder.
    Self-contained single files, more than one option, the
-   `ml-architecture-options.html` shape. Check they actually render:
-   `testfiles/design/check_render.sh <file.html>` (Chrome headless screenshot,
-   non-blank asserted — a page that renders blank is invisible to a text check).
+   `ml-architecture-options.html` shape. Check they actually render: either
+   `testfiles/design/check_render.sh <file.html>`, or — if a **render plugin**
+   is mounted — `plugin__render__screenshot` (Chrome headless screenshot,
+   non-blank asserted — a page that renders blank is invisible to a text
+   check). The plugin is the preferred path when present: it is the SAME
+   headless-Chrome screenshot, but checked and advertised rather than assumed,
+   and the model can call it itself to SEE what it drew before asking for
+   feedback. See "Local tool plugins" below.
 3. **Feedback** — the operator looks at the options and says what they think.
    Revise and repeat. This is the part no tool does for you; it's a
    conversation.
@@ -57,6 +62,37 @@ don't.
 - `ship-proven mcp add <name> --url U` registers one.
 - `ship-proven design guidance` prints the loop with the loaded design MCPs
   named honestly.
+
+## Local tool plugins (a renderer, a simulator)
+
+The shell has a fourth tool lane beside `local__`, `mcp__…` and `gateway__`:
+**`plugin__<name>__<tool>`** — a capability the operator installed on THIS
+machine, wrapped so the model can drive it. For design work two matter:
+
+- **`plugin__render__screenshot`** — turns an HTML option into a PNG with
+  whatever headless Chrome this machine has. This is how the model *sees* what
+  it drew: render the options (step 2), screenshot each, reason over the image,
+  then ask for feedback. It replaces the old assumption that a Chrome is simply
+  present — the plugin is health-checked, so if no browser is installed it is
+  skipped-and-named at startup and the loop proceeds on the `file://` links
+  alone. Nothing breaks; the "see it" step is just checked, advertised and
+  gated now.
+- **a simulator plugin** (`plugin__ios-sim__…`, `plugin__android-sim__…`, a
+  `plugin__godot__export`) — for a mobile-game or app design, the HTML loop
+  pitches the *look*; a mounted simulator plugin lets the model show the *thing
+  running*. Neither is required; both are used if present.
+
+How to tell what is available, and to add one:
+
+- `ship-proven plugin list` — the plugins this machine knows about, with live
+  health; `plugin doctor` says why any is unavailable.
+- `ship-proven plugin tools <name>` — the tools a plugin offers the model
+  (the `mcp tools` analogue).
+- `ship-proven plugin add --manifest <file.json>` — register one; it is
+  health-checked at add and again at every shell startup.
+
+A plugin that shells out is gated exactly like `local__bash`: it asks before
+running unless the shell was started `--allow-exec`.
 
 ## The preference, stated once
 
