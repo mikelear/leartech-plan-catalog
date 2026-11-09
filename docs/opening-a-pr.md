@@ -75,3 +75,28 @@ Keeper merges:
 This is the same standard `ship_proven` reports for Plans (the `plan-lint`
 rules); here it is the repo-PR half. Reading it first is how you stop paying for
 it in failed Tekton cycles.
+
+## After the push: fail fast, do not wait for all-green
+
+Do not wait for every check to pass before looking again. The gates finish at
+very different times — lint answers in minutes, end2end in tens of them — and a
+failure found at the END of a full green wait costs a whole second lap of every
+gate on the fix commit.
+
+- **Call `wait_for_first_failure_or_all_pass` (the `jx3_flow` MCP) after every
+  push.** It returns the moment ANY check fails, so you iterate on the fastest
+  signal instead of the slowest, exactly as the agents are instructed to.
+- **A first failure is a FIX LOOP, not a restart.** Read the failing step's log
+  (`step_logs` on the `tekton` MCP, or the `target_url` the row carries), fix
+  only what it names, push, and call the wait again. The other checks keep
+  running across your fix commits; you never re-pay the ones already green.
+- **Only `wait_for_terminal` when you are done changing things** — the final
+  "every check settled" before handing to review.
+- **If the tool is not mounted**, the shell's own `local__wait` with a command
+  that succeeds once the first check reports (e.g. a `gh pr checks` grep for
+  `fail`) is the fallback — never a blind `sleep`, which is killed at its
+  timeout without telling you.
+
+The rule of thumb: the FIRST red check is the cheapest moment to learn anything.
+Waiting for all-green before looking is how one lint failure costs an hour of
+end2end time, twice.
