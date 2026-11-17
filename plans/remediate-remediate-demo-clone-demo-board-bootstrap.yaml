@@ -1,0 +1,159 @@
+# Remediate remediate-demo-clone-demo-board-bootstrap — its verify-release-flow
+# step (release-pipeline-status) failed closed because the az half of the estate
+# has NEVER released leartech-demo-board: no az/release PipelineRun has ever
+# existed for any commit of this repo. This plan re-runs the exact deterministic
+# verification that failed (verify-release-flow, standalone — R23 allows the
+# no-dependsOn form for an already-deployed service), pinned to the merge commit
+# of the last merged PR (#6, fed7719), and when it passes on BOTH clusters the
+# controller flips remediate-demo-clone-demo-board-bootstrap to Resolved.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ROOT CAUSE (diagnosed 2026-10-29 from the failed AgentRun
+# remediate-demo-clone-demo-board-bootstrap-verify-fd43b654, the repo's full
+# commit-status history, both GitOps repos, and the GitHub-visible state of the
+# two estate webhooks)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# WHAT THE STEP SAW. The plan's `use: verify-release-flow` expanded with
+# {repo: mikelear/leartech-demo-board, sha: 9099a54c8145d3d673cb6fb2f54a4fd37e2b0fd7,
+# service: leartech-demo-board}. AgentRun ...-verify-fd43b654 ran
+# action release-pipeline-status and failed closed with reason FAIL; the
+# escalation hint it attached ("read the release Tekton PipelineRun's failing
+# step; a missing run means the main-push trigger/webhook did not fire") is the
+# second half of that disjunction — there is NO release PipelineRun to read.
+#
+# TWO DISTINCT DEFECTS, BOTH IN THE PINNED TARGET:
+#
+#   DEFECT 1 — the pinned sha was never a main-push tip. 9099a54 is the second
+#   parent of PR#1's merge (75b57fc), i.e. the dev-branch head at merge time.
+#   Lighthouse postsubmits fire on PUSH events to main; the only commits that
+#   ever carried release PipelineRuns are the first-parent main tips:
+#   b022f1a (scaffold, direct push) and the six PR merge commits 75b57fc,
+#   05aba58, 5eca948, 5488cb1, bd07a1c, fed7719. Every one of those carries a
+#   SUCCESS gcp/release status (e.g. leartech-demo-board-main-release-lqb9d on
+#   fed7719, PR#6's merge, reported success 2026-10-28T20:17:26Z). 9099a54's
+#   statuses are all PRESUBMIT contexts — pr/lint/test/etc — plus the Lighthouse
+#   Merge Status; no release run exists for it and none ever should. The prior
+#   plan's own PR history shows this was a hand-repair of an earlier pin (the
+#   catalog commit be7ac3c says "pin the verify sha to the merged dev-PR head
+#   (9099a54) — the scaffold sha checked the wrong PipelineRun") — it swapped a
+#   wrong pin for a different wrong pin. The right target is the PR's MERGE
+#   commit, which is what the template's `pr:` param resolves to.
+#
+#   DEFECT 2 — the az release has never fired for this repo, on any commit. The
+#   evidence is asymmetric and decisive:
+#     * gcp side: v0.0.1-gcp … v0.0.7-gcp tags exist (7 releases), gcp/release
+#       success on every main tip, gsm promote PRs #2626/#2629/#2631/#2635/
+#       #2636/#2638 all MERGED, gsm helmfile carries chart 0.0.7, the staging
+#       app answers 200 on https://leartech-demo-board-jx-staging.jx.leartech.com.
+#     * az side: ZERO -az tags (compare verrian-website and auth-service, both
+#       of which have paired v*-gcp + v*-az tags), ZERO az/release GitHub
+#       statuses on any demo-board commit, ZERO akv promote PRs for
+#       leartech-demo-board (akv's demo-board PRs are only the 2026-10-23
+#       source-config/route registrations), and a STALE akv helmfile entry
+#       (chart dev/leartech-demo-board version 0.0.1, rendered deploy image
+#       modernburro.azurecr.io/mikelear/leartech-demo-board:0.0.1, last
+#       regenerated 2026-10-21 — the residue of the previous demo-work
+#       incarnation, untouched by every release since).
+#     * az CI itself is NOT dead: az/* presubmit statuses exist for every PR
+#       head of this repo (PR#1..#6), and az/verify + az/qa-gate run green on
+#       akv's own PRs (e.g. akv#2282). az lighthouse receives this repo's
+#       pull_request events and builds them. What never happened is the PUSH
+#       event path: b022f1a — the direct-to-main scaffold push — got
+#       gcp/release and NOTHING from az.
+#   That is precisely the hint's second case: for the az half, "a missing run
+#   means the main-push trigger/webhook did not fire". The repo-level webhook
+#   is not GitHub-inspectable without admin on mikelear/leartech-demo-board
+#   (this run's token has push, not admin — the hook list 404s), so the
+#   per-repo az hook's push-event delivery/config for THIS repo is the
+#   unobservable. The platform already owns the deterministic repair: the
+#   bootstrap template's create-webhook action ("boot's --fast webhook pass
+#   does not reliably POST the GitHub Lighthouse hook for a new repo, so
+#   create it deterministically and verify it").
+#
+# WHY THE CHECK FAILED CLOSED, CORRECTLY. release-pipeline-status is per
+# cluster: it wants a release PipelineRun for the target commit on EACH
+# estate. gcp had one and it passed; az had none at all. FAIL is the right
+# verdict — this plan cannot Succeed, and therefore cannot flip
+# remediate-demo-clone-demo-board-bootstrap to Resolved, until the az release
+# genuinely fires and passes for the PR#6 merge commit.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# OPERATOR PREREQUISITES — NOT STEPS IN THIS PLAN (R22/R26; the
+# remediate-demo-rates-gbpusd-spot precedent for this exact shape)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# plan-lint R26 hard-blocks steps targeting jx-build-cluster-* in a plain Plan,
+# and R22 blocks hand-authored infra agentTypes, so the outstanding work is
+# recorded here as the procedure. A human unpauses this plan only AFTER these
+# have landed:
+#
+#   1. FIX THE PUSH-EVENT PATH (az). Re-run the create-webhook infra action for
+#      mikelear/leartech-demo-board ("POST the gcp + az Lighthouse hooks",
+#      full event set including push), then REDRIVE the az postsubmit for the
+#      PR#6 merge commit fed7719: GitHub admin → repo webhook (hook-jx.az.
+#      leartech.com) → redeliver the push delivery for fed7719, or push an
+#      empty commit to main (the canonical trigger) — the latter yields
+#      v0.0.8-gcp/-az, which equally proves the path; note release-pipeline-status
+#      is pinned to fed7719 by pr:"6", so prefer the redelivery (or re-verify
+#      with a follow-up pin) if the empty-commit route is taken.
+#   2. SEED THE AZ OVERLAY BEFORE THE FIRST az PROMOTE (akv GitOps PR, source-only
+#      — never config-root). akv's helmfiles/jx-staging/helmfile.yaml carries a
+#      bare demo-board entry with NO configs/ overlay, and akv has no
+#      helmfiles/jx-staging/configs/leartech-demo-board.yaml (gsm's exists; see
+#      gsm#2616). Mirror gsm's overlay with az's values so the first az promote
+#      does not ship an auth-blind deploy — the demo-rates root cause showed jx
+#      promote adds ONLY the bare release entry and nothing re-seeds an overlay
+#      after teardown:
+#        helmfiles/jx-staging/configs/leartech-demo-board.yaml (NEW)
+#          config.auth.authority: this cluster's Hydra (az)
+#          config.peers.leartech-demo-rates: the az staging peer URL
+#        helmfiles/jx-staging/helmfile.yaml (one-line): add
+#          "- configs/leartech-demo-board.yaml" to the demo-board release's
+#          values list (source-only edit; boot re-renders config-root)
+#      Drive az/verify + az/qa-gate green; a human /approves + merges.
+#   3. CONFIRM THE az CHART EXISTS. The stale akv entry pins chart
+#      dev/leartech-demo-board 0.0.1 from the pre-teardown incarnation; the
+#      current chart must be published to az's OCI chart registry
+#      (us-central1 pattern mirrored on ACR) at the version the az promote will
+#      pin. If the az registry lacks the 0.0.x chart, publish it before
+#      unpausing (helm cm-push or the release pipeline's helm-release step
+#      against az).
+#
+# WHAT THIS PLAN EXECUTES once those land: ONE standalone verify-release-flow
+# expansion (R23: a use: verify-release-flow that does NOT dependsOn a PR step —
+# verifying an already-deployed service by explicit PR — is legitimate; there
+# is no deployable PR step in this Plan for the platform's auto-injection to
+# duplicate). R24 is satisfied by pr:"6" — the template resolves it to
+# merge_commit_sha fed7719d292e53ce872287ca7487d2c1f69f0569, the commit whose
+# gcp release already passed. The four deterministic checks then verify, per
+# cluster: the release fired and passed (az currently the failing half),
+# promote PRs opened/green/merged (gsm#2638 done; akv's will exist only once az
+# releases), a boot reconciled the promote commit, and the NEW version is
+# deployed healthy (version-matched, never version-blind). Each carries
+# onFailure: escalate ba from the template, so a still-broken az half escalates
+# rather than silently passing. When ALL FOUR pass the Plan Succeeds and the
+# controller flips remediate-demo-clone-demo-board-bootstrap to Resolved with
+# ResolvedBy pointing here.
+#
+# Hold-by-default (R5): this catalog Plan is a PROPOSAL. It lands paused; a human
+# unpauses it AFTER the operator prerequisites above have landed (at minimum
+# item 1's webhook fix + redelivery, and item 2's overlay PR).
+apiVersion: agent.leartech.io/v1alpha1
+kind: Plan
+metadata:
+  name: remediate-remediate-demo-clone-demo-board-bootstrap
+  namespace: jx-staging
+spec:
+  paused: true
+  remediates:
+    - name: remediate-demo-clone-demo-board-bootstrap
+      namespace: jx-staging
+  steps:
+    - name: verify
+      kind: check
+      use: verify-release-flow
+      with:
+        repo: mikelear/leartech-demo-board
+        pr: "6"
+        service: leartech-demo-board
